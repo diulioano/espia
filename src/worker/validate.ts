@@ -1,5 +1,5 @@
 // Validação de cada mensagem do cliente (security.md A4/A5). Escrita à mão: são poucos tipos.
-import { AUDIO_KINDS, NICKNAME_MAX, type AudioKind, type ClientMessage, type SignalData } from '../shared/protocol';
+import { AUDIO_KINDS, LIVE_SOURCES, NICKNAME_MAX, type AudioKind, type ClientMessage, type LiveSource, type SignalData } from '../shared/protocol';
 
 type Obj = Record<string, unknown>;
 
@@ -66,14 +66,18 @@ export function parseClientMessage(raw: string): ClientMessage | null {
       const data = signalData(m.data);
       return data ? { t: 'signal', to: m.to, data } : null;
     }
-    case 'live':
-      if (!hasOnly(m, ['t', 'resolution', 'fps', 'audio'])) return null;
+    case 'live': {
+      if (!hasOnly(m, ['t', 'resolution', 'fps', 'audio', 'source'])) return null;
       if (m.resolution !== 720 && m.resolution !== 1080) return null;
       if (m.fps !== 30 && m.fps !== 60) return null;
       // boolean: abas abertas antes da 002 (compatibilidade temporária, contracts/signaling-delta.md).
-      if (typeof m.audio === 'boolean') return { t: 'live', resolution: m.resolution, fps: m.fps, audio: m.audio ? 'tab' : 'none' };
+      if (typeof m.audio === 'boolean') return { t: 'live', resolution: m.resolution, fps: m.fps, audio: m.audio ? 'tab' : 'none', source: 'screen' };
       if (!AUDIO_KINDS.includes(m.audio as AudioKind)) return null;
-      return { t: 'live', resolution: m.resolution, fps: m.fps, audio: m.audio as AudioKind };
+      // Sem source: cliente de antes da 006 → tela (specs/006 contracts/signaling-live.md).
+      const source = m.source === undefined ? 'screen' : m.source;
+      if (!LIVE_SOURCES.includes(source as LiveSource)) return null;
+      return { t: 'live', resolution: m.resolution, fps: m.fps, audio: m.audio as AudioKind, source: source as LiveSource };
+    }
     case 'unlive':
     case 'turn-refresh':
       return hasOnly(m, ['t']) ? { t: m.t } : null;

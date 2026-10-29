@@ -1,5 +1,6 @@
 // Espia Desktop: uma janela leve (WebView2) que abre o Espia publicado.
 // Ver specs/003-espia-desktop/ (spec, plan, contracts/deep-link.md).
+mod capture;
 mod links;
 #[cfg(windows)]
 mod share_bar;
@@ -43,7 +44,20 @@ fn allowed(url: &Url) -> bool {
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
-  tauri::Builder::default()
+  #[allow(unused_mut)]
+  let mut app = tauri::Builder::default();
+  // Ponte de captura nativa (specs/005): só existe no Windows.
+  #[cfg(windows)]
+  {
+    app = app.manage(capture::Capture::default()).invoke_handler(tauri::generate_handler![
+      capture::capture_supported,
+      capture::capture_list,
+      capture::capture_start,
+      capture::capture_set_quality,
+      capture::capture_stop,
+    ]);
+  }
+  app
     // Precisa ser o primeiro plugin: a segunda abertura (atalho ou link espia://) cai aqui.
     .plugin(tauri_plugin_single_instance::init(|app, args, _cwd| {
       if let Some(window) = app.get_webview_window("main") {
@@ -62,6 +76,8 @@ pub fn run() {
       {
         use tauri_plugin_deep_link::DeepLinkExt;
         let _ = app.deep_link().register_all();
+        // A mesma ponte de captura para o Worker local (só em debug).
+        app.add_capability(include_str!("../capabilities-dev/capture-dev.json"))?;
       }
 
       let args: Vec<String> = std::env::args().collect();
@@ -91,6 +107,14 @@ pub fn run() {
             let _ = popups.opener().open_url(url.as_str(), None::<&str>);
           }
           NewWindowResponse::Deny
+        })
+        // Página recarregou ou mudou: a captura nativa não tem mais quem receba os quadros.
+        .on_page_load(|window, payload| {
+          #[cfg(windows)]
+          if payload.event() == tauri::webview::PageLoadEvent::Started {
+            capture::stop_all(window.as_ref(), &window.state::<capture::Capture>());
+          }
+          let _ = (&window, &payload);
         });
 
       #[cfg(debug_assertions)]

@@ -1,5 +1,5 @@
 // Cenas mockadas da sala — espelham a prop `scene` de design_handoff_espia/design/Room.dc.html.
-import type { GoLivePrefs, ParticipantView, RoomView, StreamView, ToastView } from '../lib/types';
+import type { CameraView, CaptureSource, GoLivePrefs, ParticipantView, PickerView, RoomView, StreamView, ToastView } from '../lib/types';
 
 export const ROOM_SCENES = [
   { id: 'connecting', code: 'E1', label: 'Conectando' },
@@ -8,6 +8,15 @@ export const ROOM_SCENES = [
   { id: 'modal', code: 'A1', label: 'Seletor · Janelas' },
   { id: 'modalscreen', code: 'A2', label: 'Seletor · Telas inteiras' },
   { id: 'modalmute', code: 'A3', label: 'Seletor · Sem áudio' },
+  { id: 'pickerwindows', code: 'A1·app', label: 'App · grade de janelas' },
+  { id: 'pickerscreens', code: 'A2·app', label: 'App · telas inteiras com som' },
+  { id: 'pickerempty', code: 'A1·app', label: 'App · nenhuma janela' },
+  { id: 'pickerfallback', code: 'A1·app', label: 'App · sem ponte (seletor do Windows)' },
+  { id: 'pickercamperm', code: 'A5', label: 'Câmeras · pedir permissão' },
+  { id: 'pickercams', code: 'A5', label: 'Câmeras · lista com prévias' },
+  { id: 'pickercammic', code: 'A5', label: 'Câmeras · placa com som de jogo' },
+  { id: 'pickercamnone', code: 'A5', label: 'Câmeras · nenhuma encontrada' },
+  { id: 'pickercamdenied', code: 'A5', label: 'Câmeras · bloqueada' },
   { id: 'denied', code: 'E3', label: 'Permissão negada' },
   { id: 'single', code: 'D4', label: 'Uma transmissão' },
   { id: 'grid', code: 'D5', label: 'Várias (grade)' },
@@ -15,6 +24,8 @@ export const ROOM_SCENES = [
   { id: 'streamfail', code: 'E4', label: 'Falha na transmissão' },
   { id: 'live', code: 'D7', label: 'Você ao vivo' },
   { id: 'livescreen', code: 'D7', label: 'Ao vivo · tela inteira sem som' },
+  { id: 'livepc', code: 'D7·app', label: 'Ao vivo · tela inteira com som do PC (app)' },
+  { id: 'livecam', code: 'D7·cam', label: 'Ao vivo · câmera (Lu também de câmera)' },
   { id: 'crowd', code: 'D5+', label: 'Sala cheia (10, 6 ao vivo)' },
 ] as const;
 
@@ -62,6 +73,123 @@ const TOASTS: Partial<Record<RoomScene, Omit<ToastView, 'id'>>> = {
 
 const DEFAULT_PREFS: GoLivePrefs = { resolution: 1080, fps: 30, audio: true, surface: 'window' };
 
+// ---------- Seletor do app desktop (specs/005, tela-esperada.png) ----------
+
+/** Miniatura falsa: listras na cor do programa, com o rótulo "janela"/"tela" (como no design). */
+function fakeThumb(a: string, b: string, label: string): string {
+  const svg =
+    `<svg xmlns="http://www.w3.org/2000/svg" width="320" height="180">` +
+    `<defs><pattern id="p" width="36" height="36" patternUnits="userSpaceOnUse" patternTransform="rotate(45)">` +
+    `<rect width="18" height="36" fill="${a}"/><rect x="18" width="18" height="36" fill="${b}"/></pattern></defs>` +
+    `<rect width="320" height="180" fill="url(#p)"/>` +
+    `<text x="160" y="94" fill="#f5ead8" fill-opacity=".55" font-family="monospace" font-size="13" text-anchor="middle">${label}</text></svg>`;
+  return `data:image/svg+xml,${encodeURIComponent(svg)}`;
+}
+
+/** Ícone falso: inicial numa pastilha (como no design). */
+function fakeIcon(letter: string, bg: string, fg: string): string {
+  const svg =
+    `<svg xmlns="http://www.w3.org/2000/svg" width="32" height="32"><rect width="32" height="32" rx="8" fill="${bg}"/>` +
+    `<text x="16" y="22" fill="${fg}" font-family="Georgia,serif" font-weight="700" font-size="17" text-anchor="middle">${letter}</text></svg>`;
+  return `data:image/svg+xml,${encodeURIComponent(svg)}`;
+}
+
+const WARM = ['#3a2416', '#33200f'];
+const GREEN = ['#25301c', '#212a18'];
+const GRAY = ['#2c2925', '#282521'];
+const RED = ['#3d2219', '#361e16'];
+
+export const MOCK_SOURCES: CaptureSource[] = [
+  { id: 'w:1', kind: 'window', title: 'Hollow Knight', app: 'hollow_knight.exe', icon: fakeIcon('H', '#ffc6a5', '#643312'), thumb: fakeThumb(WARM[0], WARM[1], 'janela'), playing: true, primary: false },
+  { id: 'w:2', kind: 'window', title: 'YouTube — Firefox', app: 'Firefox', icon: fakeIcon('Y', '#ccdbb2', '#3d472b'), thumb: fakeThumb(GREEN[0], GREEN[1], 'janela'), playing: true, primary: false },
+  { id: 'w:3', kind: 'window', title: 'espia-app — Visual Studio Code', app: 'Code', icon: fakeIcon('e', '#dcd3c4', '#474238'), thumb: fakeThumb(GRAY[0], GRAY[1], 'janela'), playing: false, primary: false },
+  { id: 'w:4', kind: 'window', title: 'Spotify', app: 'Spotify', icon: fakeIcon('S', '#ccdbb2', '#3d472b'), thumb: fakeThumb(GREEN[0], GREEN[1], 'janela'), playing: true, primary: false },
+  { id: 'w:5', kind: 'window', title: 'Planilha do campeonato', app: 'LibreOffice Calc', icon: fakeIcon('P', '#f6a06b', '#402310'), thumb: fakeThumb(RED[0], RED[1], 'janela'), playing: false, primary: false },
+  { id: 'w:6', kind: 'window', title: 'Downloads', app: 'Explorador de arquivos', icon: fakeIcon('D', '#dcd3c4', '#474238'), thumb: null, playing: false, primary: false },
+  { id: 'm:1', kind: 'monitor', title: 'Tela 1', app: 'Principal', icon: null, thumb: fakeThumb(GRAY[0], GRAY[1], 'tela'), playing: false, primary: true },
+  { id: 'm:2', kind: 'monitor', title: 'Tela 2', app: '', icon: null, thumb: fakeThumb(WARM[0], WARM[1], 'tela'), playing: false, primary: false },
+];
+
+const BROWSER_PICKER: PickerView = { mode: 'browser', sources: [], loading: false, selectedId: null };
+
+function pickerFor(scene: RoomScene): PickerView {
+  if (scene === 'pickerwindows') return { mode: 'native', sources: MOCK_SOURCES, loading: false, selectedId: 'w:1' };
+  if (scene === 'pickerscreens') return { mode: 'native', sources: MOCK_SOURCES, loading: false, selectedId: 'm:1' };
+  if (scene === 'pickerempty') return { mode: 'native', sources: MOCK_SOURCES.filter((s) => s.kind === 'monitor'), loading: false, selectedId: null };
+  return BROWSER_PICKER;
+}
+
+const PICKER_SCENES: RoomScene[] = [
+  'modal',
+  'modalscreen',
+  'modalmute',
+  'pickerwindows',
+  'pickerscreens',
+  'pickerempty',
+  'pickerfallback',
+  'pickercamperm',
+  'pickercams',
+  'pickercammic',
+  'pickercamnone',
+  'pickercamdenied',
+];
+const CAMERA_SCENES: RoomScene[] = ['pickercamperm', 'pickercams', 'pickercammic', 'pickercamnone', 'pickercamdenied'];
+
+// ---------- Aba Câmeras (specs/006) ----------
+
+/** Prévia falsa animada (canvas): nada de câmera de verdade nos mocks. */
+export function fakeCameraStream(bg: string, label: string): MediaStream | null {
+  if (typeof document === 'undefined') return null;
+  const canvas = document.createElement('canvas');
+  canvas.width = 320;
+  canvas.height = 180;
+  const ctx = canvas.getContext('2d');
+  if (!ctx || !('captureStream' in canvas)) return null;
+  let t = 0;
+  const draw = () => {
+    t += 1;
+    ctx.fillStyle = bg;
+    ctx.fillRect(0, 0, 320, 180);
+    ctx.fillStyle = 'rgba(245,234,216,0.18)';
+    ctx.beginPath();
+    ctx.arc(160 + Math.sin(t / 20) * 40, 82, 34, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.fillStyle = 'rgba(245,234,216,0.6)';
+    ctx.font = '13px monospace';
+    ctx.textAlign = 'center';
+    ctx.fillText(label, 160, 160);
+  };
+  draw();
+  setInterval(draw, 66);
+  return canvas.captureStream(15);
+}
+
+export const MOCK_CAMERA_DEVICES = [
+  { id: 'cam1', label: 'HD Pro Webcam C920', kind: 'camera' as const, bg: '#2c3a2a' },
+  { id: 'cam2', label: 'Elgato HD60 X', kind: 'capture' as const, bg: '#3a2416' },
+  { id: 'cam3', label: 'OBS Virtual Camera', kind: 'camera' as const, bg: '#2c2925' },
+];
+export const MOCK_AUDIO_INPUTS = [
+  { id: 'mic1', label: 'Microfone (HD Pro Webcam C920)' },
+  { id: 'mic2', label: 'Digital Audio Interface (HD60 X)' },
+  { id: 'mic3', label: 'Headset Microphone (HyperX Cloud II)' },
+];
+
+export function mockCameraDevices(): CameraView['devices'] {
+  return MOCK_CAMERA_DEVICES.map((d) => ({ id: d.id, label: d.label, kind: d.kind, preview: fakeCameraStream(d.bg, d.kind === 'capture' ? 'console' : 'câmera'), busy: false }));
+}
+
+const NO_CAMERA: CameraView = { permission: 'unknown', devices: [], audios: [], videoId: null, audioId: null, audioRole: 'voice', mobile: false, facing: 'user' };
+
+function cameraFor(scene: RoomScene): CameraView {
+  if (scene === 'pickercamperm') return { ...NO_CAMERA, permission: 'prompt' };
+  if (scene === 'pickercamdenied') return { ...NO_CAMERA, permission: 'denied' };
+  if (scene === 'pickercamnone') return { ...NO_CAMERA, permission: 'granted', audios: MOCK_AUDIO_INPUTS };
+  if (scene === 'pickercams') return { ...NO_CAMERA, permission: 'granted', devices: mockCameraDevices(), audios: MOCK_AUDIO_INPUTS, videoId: 'cam1', audioId: 'mic1', audioRole: 'voice' };
+  if (scene === 'pickercammic') return { ...NO_CAMERA, permission: 'granted', devices: mockCameraDevices(), audios: MOCK_AUDIO_INPUTS, videoId: 'cam2', audioId: 'mic2', audioRole: 'game' };
+  return NO_CAMERA;
+}
+
 export function isRoomScene(value: string | null): value is RoomScene {
   return ROOM_SCENES.some((s) => s.id === value);
 }
@@ -74,6 +202,8 @@ export function buildRoomScene(scene: RoomScene): RoomView {
     streamfail: ['lu', 'bia'],
     live: ['lu'],
     livescreen: ['lu'],
+    livepc: ['lu'],
+    livecam: ['lu'],
     crowd: ['lu', 'bia', 'tomas', 'caio', 'duda', 'gabi'],
   };
   const ids = liveIds[scene] ?? [];
@@ -83,7 +213,8 @@ export function buildRoomScene(scene: RoomScene): RoomView {
   if (scene === 'focus') streams.find((s) => s.id === 'tomas')!.status = 'ok';
   if (scene === 'streamfail') streams.find((s) => s.id === 'bia')!.status = 'failed';
 
-  const meLive = scene === 'live' || scene === 'livescreen';
+  const meLive = scene === 'live' || scene === 'livescreen' || scene === 'livepc' || scene === 'livecam';
+  if (scene === 'livecam') streams.forEach((s) => (s.source = 'camera'));
   const toast = TOASTS[scene];
 
   return {
@@ -106,18 +237,26 @@ export function buildRoomScene(scene: RoomScene): RoomView {
           startedAt: Date.now() - (12 * 60 + 4) * 1000,
           ...(scene === 'live'
             ? { audioKind: 'window' as const }
-            : { surface: 'monitor' as const, audioKind: 'none' as const, audioReason: 'monitor' as const }),
+            : scene === 'livecam'
+              ? { surface: 'camera' as const, audioKind: 'device' as const, source: 'camera' as const, sourceTitle: 'HD Pro Webcam C920' }
+            : scene === 'livepc'
+              ? { surface: 'monitor' as const, audioKind: 'pc' as const, sourceTitle: 'Tela 1' }
+              : { surface: 'monitor' as const, audioKind: 'none' as const, audioReason: 'monitor' as const }),
         }
       : null,
     copied: scene === 'copied',
-    goLiveOpen: scene === 'modal' || scene === 'modalscreen' || scene === 'modalmute',
+    goLiveOpen: PICKER_SCENES.includes(scene),
     goLivePrefs: {
       ...DEFAULT_PREFS,
-      surface: scene === 'modalscreen' ? 'monitor' : 'window',
+      ...(scene === 'pickerwindows' ? { fps: 60 } : {}),
+      surface: CAMERA_SCENES.includes(scene) ? 'camera' : scene === 'modalscreen' || scene === 'pickerscreens' ? 'monitor' : 'window',
       audio: scene !== 'modalmute',
     },
+    picker: pickerFor(scene),
+    camera: cameraFor(scene),
     permissionDenied: scene === 'denied',
     toasts: toast ? [{ id: `scene-${scene}`, ...toast }] : [],
     canShare: true,
+    canShareScreen: true,
   };
 }

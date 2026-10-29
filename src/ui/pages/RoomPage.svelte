@@ -2,7 +2,7 @@
   import { Check, Link, LogOut, MonitorUp, ScreenShareOff } from '@lucide/svelte';
   import { audioLabelText } from '../../lib/audio-source';
   import { formatElapsed, header, watchingId } from '../../lib/room-view';
-  import type { RoomActions, RoomView } from '../../lib/types';
+  import type { CameraActions, RoomActions, RoomView } from '../../lib/types';
   import GoLiveModal from '../components/GoLiveModal.svelte';
   import Logo from '../components/Logo.svelte';
   import Participant from '../components/Participant.svelte';
@@ -10,6 +10,15 @@
   import StreamTile from '../components/StreamTile.svelte';
 
   let { view, actions }: { view: RoomView; actions: RoomActions } = $props();
+
+  // Aba Câmeras do seletor (specs/006).
+  const cameraActions: CameraActions = {
+    allow: () => actions.allowCamera(),
+    select: (id) => actions.selectCamera(id),
+    selectAudio: (id) => actions.selectAudio(id),
+    setRole: (role) => actions.setAudioRole(role),
+    setFacing: (facing) => actions.setFacing(facing),
+  };
 
   const head = $derived(header(view));
   const watching = $derived(watchingId(view));
@@ -65,11 +74,11 @@
           <StreamTile
             you
             size="thumb"
-            view={{ id: me.id, name: me.name, tone: me.tone, caption: 'sua tela', status: 'ok', muted: true, volume: 0, stream: b.stream }}
+            view={{ id: me.id, name: me.name, tone: me.tone, caption: b.source === 'camera' ? 'sua câmera' : 'sua tela', status: 'ok', muted: true, volume: 0, stream: b.stream, source: b.source }}
           />
         </div>
         <span class="me-live-stats">
-          {b.viewers} assistindo · {b.resolution}p · {b.fps} fps{b.adjusted ? ' · ajustado' : ''} · {audioLabelText(b.audioKind, b.audioReason)}
+          {b.viewers} assistindo · {b.resolution}p · {b.fps} fps{b.adjusted ? ' · ajustado' : ''} · {audioLabelText(b.audioKind, b.audioReason)}{b.source === 'camera' && b.sourceTitle ? ` · câmera ${b.sourceTitle}` : ''}
         </span>
       </div>
     {/if}
@@ -122,8 +131,13 @@
   {#if view.goLiveOpen}
     <GoLiveModal
       prefs={view.goLivePrefs}
+      picker={view.picker}
+      camera={view.camera}
       people={view.participants.length}
       onstart={actions.startGoLive}
+      onselect={actions.selectSource}
+      onsurface={actions.setSurface}
+      oncamera={cameraActions}
       onclose={actions.closeGoLive}
     />
   {/if}
@@ -143,7 +157,7 @@
   .people-count { font-size: 13px; color: var(--color-text-muted); }
   .list {
     list-style: none; margin: 0 0 0 -8px; padding: 0; display: flex; flex-direction: column; gap: 4px;
-    min-height: 0; overflow-y: auto; scrollbar-width: thin;
+    min-height: 0; overflow-y: auto;
   }
   .skeletons { display: flex; flex-direction: column; gap: 14px; padding-top: 6px; }
   .skeleton { display: flex; align-items: center; gap: 12px; }

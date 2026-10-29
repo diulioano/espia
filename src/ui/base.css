@@ -32,6 +32,21 @@ button { font: inherit; }
 .btn-icon { width: 36px; height: 36px; padding: 0; background: rgba(245, 234, 216, 0.08); }
 .btn-icon:hover { background: rgba(245, 234, 216, 0.14); }
 
+/* — rolagem — pílula na cor de destaque, sem setas, trilho transparente (app e site). No Chromium/
+   WebView2 as pseudo-classes ::-webkit-* só valem se o elemento não definir scrollbar-width/color. */
+::-webkit-scrollbar { width: 12px; height: 12px; }
+::-webkit-scrollbar-track, ::-webkit-scrollbar-corner { background: transparent; }
+::-webkit-scrollbar-button { display: none; }
+::-webkit-scrollbar-thumb {
+  border: 3px solid transparent; border-radius: var(--radius-pill); background-clip: padding-box;
+  background-color: color-mix(in srgb, var(--color-accent) 65%, transparent);
+}
+::-webkit-scrollbar-thumb:hover { background-color: var(--color-accent); }
+::-webkit-scrollbar-thumb:active { background-color: var(--color-accent-600); }
+@supports not selector(::-webkit-scrollbar) {
+  * { scrollbar-width: thin; scrollbar-color: color-mix(in srgb, var(--color-accent) 65%, transparent) transparent; }
+}
+
 /* — inputs — */
 .input {
   width: 100%; min-height: 50px; padding: 0 20px; font: inherit; font-size: 16px;

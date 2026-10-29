@@ -4,6 +4,7 @@
   import MobileRoomPage from '../ui/pages/MobileRoomPage.svelte';
   import RoomPage from '../ui/pages/RoomPage.svelte';
   import type { Navigate } from './registry';
+  import { MOCK_AUDIO_INPUTS, mockCameraDevices } from './room';
 
   let { initial, mobile = false, onnavigate }: { initial: RoomView; mobile?: boolean; onnavigate: Navigate } = $props();
 
@@ -38,17 +39,58 @@
     startGoLive(prefs) {
       view.goLivePrefs = prefs;
       view.goLiveOpen = false;
-      // Simula o que o seletor nativo entregaria: janela com o som dela; tela inteira sem som.
+      if (prefs.surface === 'camera') {
+        const cam = view.camera.devices.find((d) => d.id === view.camera.videoId);
+        view.myBroadcast = {
+          ...prefs,
+          viewers: view.participants.length - 1,
+          startedAt: Date.now(),
+          audioKind: prefs.audio && (view.camera.audioId || view.camera.mobile) ? 'device' : 'none',
+          source: 'camera',
+          sourceTitle: cam?.label ?? 'câmera traseira',
+        };
+        view.participants.forEach((p) => p.you && (p.live = true));
+        toast({ kind: 'live', text: 'Sua câmera está ao vivo pra sala' });
+        return;
+      }
       const screen = prefs.surface === 'monitor';
+      const source = view.picker.mode === 'native' ? view.picker.sources.find((s) => s.id === view.picker.selectedId) : undefined;
+      // App (specs/005): janela com o som dela; tela com o som do PC menos o Discord.
+      // Site (specs/004): o seletor nativo entregaria janela com som; tela inteira sem som.
       view.myBroadcast = {
         ...prefs,
         viewers: view.participants.length - 1,
         startedAt: Date.now(),
-        audioKind: prefs.audio && !screen ? 'window' : 'none',
-        audioReason: screen ? 'monitor' : undefined,
+        audioKind: !prefs.audio ? 'none' : source ? (screen ? 'pc' : 'window') : screen ? 'none' : 'window',
+        audioReason: screen && !source ? 'monitor' : undefined,
+        sourceTitle: source?.title,
       };
       view.participants.forEach((p) => p.you && (p.live = true));
       toast({ kind: 'live', text: 'Você está ao vivo pra sala' });
+    },
+    selectSource(id) {
+      view.picker.selectedId = id;
+    },
+    // Aba Câmeras (specs/006): só estado local, nada de câmera de verdade.
+    setSurface() {},
+    allowCamera() {
+      view.camera = { ...view.camera, permission: 'granted', devices: mockCameraDevices(), audios: MOCK_AUDIO_INPUTS, videoId: 'cam1', audioId: 'mic1' };
+    },
+    selectCamera(id) {
+      view.camera.videoId = id;
+      // Mesma sugestão da lógica real: placa → a entrada dela, como jogo.
+      if (id === 'cam2') Object.assign(view.camera, { audioId: 'mic2', audioRole: 'game' });
+      else if (id === 'cam1') Object.assign(view.camera, { audioId: 'mic1', audioRole: 'voice' });
+      else Object.assign(view.camera, { audioId: null, audioRole: 'voice' });
+    },
+    selectAudio(id) {
+      view.camera.audioId = id;
+    },
+    setAudioRole(role) {
+      view.camera.audioRole = role;
+    },
+    setFacing(facing) {
+      view.camera.facing = facing;
     },
     stopGoLive() {
       view.myBroadcast = null;

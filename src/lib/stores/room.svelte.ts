@@ -1,8 +1,23 @@
 // Sala real: liga a sinalização e a malha WebRTC ao RoomView que as telas já usam com os mocks.
 import type { IceServer, Peer, ServerMessage } from '../../shared/protocol';
-import { applyAudioRule, canShare, isPermissionDenied, startCapture, stopCapture } from '../capture';
+import { applyAudioRule, canShareScreen, isPermissionDenied, startCapture, stopCapture } from '../capture';
+import {
+  cameraPermission,
+  canUseCamera,
+  isBusy,
+  listDevices,
+  openPreview,
+  requestCamera,
+  startCamera,
+  stopStream,
+  watchDevices,
+  type CameraError,
+  type CameraPermission,
+} from '../camera';
+import { audioRole, isCaptureCard, previewIds, suggestAudio, type AudioRole, type DeviceInfo } from '../devices';
 import { untrack } from 'svelte';
 import { Mesh } from '../mesh';
+import { detectNative, matchLastSource, pollSources, sourceKey, startNative, type AudioWarn, type NativeSession } from '../native-capture';
 import { countFullViewers, effectiveQuality, isAdjusted, type Quality, type ViewMode } from '../quality';
 import { stageLayout } from '../room-view';
 import {
@@ -15,11 +30,17 @@ import {
 } from '../prefs';
 import { roomPath } from '../room-id';
 import { Signaling, type SignalingEnd } from '../signaling';
-import type { GoLivePrefs, MyBroadcastView, RoomActions, RoomView, StreamView, ToastView } from '../types';
+import type { CameraView, CaptureSource, GoLivePrefs, MyBroadcastView, RoomActions, RoomView, ShareSurface, StreamView, ToastView } from '../types';
 
 const DEFAULT_VOLUME = 0.68;
 const TOAST_MS = 4_000;
 const SCREEN_NO_AUDIO = 'Tela inteira vai sem som. Pra levar o som, transmita a janela do jogo ou uma aba.';
+/** Avisos do som no app desktop (specs/005). */
+const NATIVE_AUDIO_WARN: Record<AudioWarn, string> = {
+  unsupported: 'Seu Windows não deixa separar o som da janela — foi só a imagem.',
+  many_discords: 'Mais de um Discord aberto — tela inteira vai sem som.',
+};
+const BLACK_WARN = 'A tela tá saindo preta — tenta deixar o jogo em modo janela ou sem bordas.';
 /** Sem quadro de vídeo nesse tempo depois de "começou a transmitir" → tile "falhou". */
 const FIRST_FRAME_TIMEOUT_MS = 10_000;
 /** Pede credenciais TURN novas esse tempo antes de vencerem. */
@@ -55,6 +76,26 @@ export class RoomStore {
   theirViews = $state<Record<string, ViewMode>>({});
   /** Layout de celular (a rota avisa). Muda como eu vejo as telas dos outros. */
   mobile = $state(false);
+  /** Seletor do app desktop (specs/005): null = ainda descobrindo se a ponte existe. */
+  pickerMode = $state<'native' | 'browser' | null>(null);
+  sources = $state<CaptureSource[]>([]);
+  sourcesLoading = $state(false);
+  selectedId = $state<string | null>(null);
+  /** Aba aberta no seletor (liga/desliga as prévias de câmera). */
+  tab = $state<ShareSurface>('window');
+  /** Aba Câmeras (specs/006). */
+  camPermission = $state<CameraPermission>('unknown');
+  /** A câmera não abriu (ocupada, não encontrada…): a aba explica e oferece tentar de novo. */
+  camError = $state<CameraError | null>(null);
+  camVideos = $state<DeviceInfo[]>([]);
+  camAudios = $state<DeviceInfo[]>([]);
+  /** MediaStream não pode virar proxy: $state.raw, trocado por inteiro. */
+  camPreviews = $state.raw<Record<string, MediaStream>>({});
+  camBusy = $state<Record<string, boolean>>({});
+  camVideoId = $state<string | null>(null);
+  camAudioId = $state<string | null>(null);
+  camAudioRole = $state<AudioRole>('voice');
+  camFacing = $state<'user' | 'environment'>('user');
 
   /** Qualidade efetiva da minha transmissão: o escolhido, com teto pelo nº de espectadores. */
   readonly quality: Quality | null = $derived(
@@ -73,6 +114,15 @@ export class RoomStore {
   private mesh: Mesh | null = null;
   private frameTimers = new Map<string, ReturnType<typeof setTimeout>>();
   private turnTimer: ReturnType<typeof setTimeout> | undefined;
+  private native: NativeSession | null = null;
+  private stopPoll: (() => void) | null = null;
+  /** A pessoa trocou o som/perfil nesta abertura: não sugerir por cima. */
+  private camAudioManual = false;
+  private camRoleManual = false;
+  private stopWatchDevices: (() => void) | null = null;
+  /** Aumenta a cada entrada/saída da aba: prévias de uma abertura antiga são descartadas. */
+  private camGen = 0;
+  private muteTimer: ReturnType<typeof setTimeout> | undefined;
 
   constructor(
     readonly code: string,
@@ -97,6 +147,11 @@ export class RoomStore {
       },
     });
     this.actions = this.buildActions();
+    // App desktop com a ponte de captura? Fora dele, o seletor da 004.
+    detectNative().then((ok) => {
+      if (this.pickerMode === null) this.pickerMode = ok ? 'native' : 'browser';
+      if (this.goLiveOpen) this.startPicker();
+    });
     this.stopEffects = $effect.root(() => {
       // Avisa cada pessoa de como estou vendo a tela dela (cheia, miniatura ou escondida).
       $effect(() => {
@@ -117,6 +172,8 @@ export class RoomStore {
 
   /** Saiu da tela da sala (botão, voltar do navegador). */
   destroy() {
+    this.stopPicker();
+    this.leaveCameraTab();
     this.stopEffects();
     this.closeMedia();
     this.stopBroadcast(false);
@@ -212,6 +269,7 @@ export class RoomStore {
           muted: a.muted,
           volume: a.volume,
           stream: flowing ? m.stream! : undefined,
+          source: p.live!.source,
         };
       });
     return {
@@ -233,9 +291,17 @@ export class RoomStore {
       copied: this.copied,
       goLiveOpen: this.goLiveOpen,
       goLivePrefs: this.goLivePrefs,
+      picker: {
+        mode: this.pickerMode === 'native' ? 'native' : 'browser',
+        sources: this.sources,
+        loading: this.sourcesLoading,
+        selectedId: this.selectedId,
+      },
+      camera: this.cameraView(),
       permissionDenied: this.permissionDenied,
       toasts: this.toasts,
-      canShare: canShare(),
+      canShare: canShareScreen() || canUseCamera(),
+      canShareScreen: canShareScreen(),
     };
   }
 
@@ -252,11 +318,46 @@ export class RoomStore {
       openGoLive: () => {
         this.permissionDenied = false;
         this.goLiveOpen = true;
+        this.startPicker();
+        // Celular: só câmera (specs/006 US4).
+        this.tab = canShareScreen() ? this.goLivePrefs.surface : 'camera';
+        if (this.tab === 'camera') void this.enterCameraTab();
       },
       closeGoLive: () => {
         this.goLiveOpen = false;
+        this.stopPicker();
+        this.leaveCameraTab();
+      },
+      setSurface: (surface) => {
+        if (surface === this.tab && surface === 'camera' && this.camGen > 0) return;
+        this.tab = surface;
+        if (surface === 'camera') void this.enterCameraTab();
+        else this.leaveCameraTab();
+      },
+      allowCamera: () => void this.allowCamera(),
+      selectCamera: (id) => {
+        if (!this.camVideos.some((v) => v.id === id)) return;
+        this.camVideoId = id;
+        this.suggestCameraAudio();
+        void this.updatePreviews();
+      },
+      selectAudio: (id) => {
+        this.camAudioId = id;
+        this.camAudioManual = true;
+        const a = this.camAudios.find((x) => x.id === id);
+        if (a && !this.camRoleManual) this.camAudioRole = audioRole(a.label, this.pairedWithCapture(a));
+      },
+      setAudioRole: (role) => {
+        this.camAudioRole = role;
+        this.camRoleManual = true;
+      },
+      setFacing: (facing) => {
+        this.camFacing = facing;
       },
       startGoLive: (prefs) => this.startBroadcast(prefs),
+      selectSource: (id) => {
+        if (this.sources.some((s) => s.id === id)) this.selectedId = id;
+      },
       stopGoLive: () => this.stopBroadcast(true),
       dismissPermission: () => {
         this.permissionDenied = false;
@@ -302,7 +403,43 @@ export class RoomStore {
     return this.audio[id];
   }
 
+  // ---------- Seletor do app desktop (specs/005) ----------
+
+  /** Grade aberta: lista agora e a cada 2 s (FR-504). Falhou → seletor do navegador (FR-511). */
+  private startPicker() {
+    if (this.pickerMode !== 'native' || this.stopPoll) return;
+    let first = true;
+    this.sourcesLoading = this.sources.length === 0;
+    this.stopPoll = pollSources(
+      (sources) => {
+        this.sources = sources;
+        this.sourcesLoading = false;
+        // A escolhida fechou: some a marcação (US1 cenário 5).
+        if (this.selectedId && !sources.some((s) => s.id === this.selectedId)) this.selectedId = null;
+        // Primeira lista: volta a última fonte, se ainda existir (US5).
+        if (first && !this.selectedId) this.selectedId = matchLastSource(sources, this.goLivePrefs.lastSourceKey);
+        first = false;
+      },
+      (err) => {
+        console.warn('[espia] lista de janelas falhou; usando o seletor do Windows', err);
+        this.pickerMode = 'browser';
+        this.sourcesLoading = false;
+        this.stopPicker();
+      },
+    );
+  }
+
+  private stopPicker() {
+    this.stopPoll?.();
+    this.stopPoll = null;
+  }
+
   private async startBroadcast(prefs: GoLivePrefs) {
+    this.stopPicker();
+    if (prefs.surface === 'camera') return this.startCameraBroadcast(prefs);
+    this.leaveCameraTab();
+    const source = this.pickerMode === 'native' ? this.sources.find((s) => s.id === this.selectedId) : undefined;
+    if (source) return this.startNativeBroadcast({ ...prefs, surface: source.kind, lastSourceKey: sourceKey(source) }, source);
     this.goLivePrefs = prefs;
     saveGoLivePrefs(prefs);
     this.goLiveOpen = false;
@@ -343,6 +480,254 @@ export class RoomStore {
     if (a.warn) this.warnScreenAudio();
   }
 
+  /** App desktop: o próprio app captura a fonte escolhida na grade, sem o seletor do Windows. */
+  private async startNativeBroadcast(prefs: GoLivePrefs, source: CaptureSource) {
+    this.goLivePrefs = prefs;
+    saveGoLivePrefs(prefs);
+    this.goLiveOpen = false;
+    let session: NativeSession;
+    try {
+      session = await startNative(prefs, source.id, {
+        ended: () => this.stopBroadcast(true),
+        audio: (kind, warn) => {
+          const b = this.myBroadcast;
+          if (!b || this.native !== session) return;
+          if (warn) this.toast({ kind: 'error', text: NATIVE_AUDIO_WARN[warn] });
+          if (b.audioKind !== kind) {
+            b.audioKind = kind;
+            this.sendLive();
+          }
+        },
+        warn: () => this.toast({ kind: 'error', text: BLACK_WARN }),
+      });
+    } catch (err) {
+      if (err === 'source_gone') {
+        this.toast({ kind: 'error', text: 'Essa janela fechou — escolhe outra.' });
+        this.selectedId = null;
+      } else {
+        // FR-511: sem erro bloqueante; a próxima tentativa usa o seletor do Windows.
+        console.warn('[espia] captura nativa falhou', err);
+        this.pickerMode = 'browser';
+        this.toast({ kind: 'error', text: 'Não deu pra capturar pelo app — tenta de novo, agora pelo seletor do Windows.' });
+      }
+      this.goLiveOpen = true;
+      this.startPicker();
+      return;
+    }
+    const stream = session.stream;
+    this.native = session;
+    this.stream = stream;
+    this.warnedScreenAudio = false;
+    // O som pode entrar/sair no meio (vigia do Discord): a malha manda o estado atual.
+    const resend = () => {
+      if (this.stream === stream && this.quality) this.mesh?.setLocal(stream, this.quality);
+    };
+    stream.addEventListener('addtrack', resend);
+    stream.addEventListener('removetrack', resend);
+    this.myBroadcast = {
+      ...prefs,
+      startedAt: Date.now(),
+      viewers: this.peers.length,
+      stream,
+      audioKind: session.result.audio,
+      sourceTitle: source.title,
+    };
+    const q = this.quality!;
+    this.appliedQuality = q;
+    await this.constrainCapture(q);
+    this.mesh?.setLocal(stream, q);
+    this.sendLive();
+    this.toast({ kind: 'live', text: 'Você está ao vivo pra sala' });
+    if (session.result.audioWarn) this.toast({ kind: 'error', text: NATIVE_AUDIO_WARN[session.result.audioWarn] });
+  }
+
+  // ---------- Câmera / placa de captura (specs/006) ----------
+
+  private cameraView(): CameraView {
+    return {
+      permission: this.camPermission,
+      devices: this.camVideos.map((v) => ({
+        id: v.id,
+        label: v.label,
+        kind: isCaptureCard(v.label) ? 'capture' : 'camera',
+        preview: this.camPreviews[v.id] ?? null,
+        busy: !!this.camBusy[v.id],
+      })),
+      audios: this.camAudios.map((a) => ({ id: a.id, label: a.label })),
+      videoId: this.camVideoId,
+      audioId: this.camAudioId,
+      audioRole: this.camAudioRole,
+      mobile: !canShareScreen(),
+      facing: this.camFacing,
+      error: this.camError ?? undefined,
+    };
+  }
+
+  /** Abriu a aba: só consulta a permissão (FR-602); se já foi dada, lista e liga as prévias. */
+  private async enterCameraTab() {
+    const gen = ++this.camGen;
+    this.camAudioManual = this.camRoleManual = false;
+    if (!canShareScreen()) return; // Celular: frontal/traseira, sem lista nem prévias.
+    if (this.camPermission !== 'granted') this.camPermission = await cameraPermission();
+    if (gen !== this.camGen) return;
+    if (this.camPermission === 'granted') await this.refreshDevices(gen);
+  }
+
+  private async allowCamera() {
+    const gen = this.camGen;
+    const r = await requestCamera();
+    this.camPermission = r.permission;
+    this.camError = r.error ?? null;
+    // Abriu a câmera: os nomes já estão liberados, não precisa abrir de novo.
+    if (r.permission === 'granted' && gen === this.camGen && this.goLiveOpen) await this.refreshDevices(gen, true);
+  }
+
+  /** Saiu da aba, fechou o seletor ou vai transmitir: nenhuma prévia fica ligada (FR-604). */
+  private leaveCameraTab() {
+    this.camGen++;
+    this.stopWatchDevices?.();
+    this.stopWatchDevices = null;
+    for (const s of Object.values(this.camPreviews)) stopStream(s);
+    this.camPreviews = {};
+  }
+
+  private async refreshDevices(gen: number, retried = false): Promise<void> {
+    const { videos, audios, unnamed } = await listDevices();
+    if (gen !== this.camGen) return;
+    // Permissão dada, mas sem nomes ainda: abre e fecha a câmera uma vez (a pessoa já clicou na aba).
+    if (unnamed && !retried) {
+      const r = await requestCamera();
+      this.camPermission = r.permission;
+      this.camError = r.error ?? null;
+      if (gen !== this.camGen || r.permission !== 'granted') return;
+      return this.refreshDevices(gen, true);
+    }
+    if (videos.length) this.camError = null;
+    this.camVideos = videos;
+    this.camAudios = audios;
+    this.stopWatchDevices ??= watchDevices(() => void this.refreshDevices(this.camGen));
+    // Escolha: a que já estava, senão a última transmitida (pelo nome, FR-609), senão a primeira.
+    if (!videos.some((v) => v.id === this.camVideoId)) {
+      this.camVideoId = (videos.find((v) => v.label === this.goLivePrefs.lastVideoLabel) ?? videos[0])?.id ?? null;
+      this.suggestCameraAudio();
+    }
+    if (this.camAudioId && !audios.some((a) => a.id === this.camAudioId)) this.camAudioId = null;
+    await this.updatePreviews();
+  }
+
+  private pairedWithCapture(a: DeviceInfo) {
+    return this.camVideos.some((v) => v.groupId && v.groupId === a.groupId && isCaptureCard(v.label));
+  }
+
+  /** Som sugerido para a câmera escolhida (R4), a menos que a pessoa já tenha escolhido. */
+  private suggestCameraAudio() {
+    const video = this.camVideos.find((v) => v.id === this.camVideoId);
+    if (!video) return;
+    if (!this.camAudioManual) {
+      const last = this.camAudios.find((a) => a.label === this.goLivePrefs.lastAudioLabel);
+      const pick = suggestAudio(video, this.camAudios) ?? (video.label === this.goLivePrefs.lastVideoLabel ? last : null) ?? null;
+      this.camAudioId = pick?.id ?? null;
+    }
+    if (!this.camRoleManual) {
+      const a = this.camAudios.find((x) => x.id === this.camAudioId);
+      this.camAudioRole =
+        video.label === this.goLivePrefs.lastVideoLabel && this.goLivePrefs.lastAudioRole
+          ? this.goLivePrefs.lastAudioRole
+          : a
+            ? audioRole(a.label, this.pairedWithCapture(a))
+            : 'voice';
+    }
+  }
+
+  /** Até 4 prévias ao vivo, a escolhida primeiro (FR-603). */
+  private async updatePreviews() {
+    const gen = this.camGen;
+    const want = new Set(previewIds(this.camVideos.map((v) => ({ id: v.id, busy: this.camBusy[v.id] })), this.camVideoId));
+    const next: Record<string, MediaStream> = {};
+    for (const [id, s] of Object.entries(this.camPreviews)) {
+      if (want.has(id)) next[id] = s;
+      else stopStream(s);
+    }
+    this.camPreviews = next;
+    // Uma por vez: alguns drivers não gostam de abrir várias câmeras ao mesmo tempo.
+    for (const id of want) {
+      if (this.camPreviews[id]) continue;
+      const { stream, busy } = await openPreview(id);
+      if (gen !== this.camGen || !this.goLiveOpen || this.tab !== 'camera') {
+        stopStream(stream);
+        return;
+      }
+      if (busy) this.camBusy[id] = true;
+      if (stream) this.camPreviews = { ...this.camPreviews, [id]: stream };
+    }
+  }
+
+  private async startCameraBroadcast(prefs: GoLivePrefs) {
+    const mobile = !canShareScreen();
+    const video = this.camVideos.find((v) => v.id === this.camVideoId);
+    if (!mobile && !video) return;
+    const audio = prefs.audio ? this.camAudios.find((a) => a.id === this.camAudioId) : undefined;
+    // Celular: 720p30 fixo (bateria/4G, research R5).
+    const chosen: GoLivePrefs = {
+      ...prefs,
+      ...(mobile ? { resolution: 720 as const, fps: 30 as const } : {}),
+      ...(video ? { lastVideoLabel: video.label } : {}),
+      ...(audio ? { lastAudioLabel: audio.label, lastAudioRole: this.camAudioRole } : {}),
+    };
+    this.goLivePrefs = chosen;
+    saveGoLivePrefs(chosen);
+    this.goLiveOpen = false;
+    // Fecha as prévias antes: alguns drivers de placa não abrem a mesma câmera duas vezes.
+    this.leaveCameraTab();
+    let stream: MediaStream;
+    try {
+      stream = await startCamera({
+        videoId: mobile ? undefined : video!.id,
+        facing: this.camFacing,
+        // Celular: o microfone padrão, como voz.
+        audioId: mobile ? (prefs.audio ? '' : null) : (audio?.id ?? null),
+        audioRole: mobile ? 'voice' : this.camAudioRole,
+        resolution: chosen.resolution,
+        fps: chosen.fps,
+      });
+    } catch (err) {
+      if (isPermissionDenied(err)) this.camPermission = 'denied';
+      if (isBusy(err)) this.toast({ kind: 'error', text: 'Essa câmera está sendo usada por outro programa.' });
+      else if (!isPermissionDenied(err)) this.toast({ kind: 'error', text: 'Não deu pra abrir a câmera.' });
+      this.goLiveOpen = true;
+      this.tab = 'camera';
+      void this.enterCameraTab();
+      return;
+    }
+    this.stream = stream;
+    const track = stream.getVideoTracks()[0];
+    // Câmera desplugada / celular trocou de app: a transmissão acaba (FR-608). O som nunca fica
+    // sem a câmera (FR-606b): stopBroadcast para todas as faixas.
+    track?.addEventListener('ended', () => this.stopBroadcast(true));
+    if (mobile && track) {
+      track.addEventListener('mute', () => {
+        clearTimeout(this.muteTimer);
+        this.muteTimer = setTimeout(() => this.stream === stream && this.stopBroadcast(true), 3_000);
+      });
+      track.addEventListener('unmute', () => clearTimeout(this.muteTimer));
+    }
+    this.myBroadcast = {
+      ...chosen,
+      startedAt: Date.now(),
+      viewers: this.peers.length,
+      stream,
+      audioKind: stream.getAudioTracks().length ? 'device' : 'none',
+      source: 'camera',
+      sourceTitle: video?.label ?? (this.camFacing === 'user' ? 'câmera frontal' : 'câmera traseira'),
+    };
+    const q = this.quality!;
+    this.appliedQuality = q;
+    await this.constrainCapture(q);
+    this.mesh?.setLocal(stream, q);
+    this.sendLive();
+    this.toast({ kind: 'live', text: 'Sua câmera está ao vivo pra sala' });
+  }
+
   /** Aviso do FR-208: no máximo uma vez por transmissão. */
   private warnedScreenAudio = false;
   private warnScreenAudio() {
@@ -370,7 +755,7 @@ export class RoomStore {
     const b = this.myBroadcast;
     if (!b) return;
     const q = this.quality ?? b;
-    this.signaling.send({ t: 'live', resolution: q.resolution, fps: q.fps, audio: b.audioKind });
+    this.signaling.send({ t: 'live', resolution: q.resolution, fps: q.fps, audio: b.audioKind, source: b.source ?? 'screen' });
   }
 
   private async applyQuality(q: Quality) {
@@ -384,6 +769,15 @@ export class RoomStore {
 
   /** Reduz na captura (alivia a CPU de todos os envios de uma vez). */
   private async constrainCapture(q: Quality) {
+    // App desktop: o track é gerado; quem reduz é o app (capture_set_quality).
+    if (this.native) {
+      try {
+        await this.native.setQuality(q.resolution, q.fps);
+      } catch (err) {
+        console.warn('[espia] capture_set_quality', err);
+      }
+      return;
+    }
     const track = this.stream?.getVideoTracks()[0];
     if (!track) return;
     const width = q.resolution === 1080 ? 1920 : 1280;
@@ -412,7 +806,12 @@ export class RoomStore {
 
   private stopBroadcast(notify: boolean) {
     if (!this.stream) return;
-    stopCapture(this.stream);
+    if (this.native) {
+      const native = this.native;
+      this.native = null;
+      void native.stop();
+    } else stopCapture(this.stream);
+    clearTimeout(this.muteTimer);
     this.stream = null;
     this.myBroadcast = null;
     this.appliedQuality = null;

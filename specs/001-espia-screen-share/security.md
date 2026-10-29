@@ -78,7 +78,8 @@ Content-Security-Policy: default-src 'self'; script-src 'self'; style-src 'self'
   frame-ancestors 'self'; base-uri 'none'; form-action 'self'; object-src 'none'
 Referrer-Policy: no-referrer
 X-Content-Type-Options: nosniff
-Permissions-Policy: display-capture=(self), camera=(), microphone=(), geolocation=(), picture-in-picture=(self), fullscreen=(self)
+Permissions-Policy: display-capture=(self), camera=(self), microphone=(self), geolocation=(), picture-in-picture=(self), fullscreen=(self)
+(camera/microphone liberados para o próprio site na 006: aba Câmeras.)
 Cross-Origin-Opener-Policy: same-origin
 Strict-Transport-Security: max-age=31536000; includeSubDomains
 ```

@@ -1,6 +1,8 @@
 <!--
 Sync Impact Report
-- Versão: 1.0.1 → 1.1.0 (I: app desktop opcional permitido; restrição técnica do app desktop) — feature 003
+- Versão: 1.2.0 → 1.3.0 (I: som de uma câmera transmitida permitido; restrição: celular transmite câmera) — feature 006, pedido de 2026-10-29 (Q1: C, Q3: B)
+- Anterior: 1.1.0 → 1.2.0 (restrição técnica do app desktop: ponte de captura nativa, só para a origem do site) — feature 005, pedido de 2026-10-29
+- Anterior: 1.0.1 → 1.1.0 (I: app desktop opcional permitido; restrição técnica do app desktop) — feature 003
 - Anterior: 1.0.0 → 1.0.1 (VI: código curto de sala + limite de consultas)
 - Anterior: (template) → 1.0.0
 - Princípios definidos: I. Simplicidade para quem usa; II. Sem servidor de mídia; III. Efêmero e sem contas;
@@ -19,6 +21,8 @@ Nenhuma funcionalidade pode exigir instalação, conta, login ou senha. Textos d
 português informal (o tom do design "Espia"). Funcionalidades fora do escopo (voz, chat de texto,
 contas, amigos) MUST NOT ser adicionadas sem emenda desta constituição. Um app desktop **opcional**
 que abre o mesmo site é permitido (1.1.0); o site MUST continuar funcionando sem instalar nada.
+Voz como recurso próprio (chamada, push-to-talk, transmitir só som) continua fora do escopo; o som
+de uma **câmera transmitida** (inclusive o microfone) é permitido, só enquanto a câmera estiver no ar (1.3.0).
 
 ### II. Sem servidor de mídia
 Vídeo e áudio trafegam navegador ↔ navegador via WebRTC P2P em malha. O servidor só faz
@@ -51,10 +55,12 @@ apenas credenciais temporárias. Códigos de sala são aleatórios (CSPRNG) e o 
 - Front-end: Svelte 5 + Vite + TypeScript (SPA, sem SvelteKit). Ícones Lucide (`@lucide/svelte`).
 - Back-end: um Cloudflare Worker (serve os assets estáticos + API) e um Durable Object por sala
   (WebSocket de sinalização). Deploy com `wrangler` em `*.workers.dev`.
-- Navegadores alvo para transmitir: Chrome/Edge desktop. Assistir: qualquer navegador moderno,
-  inclusive celular.
-- App desktop (opcional): Tauri 2 + WebView2, só Windows, carrega o site publicado; nenhuma API
-  nativa exposta à página. Código em `src-tauri/`.
+- Navegadores alvo para transmitir: Chrome/Edge desktop; **câmera** também no celular (1.3.0).
+  Assistir: qualquer navegador moderno, inclusive celular.
+- App desktop (opcional): Tauri 2 + WebView2, só Windows, carrega o site publicado. Expõe à página
+  **apenas** a ponte de captura (`specs/005-seletor-nativo-desktop/contracts/native-capture.md`:
+  listar fontes, miniaturas, iniciar/parar captura de vídeo e som), **apenas** para a origem do site,
+  na janela principal. Qualquer outra API nativa exige emenda. Código em `src-tauri/`.
 - Sem dependências pesadas de UI (sem frameworks de componentes). CSS próprio sobre os tokens.
 
 ## Fluxo de desenvolvimento
@@ -71,4 +77,4 @@ Esta constituição prevalece sobre preferências de implementação. Emendas: e
 subir a versão (MAJOR remove/redefine princípio; MINOR adiciona princípio/seção; PATCH esclarece)
 e registrar o motivo no Sync Impact Report. Todo `plan.md` passa pelo Constitution Check.
 
-**Version**: 1.1.0 | **Ratified**: 2026-10-28 | **Last Amended**: 2026-10-28
+**Version**: 1.3.0 | **Ratified**: 2026-10-28 | **Last Amended**: 2026-10-29

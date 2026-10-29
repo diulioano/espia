@@ -1,0 +1,15 @@
+{
+  "identifier": "capture-dev",
+  "description": "Só em builds de debug (lib.rs): a mesma ponte para o Worker local.",
+  "windows": ["main"],
+  "remote": {
+    "urls": ["http://127.0.0.1:*/*", "http://localhost:*/*"]
+  },
+  "permissions": [
+    "allow-capture-supported",
+    "allow-capture-list",
+    "allow-capture-start",
+    "allow-capture-set-quality",
+    "allow-capture-stop"
+  ]
+}

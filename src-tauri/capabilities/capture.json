@@ -1,0 +1,16 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "capture",
+  "description": "Ponte de captura nativa (specs/005): só para o site do Espia, na janela principal.",
+  "windows": ["main"],
+  "remote": {
+    "urls": ["https://espia.espia.workers.dev/*"]
+  },
+  "permissions": [
+    "allow-capture-supported",
+    "allow-capture-list",
+    "allow-capture-start",
+    "allow-capture-set-quality",
+    "allow-capture-stop"
+  ]
+}

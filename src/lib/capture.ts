@@ -2,7 +2,8 @@
 import { decideAudio, type Surface } from './audio-source';
 import type { AudioKind, GoLivePrefs } from './types';
 
-export const canShare = () => typeof navigator !== 'undefined' && !!navigator.mediaDevices?.getDisplayMedia;
+/** Dá pra transmitir tela (só desktop; celular não tem getDisplayMedia). */
+export const canShareScreen = () => typeof navigator !== 'undefined' && !!navigator.mediaDevices?.getDisplayMedia;
 
 export async function startCapture(prefs: GoLivePrefs): Promise<MediaStream> {
   const width = prefs.resolution === 1080 ? 1920 : 1280;

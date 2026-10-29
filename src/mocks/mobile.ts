@@ -7,6 +7,7 @@ export const MOBILE_SCENES = [
   { id: 'empty', code: 'M3', label: 'Ninguém ao vivo', device: 'mobile' },
   { id: 'connecting', code: 'M·E1', label: 'Conectando', device: 'mobile' },
   { id: 'streamfail', code: 'M·E4', label: 'Falha na transmissão', device: 'mobile' },
+  { id: 'camera', code: 'M·A5', label: 'Transmitir a câmera do celular', device: 'mobile' },
 ] as const;
 
 export type MobileScene = (typeof MOBILE_SCENES)[number]['id'];
@@ -17,9 +18,17 @@ export function buildMobileScene(scene: MobileScene): RoomView {
     empty: 'empty',
     connecting: 'connecting',
     streamfail: 'streamfail',
+    camera: 'empty',
   };
   const view = buildRoomScene(base[scene]);
-  view.canShare = false;
+  // Celular: não transmite tela; só a câmera (specs/006 US4) na cena 'camera'.
+  view.canShare = scene === 'camera';
+  view.canShareScreen = false;
+  if (scene === 'camera') {
+    view.goLiveOpen = true;
+    view.goLivePrefs = { ...view.goLivePrefs, surface: 'camera', resolution: 720, fps: 30 };
+    view.camera = { ...view.camera, mobile: true, facing: 'environment' };
+  }
   view.toasts = [];
 
   if (scene === 'watching') {

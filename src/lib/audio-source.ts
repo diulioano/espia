@@ -36,5 +36,16 @@ export function decideAudio(input: {
 export function audioLabelText(kind: AudioKind, reason?: 'monitor'): string {
   if (kind === 'tab') return 'com som da aba';
   if (kind === 'window') return 'com som da janela';
+  if (kind === 'pc') return 'com som do PC (sem Discord)';
+  if (kind === 'device') return 'com som do dispositivo';
   return reason === 'monitor' ? 'sem som (tela inteira)' : 'sem som';
+}
+
+/** Texto sob "Compartilhar áudio" no seletor do app desktop (specs/005 data-model.md). */
+export function nativeAudioText(input: { surface: Surface; audio: boolean; selectedTitle?: string | null }): string {
+  if (!input.audio) return 'Só a imagem vai pra sala.';
+  if (input.surface === 'monitor') return 'Todo o som do computador vai junto — menos o Discord.';
+  return input.selectedTitle
+    ? `Só o som de ${input.selectedTitle} — nada de notificação vazando.`
+    : 'Só o som da janela que você escolher — Discord e notificações ficam de fora.';
 }

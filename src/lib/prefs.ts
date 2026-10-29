@@ -43,7 +43,16 @@ export function loadGoLivePrefs(): GoLivePrefs {
   try {
     const p = JSON.parse(read(local, KEY.goLive) ?? 'null');
     if (p && (p.resolution === 720 || p.resolution === 1080) && (p.fps === 30 || p.fps === 60)) {
-      return { resolution: p.resolution, fps: p.fps, audio: !!p.audio, surface: p.surface === 'monitor' ? 'monitor' : 'window' };
+      return {
+        resolution: p.resolution,
+        fps: p.fps,
+        audio: !!p.audio,
+        surface: p.surface === 'monitor' || p.surface === 'camera' ? p.surface : 'window',
+        ...(typeof p.lastSourceKey === 'string' ? { lastSourceKey: p.lastSourceKey } : {}),
+        ...(typeof p.lastVideoLabel === 'string' ? { lastVideoLabel: p.lastVideoLabel } : {}),
+        ...(typeof p.lastAudioLabel === 'string' ? { lastAudioLabel: p.lastAudioLabel } : {}),
+        ...(p.lastAudioRole === 'voice' || p.lastAudioRole === 'game' ? { lastAudioRole: p.lastAudioRole } : {}),
+      };
     }
   } catch {
     // Valor corrompido: usa o padrão.

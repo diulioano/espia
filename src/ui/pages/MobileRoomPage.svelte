@@ -1,7 +1,7 @@
 <script lang="ts">
   // Sala no celular (M2/M3): só assistir. Mesmo RoomView/RoomActions da RoomPage.
   import { Check, Link, Smartphone } from '@lucide/svelte';
-  import type { RoomActions, RoomView } from '../../lib/types';
+  import type { CameraActions, RoomActions, RoomView } from '../../lib/types';
   import Avatar from '../components/Avatar.svelte';
   import GoLiveModal from '../components/GoLiveModal.svelte';
   import Participant from '../components/Participant.svelte';
@@ -10,6 +10,15 @@
   import ToastStack from '../components/ToastStack.svelte';
 
   let { view, actions }: { view: RoomView; actions: RoomActions } = $props();
+
+  // Aba Câmeras do seletor (specs/006).
+  const cameraActions: CameraActions = {
+    allow: () => actions.allowCamera(),
+    select: (id) => actions.selectCamera(id),
+    selectAudio: (id) => actions.selectAudio(id),
+    setRole: (role) => actions.setAudioRole(role),
+    setFacing: (facing) => actions.setFacing(facing),
+  };
 
   const connecting = $derived(view.status === 'connecting');
   // No celular sempre há uma transmissão em destaque: a focada ou a primeira.
@@ -99,9 +108,12 @@
       </p>
     {/if}
     <div class="bar-actions">
-      <button class="btn btn-primary golive" disabled={!view.canShare || connecting} onclick={actions.openGoLive}>
-        {view.myBroadcast ? 'Ao vivo' : 'Transmitir'}
-      </button>
+      {#if view.myBroadcast}
+        <!-- Transmitindo a câmera do celular (specs/006 US4): parar fica à mão. -->
+        <button class="btn btn-stop golive" onclick={actions.stopGoLive}>Parar câmera</button>
+      {:else}
+        <button class="btn btn-primary golive" disabled={!view.canShare || connecting} onclick={actions.openGoLive}>Transmitir</button>
+      {/if}
       <button class="btn btn-secondary leave" onclick={actions.leave}>Sair</button>
     </div>
   </footer>
@@ -113,8 +125,13 @@
   {#if view.goLiveOpen}
     <GoLiveModal
       prefs={view.goLivePrefs}
+      picker={view.picker}
+      camera={view.camera}
       people={view.participants.length}
       onstart={actions.startGoLive}
+      onselect={actions.selectSource}
+      onsurface={actions.setSurface}
+      oncamera={cameraActions}
       onclose={actions.closeGoLive}
     />
   {/if}

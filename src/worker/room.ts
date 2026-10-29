@@ -258,7 +258,7 @@ export class Room extends DurableObject<Env> {
       case 'unlive': {
         const live: LiveInfo | null =
           msg.t === 'live'
-            ? { resolution: msg.resolution, fps: msg.fps, audio: msg.audio, startedAt: me.live?.startedAt ?? Date.now() }
+            ? { resolution: msg.resolution, fps: msg.fps, audio: msg.audio, source: msg.source ?? 'screen', startedAt: me.live?.startedAt ?? Date.now() }
             : null;
         const member = { ...me, live };
         ws.serializeAttachment({ joined: true, member } satisfies Attachment);

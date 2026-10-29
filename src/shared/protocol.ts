@@ -12,14 +12,23 @@ export const MAX_MESSAGE_BYTES = 64 * 1024;
 export const PING = '{"t":"ping"}';
 export const PONG = '{"t":"pong"}';
 
-/** Som que sai na transmissão (specs/002): da aba, da janela ou nenhum. Nunca o som do sistema inteiro. */
-export type AudioKind = 'tab' | 'window' | 'none';
-export const AUDIO_KINDS: readonly AudioKind[] = ['tab', 'window', 'none'];
+/**
+ * Som que sai na transmissão (specs/002): da aba, da janela ou nenhum. 'pc' (specs/005, só no app
+ * desktop): o PC inteiro **menos o Discord**. 'device' (specs/006): a entrada de som escolhida junto da
+ * câmera/placa. Nunca o som do sistema com o Discord junto.
+ */
+export type AudioKind = 'tab' | 'window' | 'pc' | 'device' | 'none';
+export const AUDIO_KINDS: readonly AudioKind[] = ['tab', 'window', 'pc', 'device', 'none'];
+
+/** O que está sendo transmitido (specs/006): tela/janela/aba ou câmera/placa de captura. */
+export type LiveSource = 'screen' | 'camera';
+export const LIVE_SOURCES: readonly LiveSource[] = ['screen', 'camera'];
 
 export interface LiveInfo {
   resolution: 720 | 1080;
   fps: 30 | 60;
   audio: AudioKind;
+  source: LiveSource;
   startedAt: number;
 }
 
@@ -46,7 +55,7 @@ export type ClientMessage =
   | { t: 'join'; nickname: string }
   | { t: 'resume'; peerId: string; resumeToken: string }
   | { t: 'signal'; to: string; data: SignalData }
-  | { t: 'live'; resolution: 720 | 1080; fps: 30 | 60; audio: AudioKind }
+  | { t: 'live'; resolution: 720 | 1080; fps: 30 | 60; audio: AudioKind; source?: LiveSource }
   | { t: 'unlive' }
   | { t: 'turn-refresh' };
 

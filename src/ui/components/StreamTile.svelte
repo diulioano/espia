@@ -42,7 +42,7 @@
   const thumb = $derived(size === 'thumb');
   const hasControls = $derived(controls && view.status === 'ok' && !thumb);
   const showName = $derived(alwaysName || size !== 'stage' || active);
-  const label = $derived(you ? 'Você' : view.name);
+  const label = $derived(you ? 'Você' : view.source === 'camera' ? `câmera de ${view.name}` : view.name);
   const level = $derived(view.muted ? 0 : view.volume);
 
   $effect(() => {
@@ -111,7 +111,7 @@
     {#if view.stream}
       <video bind:this={video} autoplay playsinline></video>
     {:else}
-      <div class="placeholder"><span>{view.caption ?? `tela de ${view.name}`}</span></div>
+      <div class="placeholder"><span>{view.caption ?? `${view.source === 'camera' ? 'câmera' : 'tela'} de ${view.name}`}</span></div>
     {/if}
   {:else if view.status === 'loading'}
     <div class="state">

@@ -3,7 +3,8 @@
   // página já dentro dela, vai direto pra sala.
   import { onDestroy } from 'svelte';
   import { fetchPreview } from '../lib/api';
-  import { canShare } from '../lib/capture';
+  import { canUseCamera } from '../lib/camera';
+  import { canShareScreen } from '../lib/capture';
   import { loadNickname, loadSession, saveNickname } from '../lib/prefs';
   import { router } from '../lib/router.svelte';
   import { RoomStore } from '../lib/stores/room.svelte';
@@ -25,7 +26,7 @@
     people: null,
     capacity: 10,
     nickname: loadNickname(),
-    canShare: canShare(),
+    canShare: canShareScreen() || canUseCamera(),
   });
 
   // Celular: layout próprio abaixo de 640px.

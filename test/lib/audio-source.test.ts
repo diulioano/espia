@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { audioLabelText, decideAudio } from '../../src/lib/audio-source';
+import { audioLabelText, decideAudio, nativeAudioText } from '../../src/lib/audio-source';
 
 // Uma linha da tabela de specs/002-audio-sem-discord/data-model.md = um caso.
 describe('decideAudio', () => {
@@ -27,5 +27,29 @@ describe('audioLabelText', () => {
     expect(audioLabelText('window')).toBe('com som da janela');
     expect(audioLabelText('none')).toBe('sem som');
     expect(audioLabelText('none', 'monitor')).toBe('sem som (tela inteira)');
+    expect(audioLabelText('pc')).toBe('com som do PC (sem Discord)');
+    expect(audioLabelText('device')).toBe('com som do dispositivo');
+  });
+});
+
+describe('nativeAudioText (seletor do app, specs/005)', () => {
+  it('janela escolhida com som cita o título', () => {
+    expect(nativeAudioText({ surface: 'window', audio: true, selectedTitle: 'Hollow Knight' })).toBe(
+      'Só o som de Hollow Knight — nada de notificação vazando.',
+    );
+  });
+  it('janela ainda não escolhida', () => {
+    expect(nativeAudioText({ surface: 'window', audio: true })).toBe(
+      'Só o som da janela que você escolher — Discord e notificações ficam de fora.',
+    );
+  });
+  it('tela inteira com som: PC menos o Discord', () => {
+    expect(nativeAudioText({ surface: 'monitor', audio: true, selectedTitle: 'Tela 1' })).toBe(
+      'Todo o som do computador vai junto — menos o Discord.',
+    );
+  });
+  it('som desligado', () => {
+    expect(nativeAudioText({ surface: 'monitor', audio: false })).toBe('Só a imagem vai pra sala.');
+    expect(nativeAudioText({ surface: 'window', audio: false, selectedTitle: 'X' })).toBe('Só a imagem vai pra sala.');
   });
 });

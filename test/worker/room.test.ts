@@ -265,6 +265,37 @@ describe('Som no live (specs/002)', () => {
     expect((await b.next('peer-live')).live).toMatchObject({ audio: 'none' });
   });
 
+  it("repassa o som do PC sem o Discord (app desktop, specs/005): 'pc'", async () => {
+    const code = await createRoom();
+    const { c: a } = await Client.join(code, 'Rafa');
+    const { c: b } = await Client.join(code, 'Lu');
+    a.send({ t: 'live', resolution: 1080, fps: 30, audio: 'pc' });
+    expect((await b.next('peer-live')).live).toMatchObject({ audio: 'pc' });
+  });
+
+  it("câmera (specs/006): source 'camera' e som 'device' repassados", async () => {
+    const code = await createRoom();
+    const { c: a } = await Client.join(code, 'Rafa');
+    const { c: b } = await Client.join(code, 'Lu');
+    a.send({ t: 'live', resolution: 720, fps: 30, audio: 'device', source: 'camera' });
+    expect((await b.next('peer-live')).live).toMatchObject({ audio: 'device', source: 'camera' });
+  });
+
+  it("cliente antigo sem source → 'screen'", async () => {
+    const code = await createRoom();
+    const { c: a } = await Client.join(code, 'Rafa');
+    const { c: b } = await Client.join(code, 'Lu');
+    a.send({ t: 'live', resolution: 720, fps: 30, audio: 'window' });
+    expect((await b.next('peer-live')).live).toMatchObject({ source: 'screen' });
+  });
+
+  it("source desconhecido → bad-message", async () => {
+    const code = await createRoom();
+    const { c: a } = await Client.join(code, 'Rafa');
+    a.send(JSON.stringify({ t: 'live', resolution: 720, fps: 30, audio: 'none', source: 'x' }));
+    expect((await a.next('error')).code).toBe('bad-message');
+  });
+
   it("som do sistema não existe: 'system' → bad-message", async () => {
     const code = await createRoom();
     const { c: a } = await Client.join(code, 'Rafa');

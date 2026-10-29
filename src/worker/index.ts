@@ -13,7 +13,7 @@ const SECURITY_HEADERS: Record<string, string> = {
   'Referrer-Policy': 'no-referrer',
   'X-Content-Type-Options': 'nosniff',
   'Permissions-Policy':
-    'display-capture=(self), camera=(), microphone=(), geolocation=(), picture-in-picture=(self), fullscreen=(self)',
+    'display-capture=(self), camera=(self), microphone=(self), geolocation=(), picture-in-picture=(self), fullscreen=(self)',
   'Cross-Origin-Opener-Policy': 'same-origin',
   'Strict-Transport-Security': 'max-age=31536000; includeSubDomains',
 };
