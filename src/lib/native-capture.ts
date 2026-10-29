@@ -196,6 +196,18 @@ const NV12_COLOR: VideoColorSpaceInit = { primaries: 'bt709', transfer: 'bt709',
 const RATE = 48_000;
 const CHANNELS = 2;
 
+/**
+ * Bytes de um pedaço de som. Pelo protocolo `ipc.localhost` o canal do Tauri entrega um ArrayBuffer; se o
+ * Tauri cair no modo postMessage (ex.: CSP sem `ipc.localhost`), chega uma lista de bytes. Antes só o
+ * ArrayBuffer era aceito e o som ia mudo.
+ */
+export function soundBytes(msg: unknown): ArrayBuffer | null {
+  if (msg instanceof ArrayBuffer) return msg;
+  if (ArrayBuffer.isView(msg)) return new Uint8Array(msg.buffer, msg.byteOffset, msg.byteLength).slice().buffer;
+  if (Array.isArray(msg)) return new Uint8Array(msg).buffer;
+  return null;
+}
+
 export interface NativeSession {
   stream: MediaStream;
   result: StartResult;
@@ -295,8 +307,9 @@ export async function startNative(
     );
   });
 
-  const sound = bridge.channel<ArrayBuffer>((buf) => {
-    if (done || !(buf instanceof ArrayBuffer)) return;
+  const sound = bridge.channel<ArrayBuffer | number[]>((msg) => {
+    const buf = soundBytes(msg);
+    if (done || !buf) return;
     if (!audioWriter) addAudio();
     const data = new Float32Array(buf);
     const frames = data.length / CHANNELS;

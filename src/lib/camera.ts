@@ -24,10 +24,14 @@ export async function cameraPermission(): Promise<CameraPermission> {
 /** Por que a câmera não abriu (a aba mostra o motivo e "Tentar de novo"). */
 export type CameraError = 'busy' | 'notfound' | 'other';
 
-/** Pede a permissão (no clique em "Permitir câmeras") e fecha a câmera na hora. */
+/**
+ * Pede a permissão (no clique em "Permitir câmeras") e fecha a câmera na hora. Pede o som junto: sem a
+ * permissão do microfone, o navegador esconde os nomes das entradas de som e a lista "Som" fica vazia
+ * (a câmera ia sem som). Se o som falhar (negado ou sem entrada), tenta só a câmera.
+ */
 export async function requestCamera(): Promise<{ permission: CameraPermission; error?: CameraError }> {
   try {
-    const s = await navigator.mediaDevices.getUserMedia({ video: true });
+    const s = await navigator.mediaDevices.getUserMedia({ video: true, audio: true }).catch(() => navigator.mediaDevices.getUserMedia({ video: true }));
     for (const t of s.getTracks()) t.stop();
     return { permission: 'granted' };
   } catch (err) {
@@ -43,14 +47,14 @@ export async function requestCamera(): Promise<{ permission: CameraPermission; e
 }
 
 /**
- * Dispositivos com nome. `unnamed`: há câmeras que o navegador ainda não deixou nomear (acontece mesmo com
- * a permissão dada, até a página abrir a câmera uma vez).
+ * Dispositivos com nome. `unnamed`: há câmeras ou entradas de som que o navegador ainda não deixou nomear
+ * (acontece mesmo com a permissão da câmera dada, até a página abrir câmera e som uma vez).
  */
 export async function listDevices(): Promise<{ videos: DeviceInfo[]; audios: DeviceInfo[]; unnamed: boolean }> {
   const all = await navigator.mediaDevices.enumerateDevices();
   const pick = (kind: MediaDeviceKind) =>
     all.filter((d) => d.kind === kind && d.label).map((d) => ({ id: d.deviceId, groupId: d.groupId, label: d.label }));
-  const unnamed = all.some((d) => d.kind === 'videoinput' && !d.label);
+  const unnamed = all.some((d) => (d.kind === 'videoinput' || d.kind === 'audioinput') && !d.label);
   return { videos: pick('videoinput'), audios: pick('audioinput'), unnamed };
 }
 

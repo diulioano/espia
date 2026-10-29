@@ -9,7 +9,7 @@ export { Room };
 const SECURITY_HEADERS: Record<string, string> = {
   'Content-Security-Policy':
     "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; font-src 'self'; img-src 'self' data:; " +
-    "media-src 'self' blob:; connect-src 'self'; frame-ancestors 'self'; base-uri 'none'; form-action 'self'; object-src 'none'",
+    "media-src 'self' blob:; connect-src 'self' http://ipc.localhost; frame-ancestors 'self'; base-uri 'none'; form-action 'self'; object-src 'none'",
   'Referrer-Policy': 'no-referrer',
   'X-Content-Type-Options': 'nosniff',
   'Permissions-Policy':

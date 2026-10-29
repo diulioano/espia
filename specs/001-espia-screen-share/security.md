@@ -74,7 +74,7 @@ Decisão: **A**. B e C ficam registradas caso o uso saia do grupo de amigos.
 
 ```text
 Content-Security-Policy: default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline';
-  font-src 'self'; img-src 'self' data:; media-src 'self' blob:; connect-src 'self';
+  font-src 'self'; img-src 'self' data:; media-src 'self' blob:; connect-src 'self' http://ipc.localhost;
   frame-ancestors 'self'; base-uri 'none'; form-action 'self'; object-src 'none'
 Referrer-Policy: no-referrer
 X-Content-Type-Options: nosniff
@@ -85,6 +85,7 @@ Strict-Transport-Security: max-age=31536000; includeSubDomains
 ```
 - `style-src 'unsafe-inline'` é necessário porque o Svelte injeta estilos das transições em tempo de execução; scripts continuam bloqueados.
 - `connect-src 'self'` cobre `wss://` do mesmo domínio. STUN/TURN não passam por CSP.
+- `http://ipc.localhost` (2026-10-29): é o canal do Tauri dentro do app desktop (ponte de captura e bandeja). Sem ele o Tauri caía no modo postMessage, que entrega o som da captura nativa como lista de bytes (o som ia mudo, ver `specs/005…`) e é mais lento. No navegador, nada do site chama esse endereço.
 - Assets estáticos recebem os mesmos cabeçalhos via arquivo `_headers`.
 
 ## 6. Checklist antes do deploy

@@ -285,6 +285,20 @@ describe('startNative', () => {
     expect(chunks[0].init.numberOfFrames).toBe(480);
   });
 
+  it('som como lista de bytes (Tauri no modo postMessage) também vira AudioData, sem perder o valor', async () => {
+    // Bug: o app real entregava number[] (CSP sem ipc.localhost) e a página descartava tudo: som mudo.
+    const b = new FakeBridge();
+    started(b, 'window');
+    const s = await startNative(PREFS, 'w:1', quiet, b);
+    const pcm = new Float32Array(960).fill(0.25);
+    b.channels[1]([...new Uint8Array(pcm.buffer)]);
+    await Promise.resolve();
+    const chunks = (s.stream as unknown as FakeStream).getAudioTracks()[0].written as FakeAudioData[];
+    expect(chunks).toHaveLength(1);
+    expect(chunks[0].init.numberOfFrames).toBe(480);
+    expect(chunks[0].init.data[0]).toBe(0.25);
+  });
+
   it("sem som ('none'): stream só com vídeo", async () => {
     const b = new FakeBridge();
     started(b, 'none');
