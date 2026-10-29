@@ -3,11 +3,14 @@ import {
   detectNative,
   matchLastSource,
   pollSources,
+  shouldDropSound,
   SlotTable,
+  soundBytes,
   sourceKey,
   startNative,
   type Bridge,
   type FrameMsg,
+  type HostMessage,
 } from '../../src/lib/native-capture';
 import type { CaptureSource, GoLivePrefs } from '../../src/lib/types';
 
@@ -38,6 +41,11 @@ class FakeBridge implements Bridge {
   }
   releaseBuffer(b: ArrayBuffer) {
     this.released.push(b);
+  }
+  hostCb: ((m: HostMessage) => void) | null = null;
+  onHostMessage(cb: (m: HostMessage) => void) {
+    this.hostCb = cb;
+    return () => (this.hostCb = null);
   }
   /** O app posta os 3 slots de uma geração. */
   postSlots(gen: number, width = 4, height = 2) {
@@ -173,12 +181,21 @@ describe('SlotTable', () => {
 // ---------- startNative com stubs do Chromium (breakout box / WebCodecs) ----------
 
 class FakeTrack {
+  /** Gerador travado: as escritas nunca terminam (som acumulando). */
+  static hold = false;
   stopped = false;
   contentHint = '';
   written: unknown[] = [];
   readonly writable: { getWriter(): { write(x: unknown): Promise<void> } };
   constructor(readonly init: { kind: 'video' | 'audio' }) {
-    this.writable = { getWriter: () => ({ write: async (x) => void this.written.push(x) }) };
+    this.writable = {
+      getWriter: () => ({
+        write: (x) => {
+          this.written.push(x);
+          return FakeTrack.hold ? new Promise<void>(() => {}) : Promise.resolve();
+        },
+      }),
+    };
   }
   get kind() {
     return this.init.kind;
@@ -299,6 +316,51 @@ describe('startNative', () => {
     expect(chunks[0].init.data[0]).toBe(0.25);
   });
 
+  it('som em base64 pelo canal de mensagens (app 0.1.7, specs/010) vira AudioData sem perder o valor', async () => {
+    const b = new FakeBridge();
+    started(b, 'window');
+    const s = await startNative(PREFS, 'w:1', quiet, b);
+    const pcm = new Float32Array(960).fill(0.5);
+    b.hostCb!({ espia: 'pcm', d: btoa(String.fromCharCode(...new Uint8Array(pcm.buffer))) });
+    await Promise.resolve();
+    const chunks = (s.stream as unknown as FakeStream).getAudioTracks()[0].written as FakeAudioData[];
+    expect(chunks).toHaveLength(1);
+    expect(chunks[0].init.numberOfFrames).toBe(480);
+    expect(chunks[0].init.data[0]).toBe(0.5);
+  });
+
+  it('som acumulado acima de 200 ms é descartado (specs/010)', async () => {
+    expect(shouldDropSound(200)).toBe(false);
+    expect(shouldDropSound(201)).toBe(true);
+    const b = new FakeBridge();
+    started(b, 'window');
+    const s = await startNative(PREFS, 'w:1', quiet, b);
+    FakeTrack.hold = true;
+    try {
+      for (let i = 0; i < 30; i++) b.channels[1](new Float32Array(960).buffer);
+    } finally {
+      FakeTrack.hold = false;
+    }
+    const chunks = (s.stream as unknown as FakeStream).getAudioTracks()[0].written as FakeAudioData[];
+    // 0, 10, …, 200 ms na fila: 21 pedaços entram; o resto é descartado.
+    expect(chunks).toHaveLength(21);
+    // O tempo dos que entram é contínuo; os descartados também contam (o som não atrasa em relação à imagem).
+    expect(chunks[20].init.timestamp).toBe(200_000);
+  });
+
+  it('avisos de quadro pelo canal de mensagens (app 0.1.7) também viram VideoFrame', async () => {
+    const b = new FakeBridge();
+    started(b);
+    const s = await startNative(PREFS, 'w:1', quiet, b);
+    b.hostCb!({ espia: 'f', m: { t: 'frame', gen: 1, slot: 0, seq: 0, ts: 1000 } });
+    await Promise.resolve();
+    expect((s.stream as unknown as FakeStream).getVideoTracks()[0].written).toHaveLength(1);
+  });
+
+  it('base64 inválido é ignorado', () => {
+    expect(soundBytes('não é base64!')).toBeNull();
+  });
+
   it("sem som ('none'): stream só com vídeo", async () => {
     const b = new FakeBridge();
     started(b, 'none');
@@ -327,6 +389,7 @@ describe('startNative', () => {
     expect(ended).toBe(1);
     expect((s.stream as unknown as FakeStream).getVideoTracks()[0].stopped).toBe(true);
     expect(b.released).toHaveLength(3);
+    expect(b.hostCb).toBeNull();
   });
 
   it('tela preta → aviso', async () => {

@@ -1,7 +1,7 @@
 {
   "name": "espia",
   "private": true,
-  "version": "0.1.5",
+  "version": "0.1.7",
   "type": "module",
   "scripts": {
     "dev": "vite",
@@ -16,7 +16,8 @@
     "dev:lan": "vite build && wrangler dev --ip 0.0.0.0 --port 8787 --local-protocol https",
     "desktop:dev": "tauri dev",
     "desktop:build": "tauri build",
-    "tauri": "tauri"
+    "tauri": "tauri",
+    "memoria": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/memoria.ps1"
   },
   "devDependencies": {
     "@cloudflare/vitest-plugin": "^1.4.10",

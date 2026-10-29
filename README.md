@@ -22,6 +22,10 @@ WebView2 que já vem no Windows, então o instalador tem poucos MB.
   **Parar** do Espia.
 - O app sempre abre a versão mais nova do site, então só é preciso reinstalar quando sair uma versão nova
   do app em si.
+- Memória: no Gerenciador de Tarefas, o motor do app aparece como **"WebView2 Manager"** (com o castor).
+  Fechado no X e fora de sala, depois de 30 s o app desliga esse motor e fica só o ícone na bandeja
+  (poucos MB); ao abrir de novo, a janela volta em segundos. Minimizado ou escondido numa sala, ele pede
+  ao motor para gastar menos. Para medir: `powershell -File scripts/memoria.ps1`.
 
 ## Desenvolvimento
 

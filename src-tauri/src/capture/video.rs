@@ -44,7 +44,7 @@ mod imp {
   };
 
   use serde_json::json;
-  use tauri::ipc::Channel;
+  use super::super::FrameSink;
   use webview2_com::Microsoft::Web::WebView2::Win32::{
     COREWEBVIEW2_SHARED_BUFFER_ACCESS_READ_ONLY, ICoreWebView2_17, ICoreWebView2Environment12, ICoreWebView2SharedBuffer,
   };
@@ -338,7 +338,7 @@ mod imp {
     pool: Direct3D11CaptureFramePool,
     session: GraphicsCaptureSession,
     device: AgileDevice,
-    frames: Channel<serde_json::Value>,
+    frames: FrameSink,
     content: (u32, u32),
   }
 
@@ -384,9 +384,18 @@ mod imp {
     }
   }
 
+  /// Pede ao Windows no máximo `fps` quadros por segundo. Sem isso, um jogo a 170 fps num monitor de 165 Hz
+  /// faz o DWM copiar ~165 quadros/s para o pool, e o descarte por intervalo jogava fora quase 2 de cada 3.
+  /// Windows 11 24H2+; antes disso falha e fica só o descarte por intervalo.
+  fn limit_rate(session: &GraphicsCaptureSession, fps: u32) {
+    // Mesma folga de 10% do descarte por intervalo, para não perder quadro por arredondamento do vsync.
+    let hundred_ns = 10_000_000 / fps.max(1) as i64 * 9 / 10;
+    let _ = session.SetMinUpdateInterval(windows::Foundation::TimeSpan { Duration: hundred_ns });
+  }
+
   impl Video {
     /// Começa a capturar. `slots` já foi postado para a página com o tamanho alvo.
-    pub fn start(item: &Item, resolution: u32, fps: u32, frames: Channel<serde_json::Value>, slots_for: impl FnOnce(u32, u32) -> Result<SlotSet, String>) -> Result<Self, String> {
+    pub fn start(item: &Item, resolution: u32, fps: u32, frames: FrameSink, slots_for: impl FnOnce(u32, u32) -> Result<SlotSet, String>) -> Result<Self, String> {
       let e = |e: windows::core::Error| e.to_string();
       let item = capture_item(item).map_err(e)?;
       let size = item.Size().map_err(e)?;
@@ -397,6 +406,7 @@ mod imp {
       let pool = Direct3D11CaptureFramePool::CreateFreeThreaded(&winrt, DirectXPixelFormat::B8G8R8A8UIntNormalized, 2, size).map_err(e)?;
       let session = pool.CreateCaptureSession(&item).map_err(e)?;
       let _ = session.SetIsCursorCaptureEnabled(true);
+      limit_rate(&session, fps);
       // Windows 11: sem a borda amarela (pede o acesso "sem borda" antes; no 10 a borda fica).
       if windows::Graphics::Capture::GraphicsCaptureAccess::RequestAccessAsync(windows::Graphics::Capture::GraphicsCaptureAccessKind::Borderless)
         .and_then(|op| op.join())
@@ -501,6 +511,7 @@ mod imp {
     /// Troca resolução/fps no ar: novo tamanho → nova geração de slots.
     pub fn set_quality(&self, resolution: u32, fps: u32, slots_for: impl FnOnce(u32, u32) -> Result<SlotSet, String>) -> Result<(u32, u32), String> {
       self.shared.interval_us.store(1_000_000 / fps.max(1) as u64, Ordering::Relaxed);
+      limit_rate(&self.session, fps);
       let (cw, ch) = *self.shared.pool_size.lock().unwrap();
       let src = if cw > 0 && ch > 0 { (cw as u32, ch as u32) } else { self.content };
       let (w, h) = target_size(src.0, src.1, resolution);

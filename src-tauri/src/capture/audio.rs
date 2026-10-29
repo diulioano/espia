@@ -70,6 +70,8 @@ pub fn audio_plan(target: Target, wants: bool, discord_roots: &[u32], own_pid: u
 
 #[cfg(windows)]
 pub use imp::{Loopback, playing_roots};
+#[cfg(all(test, windows))]
+pub use imp::CHUNK_FRAMES;
 
 #[cfg(windows)]
 mod imp {

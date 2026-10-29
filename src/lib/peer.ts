@@ -14,6 +14,18 @@ export interface PeerCallbacks {
 }
 
 const AUDIO_BITRATE = 128_000;
+
+export interface SendStats {
+  bytesSent: number;
+  /** 'none' | 'cpu' | 'bandwidth' | 'other' (qualityLimitationReason do motor). */
+  limitation: string;
+  pli: number;
+  keyFrames: number;
+  /** encoderImplementation do motor (ex.: "MediaFoundationVideoEncodeAccelerator" = placa de vídeo). */
+  encoder: string;
+  /** powerEfficientEncoder: true = compressão na placa de vídeo. null = o motor não informou. */
+  hardware: boolean | null;
+}
 const VIEW_MODES: ViewMode[] = ['full', 'thumb', 'hidden'];
 
 export class PeerLink {
@@ -169,7 +181,19 @@ export class PeerLink {
     if (this.closed) return t;
     if (!t) {
       if (!track || !stream) return null;
-      return this.pc.addTransceiver(track, { direction: 'sendonly', streams: [stream] });
+      // O teto entra junto com a faixa: antes da primeira negociação o setParameters não tem efeito, e o
+      // motor mandava no próprio padrão até a sinalização assentar (specs/010, research R3).
+      const init: RTCRtpTransceiverInit = { direction: 'sendonly', streams: [stream] };
+      if (this.quality) {
+        const p = sendParams(this.quality, this.theirView);
+        init.sendEncodings =
+          kind === 'video'
+            ? [{ active: p.active, maxBitrate: p.maxBitrate, maxFramerate: p.maxFramerate, scaleResolutionDownBy: p.scaleResolutionDownBy }]
+            : [{ active: p.active, maxBitrate: AUDIO_BITRATE }];
+      }
+      const created = this.pc.addTransceiver(track, init);
+      if (kind === 'video') preferHardwareCodec(created);
+      return created;
     }
     try {
       await t.sender.replaceTrack(track);
@@ -206,6 +230,32 @@ export class PeerLink {
     return this.encodingQueue;
   }
 
+  /** O que o motor está enviando de vídeo para esta pessoa agora (specs/010). Sem envio: null. */
+  async sendStats(): Promise<SendStats | null> {
+    const sender = this.video?.sender;
+    if (this.closed || !sender?.track) return null;
+    let out: SendStats | null = null;
+    (await sender.getStats()).forEach((s) => {
+      if (s.type !== 'outbound-rtp' || s.kind !== 'video') return;
+      const r = s as RTCOutboundRtpStreamStats & {
+        qualityLimitationReason?: string;
+        pliCount?: number;
+        keyFramesEncoded?: number;
+        encoderImplementation?: string;
+        powerEfficientEncoder?: boolean;
+      };
+      out = {
+        bytesSent: r.bytesSent ?? 0,
+        limitation: r.qualityLimitationReason ?? 'none',
+        pli: r.pliCount ?? 0,
+        keyFrames: r.keyFramesEncoded ?? 0,
+        encoder: r.encoderImplementation ?? '?',
+        hardware: r.powerEfficientEncoder ?? null,
+      };
+    });
+    return out;
+  }
+
   /** Credenciais TURN novas: vale para as próximas coletas de candidatos. */
   setIceServers(iceServers: IceServer[]) {
     if (!this.closed) this.pc.setConfiguration({ ...this.pc.getConfiguration(), iceServers: iceServers as RTCIceServer[] });
@@ -222,6 +272,30 @@ export class PeerLink {
     this.closed = true;
     this.pc.close();
     for (const t of this.remoteStream.getTracks()) t.stop();
+  }
+}
+
+/**
+ * H.264 primeiro: no Windows o Chrome/Edge comprime H.264 na placa de vídeo (NVENC/AMF/QuickSync),
+ * enquanto o VP8 padrão roda no processador — uma compressão por pessoa na malha, disputando com o jogo.
+ * Sem H.264 no motor, fica a ordem padrão. Quem recebe segue a ordem da oferta.
+ */
+export function orderCodecs<C extends { mimeType: string; sdpFmtpLine?: string }>(codecs: C[]): C[] {
+  const rank = (c: C) => {
+    if (c.mimeType.toLowerCase() !== 'video/h264') return 2;
+    // packetization-mode=1 é o que os decodificadores de celular e Safari esperam.
+    return /packetization-mode=1/.test(c.sdpFmtpLine ?? '') ? 0 : 1;
+  };
+  return codecs.map((c, i) => ({ c, i })).sort((a, b) => rank(a.c) - rank(b.c) || a.i - b.i).map(({ c }) => c);
+}
+
+function preferHardwareCodec(t: RTCRtpTransceiver) {
+  try {
+    const codecs = RTCRtpSender.getCapabilities?.('video')?.codecs;
+    if (!codecs?.some((c) => c.mimeType.toLowerCase() === 'video/h264') || !t.setCodecPreferences) return;
+    t.setCodecPreferences(orderCodecs(codecs));
+  } catch (err) {
+    console.warn('[peer] setCodecPreferences', err);
   }
 }
 

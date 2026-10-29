@@ -1,6 +1,7 @@
 fn main() {
-  // APIs nativas expostas à página (constituição 1.4.0): a ponte de captura (specs/005,
-  // contracts/native-capture.md) e o aviso de ao vivo da bandeja (specs/007, contracts/tray.md).
+  // APIs nativas expostas à página (constituição 1.5.0): a ponte de captura (specs/005,
+  // contracts/native-capture.md), o aviso de ao vivo da bandeja (specs/007, contracts/tray.md) e o
+  // aviso de sala (specs/009, contracts/engine.md).
   // Liberada só para a origem do site por capabilities/capture.json.
   tauri_build::try_build(tauri_build::Attributes::new().app_manifest(tauri_build::AppManifest::new().commands(&[
     "capture_supported",
@@ -9,6 +10,7 @@ fn main() {
     "capture_set_quality",
     "capture_stop",
     "app_set_live",
+    "app_set_room",
   ])))
   .expect("falha no tauri-build");
 }

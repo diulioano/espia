@@ -5,7 +5,7 @@
   import { fetchPreview } from '../lib/api';
   import { canUseCamera } from '../lib/camera';
   import { canShareScreen } from '../lib/capture';
-  import { installStopHook, reportLive } from '../lib/desktop';
+  import { installStopHook, reportLive, reportRoom } from '../lib/desktop';
   import { loadNickname, loadSession, saveNickname } from '../lib/prefs';
   import { router } from '../lib/router.svelte';
   import { RoomStore } from '../lib/stores/room.svelte';
@@ -90,11 +90,15 @@
   const live = $derived(!!store?.myBroadcast);
   $effect(() => reportLive(live));
   const removeStopHook = installStopHook(() => store?.actions.stopGoLive());
+  // App desktop: escondido fora de sala, o app solta o motor de página (specs/009).
+  const inRoom = $derived(!!store?.connected && !store?.ended);
+  $effect(() => reportRoom(inRoom));
 
   onDestroy(() => {
     if (router.leaveGuard === leaveGuard) router.leaveGuard = null;
     removeStopHook();
     reportLive(false);
+    reportRoom(false);
     store?.destroy();
   });
 </script>

@@ -1,6 +1,7 @@
 <!--
 Sync Impact Report
-- Versão: 1.3.0 → 1.4.0 (restrição técnica do app desktop: + aviso de ao vivo para a bandeja, `app_set_live`) — feature 007, pedido de 2026-10-29 (fechar para a bandeja sem perder a transmissão)
+- Versão: 1.4.0 → 1.5.0 (restrição técnica do app desktop: + aviso de sala, `app_set_room`) — feature 009, pedido de 2026-10-29 (soltar o motor de página escondido fora de sala, Q1: A)
+- Anterior: 1.3.0 → 1.4.0 (restrição técnica do app desktop: + aviso de ao vivo para a bandeja, `app_set_live`) — feature 007, pedido de 2026-10-29 (fechar para a bandeja sem perder a transmissão)
 - Anterior: 1.2.0 → 1.3.0 (I: som de uma câmera transmitida permitido; restrição: celular transmite câmera) — feature 006, pedido de 2026-10-29 (Q1: C, Q3: B)
 - Anterior: 1.1.0 → 1.2.0 (restrição técnica do app desktop: ponte de captura nativa, só para a origem do site) — feature 005, pedido de 2026-10-29
 - Anterior: 1.0.1 → 1.1.0 (I: app desktop opcional permitido; restrição técnica do app desktop) — feature 003
@@ -61,7 +62,8 @@ apenas credenciais temporárias. Códigos de sala são aleatórios (CSPRNG) e o 
 - App desktop (opcional): Tauri 2 + WebView2, só Windows, carrega o site publicado. Expõe à página
   **apenas** a ponte de captura (`specs/005-seletor-nativo-desktop/contracts/native-capture.md`:
   listar fontes, miniaturas, iniciar/parar captura de vídeo e som) e o aviso de ao vivo para a bandeja
-  (`specs/007-fechar-para-bandeja/contracts/tray.md`: um comando, `app_set_live(live)`, sem retorno),
+  (`specs/007-fechar-para-bandeja/contracts/tray.md`: um comando, `app_set_live(live)`, sem retorno) e o
+  aviso de sala (`specs/009-memoria-do-app/contracts/engine.md`: um comando, `app_set_room(inRoom)`, sem retorno),
   **apenas** para a origem do site,
   na janela principal. Qualquer outra API nativa exige emenda. Código em `src-tauri/`.
 - Sem dependências pesadas de UI (sem frameworks de componentes). CSS próprio sobre os tokens.
@@ -80,4 +82,4 @@ Esta constituição prevalece sobre preferências de implementação. Emendas: e
 subir a versão (MAJOR remove/redefine princípio; MINOR adiciona princípio/seção; PATCH esclarece)
 e registrar o motivo no Sync Impact Report. Todo `plan.md` passa pelo Constitution Check.
 
-**Version**: 1.4.0 | **Ratified**: 2026-10-28 | **Last Amended**: 2026-10-29
+**Version**: 1.5.0 | **Ratified**: 2026-10-28 | **Last Amended**: 2026-10-29

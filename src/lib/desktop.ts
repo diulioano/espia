@@ -2,6 +2,8 @@
 // aberto chama window.espiaOpen("/s/xxx-xxx"). No navegador nada chama isso.
 // Bandeja (specs/007, contracts/tray.md): a página avisa quando está ao vivo, e o menu do ícone
 // chama window.espiaStopLive().
+// Memória (specs/009, contracts/engine.md): a página avisa quando está numa sala, para o app saber se pode
+// soltar o motor de página com a janela escondida.
 import { invoke } from '@tauri-apps/api/core';
 import { ROOM_ID_RE } from './room-id';
 
@@ -12,6 +14,11 @@ const inApp = () => typeof window !== 'undefined' && '__TAURI_INTERNALS__' in wi
 /** Avisa o app que a transmissão própria começou ou parou (ícone "ao vivo", confirmação ao sair). */
 export function reportLive(live: boolean): void {
   if (inApp()) invoke('app_set_live', { live }).catch(() => {});
+}
+
+/** Avisa o app que entrou ou saiu de uma sala (escondido fora de sala, o app solta o motor). */
+export function reportRoom(inRoom: boolean): void {
+  if (inApp()) invoke('app_set_room', { inRoom }).catch(() => {});
 }
 
 /** "Parar transmissão" do menu da bandeja. Devolve a função que remove o gancho. */

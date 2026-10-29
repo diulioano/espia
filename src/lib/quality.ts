@@ -24,7 +24,7 @@ const BITRATE: Record<`${Resolution}-${Fps}`, number> = {
  * Nunca sobe acima do que foi escolhido no modal.
  *  1–4: o escolhido · 5–6: 720p60 (se escolheu 60) ou 1080p30, até 4 Mbps · 7+: 720p30.
  */
-export function effectiveQuality(chosen: GoLivePrefs, fullViewers: number): Quality {
+export function effectiveQuality(chosen: GoLivePrefs, fullViewers: number, cpuSteps = 0): Quality {
   let { resolution, fps } = chosen;
   let cap = Infinity;
   if (fullViewers >= 7) {
@@ -34,7 +34,24 @@ export function effectiveQuality(chosen: GoLivePrefs, fullViewers: number): Qual
     if (fps === 60) resolution = 720;
     cap = 4_000_000;
   }
+  // PC no limite (specs/010): degraus a menos, depois da regra de espectadores. Vale o mais baixo.
+  for (let i = 0; i < cpuSteps; i++) ({ resolution, fps } = stepDown({ resolution, fps }));
   return { resolution, fps, maxBitrate: Math.min(BITRATE[`${resolution}-${fps}`], cap) };
+}
+
+type Step = { resolution: Resolution; fps: Fps };
+
+/** Um degrau abaixo: primeiro o fps, depois a resolução. Mínimo 720p30. */
+export function stepDown(q: Step): Step {
+  if (q.fps === 60) return { resolution: q.resolution, fps: 30 };
+  return { resolution: 720, fps: 30 };
+}
+
+/** Um degrau acima, sem passar do escolhido. */
+export function stepUp(q: Step, chosen: Step): Step {
+  if (q.resolution < chosen.resolution) return { resolution: chosen.resolution, fps: 30 };
+  if (q.fps < chosen.fps) return { resolution: q.resolution, fps: chosen.fps };
+  return q;
 }
 
 export function isAdjusted(chosen: GoLivePrefs, q: Quality) {

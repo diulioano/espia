@@ -155,14 +155,60 @@ mod imp {
     audio::audio_plan(target, wants, &discord_roots(&table), std::process::id())
   }
 
+  /// Para onde vão os pedaços de som (10 ms, f32 intercalado).
+  pub(crate) type SoundSink = Arc<dyn Fn(&[u8]) + Send + Sync>;
+
+  /// Avisos de quadro e de estado (`{t: 'frame' | 'audio' | 'warn' | 'ended', …}`), pelo mesmo canal de mensagens
+  /// do WebView2 que o som, como `{"espia":"f","m":…}` (specs/010): 60 avisos por segundo por `eval` também
+  /// faziam a página crescer.
+  #[derive(Clone)]
+  pub struct FrameSink(Arc<dyn Fn(Value) + Send + Sync>);
+
+  impl FrameSink {
+    pub fn send(&self, msg: Value) {
+      (self.0)(msg);
+    }
+  }
+
+  fn post_json<R: Runtime>(webview: &Webview<R>, json: String) {
+    use webview2_com::Microsoft::Web::WebView2::Win32::ICoreWebView2;
+    use windows::core::HSTRING;
+    let msg = HSTRING::from(json);
+    let _ = webview.with_webview(move |wv| unsafe {
+      let core: Result<ICoreWebView2, _> = wv.controller().CoreWebView2();
+      if let Ok(core) = core {
+        let _ = core.PostWebMessageAsJson(&msg);
+      }
+    });
+  }
+
+  fn frame_sink<R: Runtime>(webview: &Webview<R>) -> FrameSink {
+    let webview = webview.clone();
+    FrameSink(Arc::new(move |m| post_json(&webview, json!({ "espia": "f", "m": m }).to_string())))
+  }
+
+  /// Mensagem de som para a página: `{"espia":"pcm","d":"<base64>"}`.
+  pub(crate) fn sound_json(bytes: &[u8]) -> String {
+    use base64::{Engine, engine::general_purpose::STANDARD};
+    json!({ "espia": "pcm", "d": STANDARD.encode(bytes) }).to_string()
+  }
+
+  /// O som vai pelo canal de mensagens do WebView2 (`chrome.webview` "message"), não por um canal do Tauri:
+  /// cada mensagem do Tauri vira um script executado na página (`eval`), e 100 por segundo faziam a página do
+  /// motor crescer sem parar (specs/010, research R2).
+  fn sound_sink<R: Runtime>(webview: &Webview<R>) -> SoundSink {
+    let webview = webview.clone();
+    Arc::new(move |bytes| post_json(&webview, sound_json(bytes)))
+  }
+
   /// Liga o som do plano; se o Windows não deixar, fica sem som e avisa (nunca o PC inteiro).
-  fn start_sound(plan: Plan, sound: &Channel<InvokeResponseBody>) -> (Option<Loopback>, Plan) {
+  fn start_sound(plan: Plan, sound: &SoundSink) -> (Option<Loopback>, Plan) {
     if matches!(plan, Plan::None(_)) {
       return (None, plan);
     }
     let ch = sound.clone();
     match Loopback::start(plan, move |bytes| {
-      let _ = ch.send(InvokeResponseBody::Raw(bytes));
+      ch(&bytes);
     }) {
       Ok(l) => (Some(l), plan),
       Err(e) => {
@@ -219,8 +265,11 @@ mod imp {
     };
 
     let wv = webview.clone();
-    let frames2 = frames.clone();
-    let sound2 = sound.clone();
+    // Os canais `frames`/`sound` do Tauri continuam no contrato (páginas antigas mandam), mas não são mais usados.
+    let _ = frames;
+    let frames2 = frame_sink(&webview);
+    let _ = sound;
+    let sound2 = sound_sink(&webview);
     let session = tauri::async_runtime::spawn_blocking(move || {
       let _com = super::com_init();
       let video = Video::start(&item, resolution, fps, frames2.clone(), |w, h| SlotSet::post(&wv, 1, w, h)).map_err(|e| {
@@ -250,8 +299,8 @@ mod imp {
     watching: Arc<AtomicBool>,
     slot: Arc<Mutex<Option<Loopback>>>,
     mut current: Plan,
-    sound: Channel<InvokeResponseBody>,
-    frames: Channel<Value>,
+    sound: SoundSink,
+    frames: FrameSink,
   ) {
     let mut roots = discord_roots(&procs::snapshot());
     thread::spawn(move || {
@@ -316,5 +365,19 @@ mod imp {
       stop_all(&webview, &state);
     }
     Ok(())
+  }
+}
+
+#[cfg(all(test, windows))]
+mod tests {
+  use super::{audio::CHUNK_FRAMES, sound_json};
+
+  #[test]
+  fn mensagem_de_som_volta_igual() {
+    use base64::{Engine, engine::general_purpose::STANDARD};
+    let bytes: Vec<u8> = (0..CHUNK_FRAMES * 2 * 4).map(|i| i as u8).collect();
+    let v: serde_json::Value = serde_json::from_str(&sound_json(&bytes)).unwrap();
+    assert_eq!(v["espia"], "pcm");
+    assert_eq!(STANDARD.decode(v["d"].as_str().unwrap()).unwrap(), bytes);
   }
 }

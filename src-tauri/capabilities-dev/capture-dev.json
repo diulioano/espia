@@ -11,6 +11,7 @@
     "allow-capture-start",
     "allow-capture-set-quality",
     "allow-capture-stop",
-    "allow-app-set-live"
+    "allow-app-set-live",
+    "allow-app-set-room"
   ]
 }

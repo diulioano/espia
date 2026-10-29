@@ -42,11 +42,19 @@ export interface Bridge {
   /** Buffers compartilhados postados pelo app (chrome.webview "sharedbufferreceived"). */
   onSharedBuffer(cb: (buffer: ArrayBuffer, meta: unknown) => void): () => void;
   releaseBuffer(buffer: ArrayBuffer): void;
+  /**
+   * Mensagens do app 0.1.7+ pelo canal do WebView2 (chrome.webview "message"), sem um script por mensagem
+   * (specs/010): `{espia:'pcm', d: base64}` (som) e `{espia:'f', m: FrameMsg}` (avisos de quadro e de estado).
+   */
+  onHostMessage(cb: (msg: HostMessage) => void): () => void;
 }
+
+export type HostMessage = { espia: 'pcm'; d: string } | { espia: 'f'; m: FrameMsg };
 
 interface WebViewHost {
   addEventListener(type: 'sharedbufferreceived', cb: (e: { getBuffer(): ArrayBuffer; additionalData: unknown }) => void): void;
-  removeEventListener(type: 'sharedbufferreceived', cb: (e: never) => void): void;
+  addEventListener(type: 'message', cb: (e: { data: unknown }) => void): void;
+  removeEventListener(type: 'sharedbufferreceived' | 'message', cb: (e: never) => void): void;
   releaseBuffer(buffer: ArrayBuffer): void;
 }
 
@@ -80,6 +88,16 @@ export const tauriBridge: Bridge = {
     return () => host.removeEventListener('sharedbufferreceived', listener as (e: never) => void);
   },
   releaseBuffer: (buffer) => webviewHost()?.releaseBuffer(buffer),
+  onHostMessage(cb) {
+    const host = webviewHost();
+    if (!host) return () => {};
+    const listener = (e: { data: unknown }) => {
+      const m = e.data as { espia?: unknown } | null;
+      if (m?.espia === 'pcm' || m?.espia === 'f') cb(m as HostMessage);
+    };
+    host.addEventListener('message', listener);
+    return () => host.removeEventListener('message', listener as (e: never) => void);
+  },
 };
 
 /** Dentro do app desktop com a ponte certa? Qualquer erro → false (fluxo da 004, FR-511). */
@@ -196,12 +214,29 @@ const NV12_COLOR: VideoColorSpaceInit = { primaries: 'bt709', transfer: 'bt709',
 const RATE = 48_000;
 const CHANNELS = 2;
 
+/** Som na fila do gerador acima disso: o pedaço novo é descartado em vez de acumular (specs/010, FR-1001). */
+export const SOUND_MAX_QUEUE_MS = 200;
+
+export function shouldDropSound(queuedMs: number): boolean {
+  return queuedMs > SOUND_MAX_QUEUE_MS;
+}
+
 /**
- * Bytes de um pedaço de som. Pelo protocolo `ipc.localhost` o canal do Tauri entrega um ArrayBuffer; se o
- * Tauri cair no modo postMessage (ex.: CSP sem `ipc.localhost`), chega uma lista de bytes. Antes só o
- * ArrayBuffer era aceito e o som ia mudo.
+ * Bytes de um pedaço de som. O app 0.1.7+ manda texto base64 pelo canal de mensagens do WebView2 (specs/010,
+ * research R2). Apps antigos mandam ArrayBuffer pelo protocolo `ipc.localhost`, ou uma lista de
+ * bytes se o Tauri cair no modo postMessage (ex.: CSP sem `ipc.localhost`).
  */
 export function soundBytes(msg: unknown): ArrayBuffer | null {
+  if (typeof msg === 'string') {
+    try {
+      const bin = atob(msg);
+      const out = new Uint8Array(bin.length);
+      for (let i = 0; i < bin.length; i++) out[i] = bin.charCodeAt(i);
+      return out.buffer;
+    } catch {
+      return null;
+    }
+  }
   if (msg instanceof ArrayBuffer) return msg;
   if (ArrayBuffer.isView(msg)) return new Uint8Array(msg.buffer, msg.byteOffset, msg.byteLength).slice().buffer;
   if (Array.isArray(msg)) return new Uint8Array(msg).buffer;
@@ -237,6 +272,9 @@ export async function startNative(
   let audio: MediaStreamTrackGenerator | null = null;
   let audioWriter: WritableStreamDefaultWriter<VideoFrame | AudioData> | null = null;
   let audioTs = 0;
+  /** Som já entregue ao gerador e ainda não consumido (µs). */
+  let audioQueuedUs = 0;
+  let soundDropped = 0;
   const addAudio = () => {
     audio = new MediaStreamTrackGenerator({ kind: 'audio' });
     audioWriter = audio.writable.getWriter();
@@ -247,6 +285,7 @@ export async function startNative(
     stream.removeTrack(audio);
     audio.stop();
     audio = audioWriter = null;
+    audioQueuedUs = 0;
   };
   let newest = -1;
   let busy = false;
@@ -254,8 +293,8 @@ export async function startNative(
   let dropped = 0;
   let sent = 0;
   const stats = setInterval(() => {
-    console.debug('[espia] captura nativa:', { fonte: sourceId, gen: slots.gen, enviados: sent, descartados: dropped });
-    sent = dropped = 0;
+    console.debug('[espia] captura nativa:', { fonte: sourceId, gen: slots.gen, enviados: sent, descartados: dropped, somDescartado: soundDropped });
+    sent = dropped = soundDropped = 0;
   }, 10_000);
 
   const finish = () => {
@@ -263,13 +302,14 @@ export async function startNative(
     done = true;
     clearInterval(stats);
     offBuffers();
+    offHost();
     slots.clear();
     video.stop();
     audio?.stop();
     events.ended();
   };
 
-  const frames = bridge.channel<FrameMsg>((msg) => {
+  const onFrame = (msg: FrameMsg) => {
     if (done) return;
     if (msg.t === 'ended') return finish();
     if (msg.t === 'audio') {
@@ -305,18 +345,31 @@ export async function startNative(
       () => (busy = false),
       () => (busy = false),
     );
-  });
+  };
 
-  const sound = bridge.channel<ArrayBuffer | number[]>((msg) => {
+  const onSound = (msg: unknown) => {
     const buf = soundBytes(msg);
     if (done || !buf) return;
     if (!audioWriter) addAudio();
     const data = new Float32Array(buf);
     const frames = data.length / CHANNELS;
-    const chunk = new AudioData({ format: 'f32', sampleRate: RATE, numberOfChannels: CHANNELS, numberOfFrames: frames, timestamp: audioTs, data });
-    audioTs += Math.round((frames / RATE) * 1_000_000);
-    audioWriter!.write(chunk).catch(() => {});
-  });
+    const us = Math.round((frames / RATE) * 1_000_000);
+    const ts = audioTs;
+    // O tempo anda mesmo quando o pedaço é descartado: o som continua alinhado com a imagem.
+    audioTs += us;
+    if (shouldDropSound(audioQueuedUs / 1000)) {
+      soundDropped++;
+      return;
+    }
+    const chunk = new AudioData({ format: 'f32', sampleRate: RATE, numberOfChannels: CHANNELS, numberOfFrames: frames, timestamp: ts, data });
+    audioQueuedUs += us;
+    const consumed = () => (audioQueuedUs = Math.max(0, audioQueuedUs - us));
+    audioWriter!.write(chunk).then(consumed, consumed);
+  };
+  // App 0.1.7+: pelo canal de mensagens do WebView2. Apps antigos: pelos canais do Tauri.
+  const offHost = bridge.onHostMessage((m) => (m.espia === 'pcm' ? onSound(m.d) : onFrame(m.m)));
+  const frames = bridge.channel<FrameMsg>(onFrame);
+  const sound = bridge.channel<ArrayBuffer | number[]>(onSound);
 
   let result: StartResult;
   try {
@@ -332,6 +385,7 @@ export async function startNative(
     done = true;
     clearInterval(stats);
     offBuffers();
+    offHost();
     slots.clear();
     video.stop();
     throw err;

@@ -35,6 +35,8 @@ Esta é a **única** API nativa que o app expõe à página (emenda 1.2.0 da con
 
 ## Áudio
 
+> **Atualizado na 010** ([delta](../../010-transmissao-leve/contracts/native-capture-delta.md)): no app 0.1.7+, o som e os avisos de `frames` chegam pelo canal de mensagens do WebView2 (`chrome.webview` "message", `{espia:'pcm', d: base64}` e `{espia:'f', m: FrameMsg}`), não pelos canais do Tauri. Cada mensagem de canal do Tauri executava um script na página, e a página crescia sem parar. A página descarta som com mais de 200 ms na fila.
+
 O canal `sound` recebe `ArrayBuffer`s de PCM **float32 intercalado, 48 kHz, 2 canais, 480 quadros (10 ms)**. A página monta um `AudioData` (`format: 'f32'`) com um timestamp contínuo e o escreve no gerador de áudio. Se o som não vier, o stream sai sem track de áudio.
 
 ## O que a página garante

@@ -3,7 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 const invoke = vi.hoisted(() => vi.fn(() => Promise.resolve()));
 vi.mock('@tauri-apps/api/core', () => ({ invoke }));
 
-import { installStopHook, openAction, reportLive } from '../../src/lib/desktop';
+import { installStopHook, openAction, reportLive, reportRoom } from '../../src/lib/desktop';
 
 describe('openAction (link de sala vindo do app desktop)', () => {
   it('vai para a sala quando não está transmitindo', () => {
@@ -46,6 +46,26 @@ describe('bandeja do app desktop (specs/007)', () => {
     reportLive(false);
     expect(invoke).toHaveBeenNthCalledWith(1, 'app_set_live', { live: true });
     expect(invoke).toHaveBeenNthCalledWith(2, 'app_set_live', { live: false });
+  });
+
+  it('reportRoom não chama nada fora do app', () => {
+    reportRoom(true);
+    expect(invoke).not.toHaveBeenCalled();
+  });
+
+  it('reportRoom avisa o app com app_set_room (specs/009)', () => {
+    w.__TAURI_INTERNALS__ = {};
+    reportRoom(true);
+    reportRoom(false);
+    expect(invoke).toHaveBeenNthCalledWith(1, 'app_set_room', { inRoom: true });
+    expect(invoke).toHaveBeenNthCalledWith(2, 'app_set_room', { inRoom: false });
+  });
+
+  it('reportRoom engole erro do app', async () => {
+    w.__TAURI_INTERNALS__ = {};
+    invoke.mockReturnValueOnce(Promise.reject(new Error('sem comando')));
+    expect(() => reportRoom(true)).not.toThrow();
+    await Promise.resolve();
   });
 
   it('espiaStopLive chama a função instalada e some ao remover', () => {

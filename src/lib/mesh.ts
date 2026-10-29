@@ -1,7 +1,7 @@
 // Malha da sala: uma PeerLink por pessoa (architecture.md §4.1). Quem chega inicia a conexão com
 // quem já está; quem já está espera a primeira mensagem e cria a conexão nessa hora.
 import type { IceServer, SignalData } from '../shared/protocol';
-import { fingerprintOf, PeerLink } from './peer';
+import { fingerprintOf, PeerLink, type SendStats } from './peer';
 import type { Quality, ViewMode } from './quality';
 
 export interface MeshCallbacks {
@@ -88,6 +88,14 @@ export class Mesh {
 
   retry(id: string) {
     this.links.get(id)?.restart();
+  }
+
+  /** Envio de vídeo por pessoa, com como ela me vê (specs/010). */
+  async sendStats(): Promise<{ id: string; view: ViewMode; stats: SendStats }[]> {
+    const out = await Promise.all(
+      [...this.links].map(async ([id, l]) => ({ id, view: l.theirView, stats: await l.sendStats().catch(() => null) })),
+    );
+    return out.filter((x): x is { id: string; view: ViewMode; stats: SendStats } => x.stats !== null);
   }
 
   /** Quantas conexões estão de pé (espectadores possíveis da sua transmissão). */

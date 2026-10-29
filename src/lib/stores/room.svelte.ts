@@ -18,7 +18,8 @@ import { audioRole, isCaptureCard, previewIds, suggestAudio, type AudioRole, typ
 import { untrack } from 'svelte';
 import { Mesh } from '../mesh';
 import { detectNative, matchLastSource, pollSources, sourceKey, startNative, type AudioWarn, type NativeSession } from '../native-capture';
-import { countFullViewers, effectiveQuality, isAdjusted, type Quality, type ViewMode } from '../quality';
+import { CpuGovernor } from '../cpu-governor';
+import { countFullViewers, effectiveQuality, isAdjusted, stepDown, type Quality, type ViewMode } from '../quality';
 import { stageLayout } from '../room-view';
 import {
   loadGoLivePrefs,
@@ -97,10 +98,18 @@ export class RoomStore {
   camAudioRole = $state<AudioRole>('voice');
   camFacing = $state<'user' | 'environment'>('user');
 
-  /** Qualidade efetiva da minha transmissão: o escolhido, com teto pelo nº de espectadores. */
+  /** Degraus baixados porque o PC não dá conta de comprimir (specs/010). Sem aviso: o indicador já mostra. */
+  cpuSteps = $state(0);
+  private governor = new CpuGovernor();
+  private sendBusy = false;
+  private sendTicks = 0;
+  private sendLast = new Map<string, number>();
+
+  /** Qualidade efetiva da minha transmissão: o escolhido, com teto pelo nº de espectadores e pela CPU. */
   readonly quality: Quality | null = $derived(
-    this.myBroadcast ? effectiveQuality(this.myBroadcast, countFullViewers(Object.values(this.theirViews))) : null,
+    this.myBroadcast ? effectiveQuality(this.myBroadcast, countFullViewers(Object.values(this.theirViews)), this.cpuSteps) : null,
   );
+  private readonly broadcasting = $derived(!!this.myBroadcast);
 
   readonly view: RoomView = $derived.by(() => this.buildView());
   readonly actions: RoomActions;
@@ -162,6 +171,13 @@ export class RoomStore {
       $effect(() => {
         const q = this.quality;
         if (q) untrack(() => this.applyQuality(q));
+      });
+      // Transmitindo: uma vez por segundo, olha se o motor está limitando por CPU (specs/010, research R5).
+      $effect(() => {
+        if (!this.broadcasting) return;
+        untrack(() => this.resetCpu());
+        const timer = setInterval(() => void this.watchSend(), 1000);
+        return () => clearInterval(timer);
       });
     });
   }
@@ -802,6 +818,45 @@ export class RoomStore {
       for (const s of v.streams) out[s.id] = 'full';
     }
     return out;
+  }
+
+  private resetCpu() {
+    this.governor.reset();
+    this.cpuSteps = 0;
+    this.sendTicks = 0;
+    this.sendLast.clear();
+  }
+
+  /** CPU no limite em alguma pessoa em tela cheia por 10 s → um degrau a menos; 60 s de folga → um a mais. */
+  private async watchSend() {
+    const q = this.quality;
+    if (!this.mesh || !q || this.sendBusy) return;
+    this.sendBusy = true;
+    try {
+      const all = await this.mesh.sendStats();
+      const full = all.filter((x) => x.view === 'full');
+      if (full.length) {
+        const down = stepDown(q);
+        const canGoDown = down.resolution !== q.resolution || down.fps !== q.fps;
+        if (this.governor.tick(full.some((x) => x.stats.limitation === 'cpu'), canGoDown)) this.cpuSteps = this.governor.steps;
+      }
+      // Log de envio a cada 10 s: Mbps por pessoa e por que o motor está limitando (SC-1003).
+      if (++this.sendTicks % 10 === 0) {
+        const pessoas: Record<string, string> = {};
+        let total = 0;
+        for (const { id, view, stats } of all) {
+          const mbps = ((stats.bytesSent - (this.sendLast.get(id) ?? stats.bytesSent)) * 8) / 10 / 1e6;
+          this.sendLast.set(id, stats.bytesSent);
+          total += mbps;
+          pessoas[id.slice(0, 6)] = `${mbps.toFixed(1)} Mbps ${view} ${stats.limitation} pli=${stats.pli} ${stats.encoder}${stats.hardware ? ' (placa)' : ''}`;
+        }
+        console.debug('[espia] envio', { total: `${total.toFixed(1)} Mbps`, qualidade: `${q.resolution}p${q.fps}`, cpuSteps: this.cpuSteps, pessoas });
+      }
+    } catch (err) {
+      console.warn('[espia] stats de envio', err);
+    } finally {
+      this.sendBusy = false;
+    }
   }
 
   private stopBroadcast(notify: boolean) {

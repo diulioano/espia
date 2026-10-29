@@ -155,10 +155,16 @@ mod imp {
     Ok(())
   }
 
+  /// Traz a janela de volta; se o motor tinha sido solto (specs/009), cria a janela de novo.
   fn show<R: Runtime>(app: &AppHandle<R>) {
-    if let Some(w) = app.get_webview_window("main") {
+    let window = match app.get_webview_window("main") {
+      Some(w) => Some(w),
+      None => crate::create_main(app, None).map_err(|e| eprintln!("[espia] não deu pra abrir a janela: {e}")).ok(),
+    };
+    if let Some(w) = window {
       crate::focus(&w);
     }
+    crate::engine::set_window(app, crate::engine::WindowMode::Visible);
   }
 
   /// Ícone, dica e menu conforme o estado (FR-706).
@@ -176,6 +182,7 @@ mod imp {
   pub fn set_live<R: Runtime>(app: &AppHandle<R>, live: bool) {
     if app.state::<TrayState>().live.swap(live, Ordering::Relaxed) != live {
       refresh(app);
+      crate::engine::apply(app);
     }
   }
 
@@ -203,6 +210,7 @@ mod imp {
 
   fn hide<R: Runtime>(app: &AppHandle<R>, window: &Window<R>, state: &State<TrayState>) {
     let _ = window.hide();
+    crate::engine::set_window(app, crate::engine::WindowMode::Hidden);
     if !state.prefs().tray_notice_shown {
       let _ = app.notification().builder().title(NOTICE_TITLE).body(NOTICE_BODY).show();
       state.update(|p| p.tray_notice_shown = true);

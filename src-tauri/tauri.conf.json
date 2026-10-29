@@ -2,7 +2,7 @@
   "$schema": "../node_modules/@tauri-apps/cli/config.schema.json",
   "productName": "Espia",
   "mainBinaryName": "Espia",
-  "version": "0.1.5",
+  "version": "0.1.7",
   "identifier": "dev.espia.app",
   "build": {
     "frontendDist": "www"
