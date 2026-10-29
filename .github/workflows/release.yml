@@ -36,3 +36,13 @@ jobs:
             clique em **Mais informações → Executar assim mesmo**.
           releaseDraft: false
           prerelease: false
+      # Cópia com nome fixo: o site baixa sempre .../releases/latest/download/Espia-setup.exe
+      # (specs/008-instalar-app/contracts/download.md).
+      - name: Instalador com nome fixo
+        if: github.ref_type == 'tag'
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          cp src-tauri/target/release/bundle/nsis/Espia_*_x64-setup.exe Espia-setup.exe
+          gh release upload "${{ github.ref_name }}" Espia-setup.exe --clobber

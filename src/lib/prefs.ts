@@ -7,6 +7,7 @@ const KEY = {
   goLive: 'espia:golive',
   volume: (name: string) => `espia:volume:${name.toLowerCase()}`,
   session: (code: string) => `espia:session:${code}`,
+  appInvite: 'espia:appinvite',
 };
 
 function read(storage: () => Storage, key: string): string | null {
@@ -35,6 +36,15 @@ export function loadNickname(): string {
 
 export function saveNickname(nickname: string) {
   write(local, KEY.nickname, nickname);
+}
+
+/** "Agora não" no convite do app (specs/008): vale para sempre nesse navegador. */
+export function loadAppInviteDismissed(): boolean {
+  return read(local, KEY.appInvite) === 'dismissed';
+}
+
+export function saveAppInviteDismissed() {
+  write(local, KEY.appInvite, 'dismissed');
 }
 
 export const DEFAULT_GO_LIVE: GoLivePrefs = { resolution: 1080, fps: 30, audio: true, surface: 'window' };

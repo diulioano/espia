@@ -1,6 +1,7 @@
 <script lang="ts">
   import { cleanNickname, NICKNAME_MAX } from '../../lib/join-view';
   import type { HomeActions, HomeView } from '../../lib/types';
+  import AppInvite from '../components/AppInvite.svelte';
   import Logo from '../components/Logo.svelte';
   import Mascot from '../components/Mascot.svelte';
   import StreamTile from '../components/StreamTile.svelte';
@@ -88,6 +89,10 @@
       </div>
       <button class="btn btn-secondary join-btn" disabled={!link.trim()}>Entrar</button>
     </form>
+
+    {#if view.appInvite}
+      <AppInvite state={view.appInvite} ondownload={actions.downloadApp} ondismiss={actions.dismissAppInvite} />
+    {/if}
   </main>
 </div>
 
@@ -133,6 +138,14 @@
   .link-input::placeholder { color: rgba(245, 234, 216, 0.4); }
   .join-btn { min-height: 44px; padding: 0 18px; }
   .error { font-size: 12px; color: var(--color-accent-300); padding-left: 20px; }
+
+  /* Notebook (768 px de altura) com o convite do app: compacta para caber sem rolar (specs/008 SC-804). */
+  @media (min-width: 640px) and (max-height: 820px) {
+    .home:has(:global(.invite)) .top { padding-block: 24px 0; }
+    .content:has(:global(.invite)) { padding-block: 28px 20px; gap: 16px; }
+    .content:has(:global(.invite)) h1 { font-size: 64px; }
+    .content:has(:global(.invite)) .join { margin-top: 12px; }
+  }
 
   @media (max-width: 1279px) {
     .art-main { right: -120px; opacity: 0.6; }

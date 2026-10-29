@@ -5,6 +5,8 @@ export const HOME_SCENES = [
   { id: 'default', code: 'D1', label: 'Página inicial' },
   { id: 'empty', code: 'D1', label: 'Primeira visita (sem apelido)' },
   { id: 'error', code: 'D1', label: 'Link inválido' },
+  { id: 'invite', code: 'D1', label: 'Convite do app (Windows)' },
+  { id: 'invitehint', code: 'D1', label: 'Convite: baixando' },
 ] as const;
 
 export type HomeScene = (typeof HOME_SCENES)[number]['id'];
@@ -16,5 +18,6 @@ export function buildHomeScene(scene: HomeScene): HomeView {
     nickname: scene === 'empty' ? '' : 'Rafa',
     link: scene === 'error' ? 'https://youtu.be/dQw4w9WgXcQ' : '',
     linkError: scene === 'error' ? LINK_ERROR : null,
+    appInvite: scene === 'invite' ? 'offer' : scene === 'invitehint' ? 'hint' : undefined,
   };
 }

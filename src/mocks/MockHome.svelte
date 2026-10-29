@@ -21,6 +21,12 @@
     clearLinkError() {
       view.linkError = null;
     },
+    downloadApp() {
+      view.appInvite = 'hint';
+    },
+    dismissAppInvite() {
+      view.appInvite = undefined;
+    },
   };
 </script>
 

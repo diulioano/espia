@@ -159,12 +159,17 @@ export interface HomeView {
   createError?: string | null;
   /** Esperando o servidor criar a sala. */
   creating?: boolean;
+  /** Convite do app desktop (specs/008): oferta, ou a dica depois de baixar. Ausente = não mostra. */
+  appInvite?: 'offer' | 'hint';
 }
 
 export interface HomeActions {
   createRoom(nickname: string): void;
   openLink(text: string): void;
   clearLinkError(): void;
+  /** Clicou em "Baixar o app" (o link baixa sozinho; aqui só troca para a dica). */
+  downloadApp(): void;
+  dismissAppInvite(): void;
 }
 
 export interface JoinPreviewPerson {

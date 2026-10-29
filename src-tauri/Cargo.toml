@@ -1,6 +1,6 @@
 [package]
 name = "espia"
-version = "0.1.4"
+version = "0.1.5"
 description = "Espia: compartilhamento de tela entre amigos (app desktop leve)"
 authors = ["Diuliano Vargas"]
 license = ""

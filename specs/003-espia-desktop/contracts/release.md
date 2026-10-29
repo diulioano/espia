@@ -3,7 +3,7 @@
 | Workflow | Gatilho | O que faz | Segredos |
 |---|---|---|---|
 | `ci.yml` | push e pull request | `npm ci` → `npm run check` → `npm test` → `npm run build` (Ubuntu); `cargo test` em `src-tauri` (Windows) | — |
-| `release.yml` | tag `v*` (ou manual) | `tauri-apps/tauri-action` gera o instalador NSIS (`Espia_<versão>_x64-setup.exe`) e publica a Release com ele | `GITHUB_TOKEN` (automático) |
+| `release.yml` | tag `v*` (ou manual) | `tauri-apps/tauri-action` gera o instalador NSIS (`Espia_<versão>_x64-setup.exe`) e publica a Release com ele; nas tags, sobe também a cópia `Espia-setup.exe` (link fixo do site, specs/008 `contracts/download.md`) | `GITHUB_TOKEN` (automático) |
 | `deploy.yml` | push na `main` (ou manual) | `npm ci` → `npm run deploy` (vite build + wrangler deploy) | `CLOUDFLARE_API_TOKEN`, `CLOUDFLARE_ACCOUNT_ID`; sem eles o job é pulado |
 
 ## Versão

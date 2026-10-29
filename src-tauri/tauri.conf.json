@@ -2,7 +2,7 @@
   "$schema": "../node_modules/@tauri-apps/cli/config.schema.json",
   "productName": "Espia",
   "mainBinaryName": "Espia",
-  "version": "0.1.4",
+  "version": "0.1.5",
   "identifier": "dev.espia.app",
   "build": {
     "frontendDist": "www"
@@ -49,7 +49,13 @@
           "PortugueseBR"
         ],
         "displayLanguageSelector": false,
-        "installerIcon": "icons/icon.ico"
+        "installerIcon": "icons/icon.ico",
+        "sidebarImage": "nsis/sidebar.bmp",
+        "headerImage": "nsis/header.bmp",
+        "installerHooks": "nsis/hooks.nsh",
+        "customLanguageFiles": {
+          "PortugueseBR": "nsis/PortugueseBR.nsh"
+        }
       }
     }
   }

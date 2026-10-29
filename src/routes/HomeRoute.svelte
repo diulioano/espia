@@ -1,13 +1,21 @@
 <script lang="ts">
   // "/" real: cria sala no servidor ou abre um link colado.
   import { createRoom } from '../lib/api';
-  import { loadNickname, saveNickname } from '../lib/prefs';
+  import { appInviteVisible, readInviteEnv } from '../lib/app-invite';
+  import { loadAppInviteDismissed, loadNickname, saveAppInviteDismissed, saveNickname } from '../lib/prefs';
   import { parseRoomId, roomPath } from '../lib/room-id';
   import { router } from '../lib/router.svelte';
   import type { HomeActions, HomeView } from '../lib/types';
   import HomePage from '../ui/pages/HomePage.svelte';
 
-  let view = $state<HomeView>({ nickname: loadNickname(), link: '', linkError: null, createError: null, creating: false });
+  let view = $state<HomeView>({
+    nickname: loadNickname(),
+    link: '',
+    linkError: null,
+    createError: null,
+    creating: false,
+    appInvite: appInviteVisible({ ...readInviteEnv(), dismissed: loadAppInviteDismissed() }) ? 'offer' : undefined,
+  });
 
   const actions: HomeActions = {
     async createRoom(nickname) {
@@ -30,6 +38,13 @@
     },
     clearLinkError() {
       view.linkError = null;
+    },
+    downloadApp() {
+      view.appInvite = 'hint';
+    },
+    dismissAppInvite() {
+      saveAppInviteDismissed();
+      view.appInvite = undefined;
     },
   };
 </script>
