@@ -166,7 +166,7 @@ description: "Tarefas da 006: transmitir câmera ou placa de captura"
   **Nunca** usar `--use-fake-ui-for-media-stream` sem a câmera falsa, nem capturar a tela real.
 - [x] T629 Publicar o site (`npm run deploy`, pela pessoa usuária). O app 0.1.3 já pega a câmera, sem build novo.
 - [ ] T630 Roteiro manual C1–C7 do `quickstart.md` (webcam, app, placa + console, voz sem eco, celular, câmera ocupada, cabo desconectado).
-- [ ] T631 Commit e relatório `specs/006-transmitir-camera/relatorio.md` no formato do da 005.
+- [x] T631 Commit e relatório `specs/006-transmitir-camera/relatorio.md` no formato do da 005.
 
 ---
 

@@ -216,7 +216,7 @@ description: "Tarefas da 005: seletor de tela nativo no app desktop"
 - [x] T550 Subir a versão para `0.1.3` (`package.json`, `src-tauri/Cargo.toml`, `src-tauri/tauri.conf.json`). Rodar `npm run desktop:build` e anotar o tamanho de `Espia_0.1.3_x64-setup.exe` em relação aos 1,13 MB da v0.1.2. A referência é ~+5 MB, flexível (SC-506).
 - [x] T551 Publicar o site (`npm run deploy`) **antes** de distribuir o app: o app carrega o site publicado.
 - [ ] T552 Roteiro manual N1–N8 do `quickstart.md` com a galera (Discord ligado, dois monitores, Windows 10 se der).
-- [ ] T553 Commit + tag `v0.1.3` (o workflow Release gera o instalador). Escrever `specs/005-seletor-nativo-desktop/relatorio.md` no formato do da 004: o que foi feito, diferenças em relação ao design, testes, tamanho e o que depende da pessoa usuária.
+- [x] T553 Commit + tag `v0.1.3` (o workflow Release gera o instalador). Escrever `specs/005-seletor-nativo-desktop/relatorio.md` no formato do da 004: o que foi feito, diferenças em relação ao design, testes, tamanho e o que depende da pessoa usuária.
 
 ---
 
