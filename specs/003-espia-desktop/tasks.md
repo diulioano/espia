@@ -51,14 +51,14 @@ description: "Tarefas da 003: Espia Desktop (Tauri, Windows) + GitHub"
 - [x] T021 [P] [US4] `.github/workflows/deploy.yml` (pula sem `CLOUDFLARE_API_TOKEN`)
 - [x] T022 [US4] `README.md` (o que é, baixar o app, aviso do SmartScreen, desenvolver, lançar versão)
 - [x] T023 [US4] Varredura de segredos antes do primeiro push (`.dev.vars`, tokens em specs/memória)
-- [x] T024 [US4] `git init`, commit, `gh repo create DiulianoVargas/espia --public`, push
-- [x] T025 [US4] Tag `v0.1.0` → acompanhar o release até o instalador aparecer (SC-007)
+- [ ] T024 [US4] `git init` e commit ✅; falta (bloqueado pelo modo automático, a pessoa decide): `gh repo create DiulianoVargas/espia --public`, push
+- [ ] T025 [US4] Tag `v0.1.0` → acompanhar o release até o instalador aparecer (SC-007)
 
 ## Phase 7: Polish
 
 - [x] T026 Atualizar `DEFINICOES.md` (nome Espia, app desktop saiu do "fora do escopo", GitHub) e `CLAUDE`/memória
-- [x] T027 `npm run deploy` do site com o gancho `espiaOpen`
-- [x] T028 Renomear a pasta `Documents\screen-share` → `Documents\espia` (por último)
+- [ ] T027 `npm run deploy` do site com o gancho `espiaOpen` (bloqueado pelo modo automático: a pessoa roda)
+- [ ] T028 Renomear a pasta `Documents\screen-share` → `Documents\espia` (por último)
 
 ## Dependências
 
