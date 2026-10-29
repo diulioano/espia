@@ -1,0 +1,38 @@
+# Tag vX.Y.Z → instalador do Windows (NSIS) publicado na Release. Ver specs/003-espia-desktop/contracts/release.md.
+name: Release
+
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri
+      - uses: tauri-apps/tauri-action@v0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          tagName: ${{ github.ref_type == 'tag' && github.ref_name || 'v__VERSION__' }}
+          releaseName: Espia ${{ github.ref_type == 'tag' && github.ref_name || 'v__VERSION__' }}
+          releaseBody: |
+            Baixe **Espia_*_x64-setup.exe** abaixo e instale (não precisa de administrador).
+
+            O Windows pode avisar "O Windows protegeu o computador" porque o app não é assinado:
+            clique em **Mais informações → Executar assim mesmo**.
+          releaseDraft: false
+          prerelease: false

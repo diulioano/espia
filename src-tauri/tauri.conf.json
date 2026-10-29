@@ -1,0 +1,40 @@
+{
+  "$schema": "../node_modules/@tauri-apps/cli/config.schema.json",
+  "productName": "Espia",
+  "mainBinaryName": "Espia",
+  "version": "0.1.0",
+  "identifier": "dev.espia.app",
+  "build": {
+    "frontendDist": "www"
+  },
+  "app": {
+    "windows": [],
+    "security": {
+      "csp": "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src https://espia.espia.workers.dev; base-uri 'none'; object-src 'none'"
+    }
+  },
+  "plugins": {
+    "deep-link": {
+      "desktop": { "schemes": ["espia"] }
+    }
+  },
+  "bundle": {
+    "active": true,
+    "targets": ["nsis"],
+    "publisher": "Espia",
+    "shortDescription": "Compartilhamento de tela entre amigos",
+    "longDescription": "Espia: transmita e assista a tela dos amigos, estilo Go Live, sem servidor de mídia.",
+    "copyright": "Espia",
+    "category": "SocialNetworking",
+    "icon": ["icons/32x32.png", "icons/128x128.png", "icons/128x128@2x.png", "icons/icon.ico"],
+    "windows": {
+      "webviewInstallMode": { "type": "downloadBootstrapper", "silent": true },
+      "nsis": {
+        "installMode": "currentUser",
+        "languages": ["PortugueseBR"],
+        "displayLanguageSelector": false,
+        "installerIcon": "icons/icon.ico"
+      }
+    }
+  }
+}

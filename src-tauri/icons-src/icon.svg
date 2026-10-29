@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024">
+  <!-- Castor do Espia (Mascot.svelte, humor "happy") num quadrado arredondado. Fonte do `tauri icon`. -->
+  <rect width="1024" height="1024" rx="220" fill="#d67f48"/>
+  <ellipse cx="284" cy="231" rx="91" ry="94" fill="#643312"/>
+  <ellipse cx="740" cy="231" rx="91" ry="94" fill="#643312"/>
+  <path d="M132 626 A380 429 0 0 1 892 626 A350 311 0 0 1 542 937 L482 937 A350 311 0 0 1 132 626 Z" fill="#8c491a"/>
+  <rect x="330" y="435" width="84" height="85" rx="42" fill="#201e1d"/>
+  <rect x="611" y="435" width="84" height="85" rx="42" fill="#201e1d"/>
+  <ellipse cx="512" cy="605" rx="61" ry="34" fill="#201e1d"/>
+  <path d="M463 648 H508 V711 A22.5 22 0 0 1 463 711 Z" fill="#fdf6ec"/>
+  <path d="M517 648 H562 V711 A22.5 22 0 0 1 517 711 Z" fill="#fdf6ec"/>
+</svg>

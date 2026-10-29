@@ -1,0 +1,285 @@
+<script lang="ts">
+  import { Maximize, PictureInPicture2, RefreshCw, Volume2, VolumeX, WifiOff } from '@lucide/svelte';
+  import type { StreamView, TileSize } from '../../lib/types';
+  import LiveBadge from './LiveBadge.svelte';
+  import Spinner from './Spinner.svelte';
+
+  let {
+    view,
+    size = 'stage',
+    focused = false,
+    you = false,
+    alwaysName = false,
+    controls = true,
+    radius,
+    onselect,
+    ontogglemute,
+    onvolume,
+    onretry,
+  }: {
+    view: StreamView;
+    size?: TileSize;
+    focused?: boolean;
+    you?: boolean;
+    /** Chip de nome sempre visível (ilustrações). */
+    alwaysName?: boolean;
+    /** false = tile decorativo, sem controles. */
+    controls?: boolean;
+    /** Raio vindo do pai (palco 28–32). */
+    radius?: string;
+    /** Clique no tile (focar na grade / trocar na faixa). */
+    onselect?: () => void;
+    ontogglemute?: () => void;
+    onvolume?: (volume: number) => void;
+    onretry?: () => void;
+  } = $props();
+
+  let container: HTMLDivElement;
+  let video: HTMLVideoElement | undefined = $state();
+  let active = $state(false);
+  let hideTimer: ReturnType<typeof setTimeout> | undefined;
+
+  const thumb = $derived(size === 'thumb');
+  const hasControls = $derived(controls && view.status === 'ok' && !thumb);
+  const showName = $derived(alwaysName || size !== 'stage' || active);
+  const label = $derived(you ? 'Você' : view.name);
+  const level = $derived(view.muted ? 0 : view.volume);
+
+  $effect(() => {
+    if (video && video.srcObject !== (view.stream ?? null)) video.srcObject = view.stream ?? null;
+  });
+  $effect(() => {
+    if (video) {
+      video.muted = you || view.muted;
+      video.volume = view.volume;
+    }
+  });
+
+  function wake() {
+    active = true;
+    clearTimeout(hideTimer);
+    hideTimer = setTimeout(() => (active = false), 2000);
+  }
+  function sleep() {
+    clearTimeout(hideTimer);
+    active = false;
+  }
+
+  function handleClick() {
+    if (view.status === 'failed' && thumb) onretry?.();
+    else onselect?.();
+  }
+  function handleKey(e: KeyboardEvent) {
+    if (onselect && (e.key === 'Enter' || e.key === ' ')) {
+      e.preventDefault();
+      handleClick();
+    }
+  }
+
+  async function pip(e: MouseEvent) {
+    e.stopPropagation();
+    if (!video || !document.pictureInPictureEnabled) return;
+    if (document.pictureInPictureElement === video) await document.exitPictureInPicture();
+    else await video.requestPictureInPicture().catch(() => {});
+  }
+  async function fullscreen(e: MouseEvent) {
+    e.stopPropagation();
+    if (document.fullscreenElement) await document.exitFullscreen();
+    else await container.requestFullscreen().catch(() => {});
+  }
+</script>
+
+<!-- svelte-ignore a11y_no_noninteractive_tabindex -->
+<div
+  bind:this={container}
+  class="tile size-{size} tone-{view.tone}"
+  class:focused
+  class:clickable={!!onselect}
+  class:active
+  style:border-radius={thumb ? 'var(--radius-tile-sm)' : radius}
+  role={onselect ? 'button' : 'group'}
+  tabindex={onselect || hasControls ? 0 : undefined}
+  aria-label={`Transmissão de ${label}`}
+  onclick={handleClick}
+  onkeydown={handleKey}
+  onpointermove={wake}
+  onpointerdown={wake}
+  onpointerleave={sleep}
+  onfocusin={wake}
+>
+  {#if view.status === 'ok'}
+    {#if view.stream}
+      <video bind:this={video} autoplay playsinline></video>
+    {:else}
+      <div class="placeholder"><span>{view.caption ?? `tela de ${view.name}`}</span></div>
+    {/if}
+  {:else if view.status === 'loading'}
+    <div class="state">
+      <Spinner size={thumb ? 22 : 40} />
+      {#if !thumb}<span class="loading-text">Conectando à transmissão de {view.name}…</span>{/if}
+    </div>
+  {:else}
+    <div class="state failed">
+      <div class="fail-icon"><WifiOff size={22} strokeWidth={2.75} /></div>
+      {#if thumb}
+        <span class="fail-thumb">Falhou · tocar p/ tentar</span>
+      {:else}
+        <div class="fail-text">
+          <span class="fail-title">Não deu pra conectar com {view.name}</span>
+          <span class="fail-body">A conexão caiu ou a rede de alguém está bloqueando. Às vezes uma segunda tentativa resolve.</span>
+        </div>
+        <button
+          class="btn btn-primary retry"
+          onclick={(e) => {
+            e.stopPropagation();
+            onretry?.();
+          }}
+        >
+          <RefreshCw size={16} strokeWidth={2.75} />
+          Tentar de novo
+        </button>
+      {/if}
+    </div>
+  {/if}
+
+  <div class="name-chip" class:visible={showName}>
+    <LiveBadge />
+    <span>{label}</span>
+  </div>
+
+  {#if view.muted && view.status === 'ok' && !you}
+    <div class="muted-badge" class:hidden={hasControls && active} aria-label="Sem som">
+      <VolumeX size={15} strokeWidth={2.75} />
+    </div>
+  {/if}
+
+  {#if hasControls}
+    <!-- svelte-ignore a11y_click_events_have_key_events, a11y_no_static_element_interactions -->
+    <div class="controls" class:visible={active} onclick={(e) => e.stopPropagation()}>
+      {#if !you}
+        <button class="ctl" aria-label={view.muted ? 'Ativar som' : 'Silenciar'} onclick={() => ontogglemute?.()}>
+          {#if view.muted}<VolumeX size={18} strokeWidth={2.75} />{:else}<Volume2 size={18} strokeWidth={2.75} />{/if}
+        </button>
+        <input
+          class="slider"
+          type="range"
+          min="0"
+          max="1"
+          step="0.01"
+          value={level}
+          style:--fill="{level * 100}%"
+          aria-label="Volume"
+          oninput={(e) => onvolume?.(Number(e.currentTarget.value))}
+        />
+      {/if}
+      <div class="spacer"></div>
+      <button class="ctl" aria-label="Picture-in-picture" onclick={pip} disabled={!view.stream}>
+        <PictureInPicture2 size={18} strokeWidth={2.75} />
+      </button>
+      <button class="ctl" aria-label="Tela cheia" onclick={fullscreen}>
+        <Maximize size={18} strokeWidth={2.75} />
+      </button>
+    </div>
+  {/if}
+</div>
+
+<style>
+  .tile {
+    --a: #3a2416; --b: #33200f;
+    position: relative; width: 100%; height: 100%; overflow: hidden;
+    border-radius: var(--radius-card); background: var(--color-stage); color: var(--color-text);
+    box-shadow: inset 0 0 0 1px rgba(245, 234, 216, 0.06);
+  }
+  .tone-sage { --a: #262d1d; --b: #212818; }
+  .tone-sand { --a: #2e2a24; --b: #28241f; }
+  .tone-deep { --a: #40261a; --b: #381f14; }
+  .size-grid { border-radius: var(--radius-tile); }
+  .focused::after {
+    content: ''; position: absolute; inset: 0; border-radius: inherit; pointer-events: none;
+    box-shadow: inset 0 0 0 3px var(--color-accent);
+  }
+  .clickable { cursor: pointer; }
+  .size-stage.active, .size-grid.active { cursor: default; }
+  .size-grid.clickable.active { cursor: pointer; }
+
+  video { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: contain; background: var(--color-stage); }
+  .placeholder {
+    position: absolute; inset: 0; display: grid; place-items: center;
+    background: repeating-linear-gradient(135deg, var(--a) 0 26px, var(--b) 26px 52px);
+  }
+  .placeholder span {
+    font-family: var(--font-mono); font-size: 14px; letter-spacing: 0.04em; color: rgba(245, 234, 216, 0.5);
+  }
+  .size-thumb .placeholder span { font-size: 11px; }
+
+  .state {
+    position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center;
+    gap: 14px; padding: 20px; text-align: center; background: #171512;
+  }
+  .size-thumb .state { gap: 8px; padding: 8px; }
+  .loading-text { font-size: 14px; color: rgba(245, 234, 216, 0.7); }
+  .failed { gap: 12px; }
+  .fail-icon {
+    width: 56px; height: 56px; border-radius: 50%; display: grid; place-items: center;
+    background: rgba(198, 113, 57, 0.18); color: var(--color-accent-400);
+  }
+  .size-thumb .fail-icon { width: 36px; height: 36px; }
+  .fail-text { display: flex; flex-direction: column; gap: 4px; align-items: center; }
+  .fail-title { font-family: var(--font-heading); font-size: 22px; line-height: 1.2; }
+  .fail-body { font-size: 14px; color: rgba(245, 234, 216, 0.65); max-width: 340px; text-wrap: pretty; }
+  .fail-thumb { font-size: 12px; font-weight: 600; color: rgba(245, 234, 216, 0.75); }
+  .retry { margin-top: 6px; padding: 10px 18px; color: var(--color-bg); }
+
+  .name-chip {
+    position: absolute; top: 16px; left: 16px; display: flex; align-items: center; gap: 8px;
+    padding: 5px 12px 5px 5px; border-radius: var(--radius-pill);
+    background: var(--color-overlay); backdrop-filter: blur(8px);
+    font-size: 14px; font-weight: 600;
+    opacity: 0; transition: opacity 150ms ease-out; pointer-events: none;
+  }
+  .name-chip.visible { opacity: 1; }
+  .size-thumb .name-chip { top: 8px; left: 8px; font-size: 12px; }
+
+  .muted-badge {
+    position: absolute; top: 16px; right: 16px; width: 30px; height: 30px; border-radius: 50%;
+    display: grid; place-items: center; background: var(--color-overlay);
+    transition: opacity 150ms ease-out;
+  }
+  .muted-badge.hidden { opacity: 0; }
+  .size-thumb .muted-badge { top: 8px; right: 8px; }
+
+  .controls {
+    position: absolute; left: 0; right: 0; bottom: 0; display: flex; align-items: center; gap: 10px;
+    padding: 40px 20px 20px;
+    background: linear-gradient(to top, rgba(12, 11, 10, 0.9), rgba(12, 11, 10, 0));
+    opacity: 0; transition: opacity 150ms ease-out; pointer-events: none;
+  }
+  .controls.visible { opacity: 1; pointer-events: auto; }
+  .size-grid .controls { padding: 28px 14px 14px; }
+  .spacer { flex: 1; }
+  .ctl {
+    --c: 42px;
+    width: var(--c); height: var(--c); border: 0; border-radius: 50%; flex: none;
+    display: grid; place-items: center; cursor: pointer;
+    color: var(--color-text); background: var(--color-ctl);
+  }
+  .size-grid .ctl { --c: 36px; }
+  .ctl:hover:not(:disabled) { background: rgba(245, 234, 216, 0.24); }
+  .ctl:disabled { opacity: 0.45; cursor: not-allowed; }
+
+  .slider {
+    --w: 120px;
+    appearance: none; width: var(--w); height: 14px; margin: 0; background: transparent; cursor: pointer;
+  }
+  .size-grid .slider { --w: 72px; }
+  .slider::-webkit-slider-runnable-track {
+    height: 6px; border-radius: 999px;
+    background: linear-gradient(to right, var(--color-accent-400) var(--fill), rgba(245, 234, 216, 0.22) var(--fill));
+  }
+  .slider::-moz-range-track { height: 6px; border-radius: 999px; background: rgba(245, 234, 216, 0.22); }
+  .slider::-moz-range-progress { height: 6px; border-radius: 999px; background: var(--color-accent-400); }
+  .slider::-webkit-slider-thumb {
+    appearance: none; width: 14px; height: 14px; margin-top: -4px; border-radius: 50%; background: #f5ead8; border: 0;
+  }
+  .slider::-moz-range-thumb { width: 14px; height: 14px; border-radius: 50%; background: #f5ead8; border: 0; }
+</style>

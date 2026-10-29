@@ -1,0 +1,66 @@
+/* Classes base do sistema Organic, adaptadas ao tema escuro do Espia (design_handoff_espia/design/_ds). */
+
+*, *::before, *::after { box-sizing: border-box; }
+html, body, #app { height: 100%; }
+button { font: inherit; }
+
+/* — botões — */
+.btn {
+  display: inline-flex; align-items: center; justify-content: center; gap: 8px;
+  cursor: pointer; text-decoration: none; white-space: nowrap;
+  font-family: var(--font-heading); font-weight: 400; font-size: 15px; line-height: 1.2;
+  color: var(--color-text); background: transparent;
+  border: 1px solid transparent; border-radius: var(--radius-pill);
+  padding: 12px 20px;
+  transition: background-color 120ms ease-out, opacity 120ms ease-out;
+}
+.btn svg { display: block; flex: none; }
+.btn:disabled { opacity: 0.45; cursor: not-allowed; }
+.btn-primary { background: var(--color-accent); color: var(--color-bg); }
+.btn-primary:not(:disabled):hover { background: var(--color-accent-600); }
+.btn-primary:not(:disabled):active { background: var(--color-accent-700); }
+.btn-stop { border: 2px solid var(--color-accent); color: var(--color-accent-400); }
+.btn-stop:hover { background: rgba(198, 113, 57, 0.1); }
+.btn-invite { background: var(--color-accent-2-400); color: var(--color-accent-2-900); }
+.btn-invite:hover { background: var(--color-accent-2-300); }
+.btn-invite.is-copied { background: var(--color-accent-2-200); }
+.btn-secondary { border-color: var(--color-divider); }
+.btn-secondary:not(:disabled):hover { background: color-mix(in srgb, var(--color-text) 7%, transparent); }
+.btn-secondary:not(:disabled):active { background: color-mix(in srgb, var(--color-text) 14%, transparent); }
+.btn-ghost { color: var(--color-accent-400); }
+.btn-ghost:hover { background: color-mix(in srgb, var(--color-accent) 10%, transparent); }
+.btn-icon { width: 36px; height: 36px; padding: 0; background: rgba(245, 234, 216, 0.08); }
+.btn-icon:hover { background: rgba(245, 234, 216, 0.14); }
+
+/* — inputs — */
+.input {
+  width: 100%; min-height: 50px; padding: 0 20px; font: inherit; font-size: 16px;
+  color: var(--color-text); caret-color: var(--color-accent);
+  background: var(--color-surface);
+  border: 1px solid var(--color-divider); border-radius: var(--radius-pill);
+}
+.input:hover { border-color: color-mix(in srgb, var(--color-text) 45%, transparent); }
+.input:focus-visible { border-color: var(--color-accent); box-shadow: var(--ring-focus); outline: none; }
+.input[aria-invalid='true'] { border-color: var(--color-accent-400); }
+
+/* — segmentado — */
+.seg {
+  display: flex; overflow: hidden;
+  border: 1px solid rgba(245, 234, 216, 0.16); border-radius: var(--radius-pill);
+}
+.seg-opt {
+  flex: 1; display: inline-flex; align-items: center; justify-content: center;
+  padding: 11px; font-size: 15px; cursor: pointer; position: relative;
+}
+.seg-opt + .seg-opt { border-left: 1px solid rgba(245, 234, 216, 0.16); }
+.seg-opt input { position: absolute; opacity: 0; width: 0; height: 0; pointer-events: none; }
+.seg-opt:has(input:checked) { background: var(--color-accent); color: var(--color-bg); font-weight: 600; }
+.seg-opt:not(:has(input:checked)):hover { background: color-mix(in srgb, var(--color-text) 7%, transparent); }
+.seg-opt:has(input:focus-visible) { outline: 2px solid var(--color-accent); outline-offset: -2px; }
+
+/* — utilitários — */
+.muted { color: var(--color-text-muted); }
+.visually-hidden {
+  position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px;
+  overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0;
+}

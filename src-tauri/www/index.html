@@ -1,0 +1,31 @@
+<!doctype html>
+<html lang="pt-BR">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="color-scheme" content="dark" />
+    <title>Espia</title>
+    <link rel="stylesheet" href="loader.css" />
+    <script src="loader.js" defer></script>
+  </head>
+  <body>
+    <!-- Tela local do app: abre o Espia publicado ou explica que não deu (FR-008). -->
+    <main data-state="loading">
+      <svg class="castor" viewBox="132 137 760 800" aria-hidden="true">
+        <ellipse cx="284" cy="231" rx="91" ry="94" fill="#643312" />
+        <ellipse cx="740" cy="231" rx="91" ry="94" fill="#643312" />
+        <path d="M132 626 A380 429 0 0 1 892 626 A350 311 0 0 1 542 937 L482 937 A350 311 0 0 1 132 626 Z" fill="#8c491a" />
+        <rect class="eye" x="330" y="435" width="84" height="85" rx="42" fill="#201e1d" />
+        <rect class="eye" x="611" y="435" width="84" height="85" rx="42" fill="#201e1d" />
+        <ellipse cx="512" cy="605" rx="61" ry="34" fill="#201e1d" />
+        <path d="M463 648 H508 V711 A22.5 22 0 0 1 463 711 Z" fill="#fdf6ec" />
+        <path d="M517 648 H562 V711 A22.5 22 0 0 1 517 711 Z" fill="#fdf6ec" />
+      </svg>
+      <p class="loading">Abrindo o Espia…</p>
+      <div class="offline">
+        <h1>Sem conexão com o Espia</h1>
+        <p>Confere a internet e tenta de novo.</p>
+        <button type="button" id="retry">Tentar de novo</button>
+      </div>
+    </main>
+  </body>
+</html>
