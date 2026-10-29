@@ -2,7 +2,7 @@
   "$schema": "../node_modules/@tauri-apps/cli/config.schema.json",
   "productName": "Espia",
   "mainBinaryName": "Espia",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "identifier": "dev.espia.app",
   "build": {
     "frontendDist": "www"
@@ -15,23 +15,39 @@
   },
   "plugins": {
     "deep-link": {
-      "desktop": { "schemes": ["espia"] }
+      "desktop": {
+        "schemes": [
+          "espia"
+        ]
+      }
     }
   },
   "bundle": {
     "active": true,
-    "targets": ["nsis"],
+    "targets": [
+      "nsis"
+    ],
     "publisher": "Espia",
     "shortDescription": "Compartilhamento de tela entre amigos",
     "longDescription": "Espia: transmita e assista a tela dos amigos, estilo Go Live, sem servidor de mídia.",
     "copyright": "Espia",
     "category": "SocialNetworking",
-    "icon": ["icons/32x32.png", "icons/128x128.png", "icons/128x128@2x.png", "icons/icon.ico"],
+    "icon": [
+      "icons/32x32.png",
+      "icons/128x128.png",
+      "icons/128x128@2x.png",
+      "icons/icon.ico"
+    ],
     "windows": {
-      "webviewInstallMode": { "type": "downloadBootstrapper", "silent": true },
+      "webviewInstallMode": {
+        "type": "downloadBootstrapper",
+        "silent": true
+      },
       "nsis": {
         "installMode": "currentUser",
-        "languages": ["PortugueseBR"],
+        "languages": [
+          "PortugueseBR"
+        ],
         "displayLanguageSelector": false,
         "installerIcon": "icons/icon.ico"
       }

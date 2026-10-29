@@ -1,7 +1,7 @@
 {
   "name": "espia",
   "private": true,
-  "version": "0.1.0",
+  "version": "0.1.1",
   "type": "module",
   "scripts": {
     "dev": "vite",
@@ -15,7 +15,8 @@
     "smoke": "node scripts/smoke-signaling.mjs",
     "dev:lan": "vite build && wrangler dev --ip 0.0.0.0 --port 8787 --local-protocol https",
     "desktop:dev": "tauri dev",
-    "desktop:build": "tauri build"
+    "desktop:build": "tauri build",
+    "tauri": "tauri"
   },
   "devDependencies": {
     "@cloudflare/vitest-plugin": "^1.4.10",
