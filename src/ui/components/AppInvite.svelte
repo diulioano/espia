@@ -1,7 +1,7 @@
 <script lang="ts">
   // Convite para baixar o app desktop (specs/008). Secundário: fica abaixo de "Tem um link?".
   import { Download, X } from '@lucide/svelte';
-  import { DOWNLOAD_URL, RELEASES_URL } from '../../lib/app-invite';
+  import { DOWNLOAD_URL } from '../../lib/app-invite';
   import Mascot from './Mascot.svelte';
 
   let { state, ondownload, ondismiss }: { state: 'offer' | 'hint'; ondownload: () => void; ondismiss: () => void } = $props();
@@ -14,7 +14,7 @@
       <strong>Tem Windows? Baixe o app do Espia</strong>
       <span>Escolha a janela numa grade com prévias, som sem vazar o Discord e feche sem sair da sala.</span>
       <div class="actions">
-        <a class="btn btn-secondary dl" href={DOWNLOAD_URL} onclick={() => ondownload()}>
+        <a class="btn btn-secondary dl" href={DOWNLOAD_URL} download onclick={() => ondownload()}>
           <Download size={16} strokeWidth={2.75} />Baixar o app
         </a>
         <button class="btn btn-ghost later" onclick={() => ondismiss()}>Agora não</button>
@@ -26,7 +26,7 @@
       <span>
         Se o Windows avisar que protegeu o computador, clique em <b>Mais informações</b> → <b>Executar assim mesmo</b>.
       </span>
-      <a class="fallback" href={RELEASES_URL} target="_blank" rel="noopener">Não baixou? Abra a página de versões</a>
+      <a class="fallback" href={DOWNLOAD_URL} download>Não baixou? Tente de novo</a>
     </div>
     <button class="btn btn-icon close" aria-label="Fechar" onclick={() => ondismiss()}><X size={16} strokeWidth={2.75} /></button>
   {/if}

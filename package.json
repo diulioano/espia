@@ -17,7 +17,8 @@
     "desktop:dev": "tauri dev",
     "desktop:build": "tauri build",
     "tauri": "tauri",
-    "memoria": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/memoria.ps1"
+    "memoria": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/memoria.ps1",
+    "desktop:release": "tauri build && node scripts/copy-installer.mjs"
   },
   "devDependencies": {
     "@cloudflare/vitest-plugin": "^1.4.10",

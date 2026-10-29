@@ -1,9 +1,10 @@
 // Convite para baixar o app desktop na tela inicial (specs/008, research R1/R2). Só no Windows, fora do app.
 
-/** Sempre o instalador da versão mais nova (contracts/download.md). */
-export const DOWNLOAD_URL = 'https://github.com/DiulianoVargas/espia/releases/latest/download/Espia-setup.exe';
-/** Reserva, se o download não começar. */
-export const RELEASES_URL = 'https://github.com/DiulianoVargas/espia/releases/latest';
+/**
+ * Sempre o instalador da versão mais nova, servido pelo próprio Worker (sem GitHub): `npm run desktop:release`
+ * copia o instalador para public/download/ e o `npm run deploy` publica junto com o site.
+ */
+export const DOWNLOAD_URL = '/download/Espia-setup.exe';
 
 export interface InviteEnv {
   /** `navigator.userAgentData.platform` (Chrome/Edge); falta no Firefox e no Safari. */
