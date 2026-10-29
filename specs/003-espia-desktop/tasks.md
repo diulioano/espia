@@ -51,8 +51,8 @@ description: "Tarefas da 003: Espia Desktop (Tauri, Windows) + GitHub"
 - [x] T021 [P] [US4] `.github/workflows/deploy.yml` (pula sem `CLOUDFLARE_API_TOKEN`)
 - [x] T022 [US4] `README.md` (o que é, baixar o app, aviso do SmartScreen, desenvolver, lançar versão)
 - [x] T023 [US4] Varredura de segredos antes do primeiro push (`.dev.vars`, tokens em specs/memória)
-- [ ] T024 [US4] `git init` e commit ✅; falta (bloqueado pelo modo automático, a pessoa decide): `gh repo create DiulianoVargas/espia --public`, push
-- [ ] T025 [US4] Tag `v0.1.0` → acompanhar o release até o instalador aparecer (SC-007)
+- [x] T024 [US4] `git init`, commit, `gh repo create DiulianoVargas/espia --public`, push (https://github.com/DiulianoVargas/espia)
+- [x] T025 [US4] Release: `v0.1.0` falhou (faltava o script `npm run tauri`); `v0.1.1` publicada em ~10 min com `Espia_0.1.1_x64-setup.exe` (1,19 MB) (SC-007)
 
 ## Phase 7: Polish
 
