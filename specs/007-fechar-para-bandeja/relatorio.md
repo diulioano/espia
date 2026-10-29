@@ -35,7 +35,10 @@ Instalador `Espia_0.1.4_x64-setup.exe`: **1,60 MiB** (1.675.076 bytes), +164 KB 
 
 - Site: versão do Worker `2eca8fb5` (2026-10-29), com o `app_set_live`.
 
-## ⚠️ O que precisa de você
+## Teste manual (2026-10-29)
 
-1. **Roteiro B1–B8** (`quickstart.md`), principalmente o B2: transmitir, clicar no X, esperar 5 min e conferir com quem assiste que nada travou.
-2. **Tag `v0.1.4`** depois do roteiro (o workflow Release gera o instalador).
+A pessoa usuária testou o app 0.1.4, inclusive transmitindo a câmera com a janela escondida: **funcionou**. O plano B do R2 não foi necessário.
+
+## Release
+
+Tag `v0.1.4` criada depois do teste (o workflow Release gera o instalador).

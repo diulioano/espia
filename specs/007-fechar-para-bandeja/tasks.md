@@ -28,7 +28,7 @@
 - [x] T708 [US1] Em `src-tauri/src/lib.rs`, chamar `app.manage(TrayState::load(app))` e `tray::setup(app)?` no `setup`, registrar `.plugin(tauri_plugin_notification::init())`, e tratar `WindowEvent::CloseRequested { api, .. }` da janela `main` (via `.on_window_event` no `tauri::Builder`): `on_close(prefs, live)` → `Hide` = `api.prevent_close()` + `window.hide()`; `Exit`/`ConfirmExit` = `api.prevent_close()` + `tray::quit(app)` (T715)
 - [x] T709 [US1] Aviso da primeira vez em `src-tauri/src/tray.rs`: ao esconder com `tray_notice_shown == false`, mostrar a notificação (`NotificationExt`, título "O Espia continua aberto", corpo do `data-model.md`), marcar `tray_notice_shown = true` e `save()` (FR-703)
 - [x] T710 [US1] Conferir que o `single_instance` (`src-tauri/src/lib.rs`) mostra a janela escondida e segue o `open_room` para links `espia://s/...` (R8); ajustar só se `focus` não bastar
-- [ ] T711 [US1] **precisa da pessoa usuária** (roteiro B2/B3: a captura real não entra nos testes automáticos) — Verificar R2 com `npm run tauri dev`: transmitir (captura nativa e câmera), esconder 5 min, outra janela/navegador assiste; olhar o log `[espia] captura nativa:`. Se houver queda, aplicar o plano B do `research.md` R2 em `src-tauri/src/lib.rs` (`additional_browser_args` também no release) e registrar o resultado em `specs/007-fechar-para-bandeja/research.md` R2
+- [x] T711 [US1] **precisa da pessoa usuária** (roteiro B2/B3: a captura real não entra nos testes automáticos) — Verificar R2 com `npm run tauri dev`: transmitir (captura nativa e câmera), esconder 5 min, outra janela/navegador assiste; olhar o log `[espia] captura nativa:`. Se houver queda, aplicar o plano B do `research.md` R2 em `src-tauri/src/lib.rs` (`additional_browser_args` também no release) e registrar o resultado em `specs/007-fechar-para-bandeja/research.md` R2
 
 **Checkpoint**: X esconde, ícone traz de volta, transmissão não cai.
 
@@ -62,8 +62,8 @@
 - [x] T721 `npm run check`, `npm test`, `cargo test`, `cargo clippy --all-targets` sem erros nem avisos
 - [x] T722 Versão `0.1.4` em `src-tauri/Cargo.toml`, `src-tauri/tauri.conf.json` e `package.json`; `npm run tauri build` e anotar o tamanho do instalador (meta: + < 0,3 MB)
 - [x] T723 `npm run deploy` do site com o `app_set_live` (antes da tag: o app só sabe que está ao vivo com o site novo)
-- [ ] T724 Roteiro manual B1–B8 de `specs/007-fechar-para-bandeja/quickstart.md` — **precisa da pessoa usuária**
-- [ ] T725 Commit, tag `v0.1.4` e `specs/007-fechar-para-bandeja/relatorio.md` no formato do da 006
+- [x] T724 Roteiro manual B1–B8 de `specs/007-fechar-para-bandeja/quickstart.md` — **precisa da pessoa usuária**
+- [x] T725 Commit, tag `v0.1.4` e `specs/007-fechar-para-bandeja/relatorio.md` no formato do da 006
 
 ## Dependencies
 
