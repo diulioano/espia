@@ -37,7 +37,7 @@
 - [x] T810 [P] [US1] Mocks em `src/mocks/home.ts` e `src/mocks/MockHome.svelte`: cenas `invite` ("Convite do app") e `invitehint` ("Convite: baixando"), com `downloadApp` → `hint` e `dismissAppInvite` → some (FR-809)
 - [x] T811 [US1] Em `src/routes/HomeRoute.svelte`: `appInvite` inicial = `appInviteVisible({ ...readInviteEnv(), dismissed: loadAppInviteDismissed() }) ? 'offer' : undefined`; `downloadApp` → `'hint'`; `dismissAppInvite` → `saveAppInviteDismissed()` + `undefined`
 - [x] T812 [US1] Em `.github/workflows/release.yml`, depois do `tauri-action`: passo `shell: bash` que copia `src-tauri/target/release/bundle/nsis/Espia_*_x64-setup.exe` para `Espia-setup.exe` e roda `gh release upload "${{ github.ref_name }}" Espia-setup.exe --clobber` (só quando `github.ref_type == 'tag'`; `GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}`); registrar o asset em `specs/003-espia-desktop/contracts/release.md` (contracts/download.md)
-- [ ] T813 [US1] Subir `Espia-setup.exe` na Release `v0.1.4` já publicada (`gh release download v0.1.4 -p "Espia_*_x64-setup.exe"` + `gh release upload v0.1.4 Espia-setup.exe`) — **pedir OK da pessoa usuária antes** — e conferir o contrato com `curl -sIL` terminando em `200`
+- [x] T813 [US1] Subir `Espia-setup.exe` na Release `v0.1.4` já publicada (`gh release download v0.1.4 -p "Espia_*_x64-setup.exe"` + `gh release upload v0.1.4 Espia-setup.exe`) — **pedir OK da pessoa usuária antes** — e conferir o contrato com `curl -sIL` terminando em `200`
 
 ## Phase 5: User Story 3 — Não incomodar (P2)
 
@@ -62,9 +62,9 @@
 
 - [x] T819 `npm run check`, `npm test` e os mocks `default`, `invite` e `invitehint` conferidos em 1440×900 e 1366×768
 - [x] T820 Versão `0.1.5` em `package.json`, `src-tauri/tauri.conf.json` e `src-tauri/Cargo.toml`
-- [ ] T821 Deploy do site (`npm run deploy`, ou pedir para a pessoa rodar se o modo automático bloquear) e conferir `curl -sI …/favicon.ico` → `image/x-icon`
-- [ ] T822 Roteiro I1–I6 de `quickstart.md` — **precisa da pessoa usuária** (I5/I6: instalar de verdade)
-- [ ] T823 Commit, tag `v0.1.5` (o workflow gera o instalador com a arte e o `Espia-setup.exe`) e `specs/008-instalar-app/relatorio.md` no formato do da 007
+- [x] T821 Deploy do site (`npm run deploy`, ou pedir para a pessoa rodar se o modo automático bloquear) e conferir `curl -sI …/favicon.ico` → `image/x-icon`
+- [x] T822 Roteiro I1–I6 de `quickstart.md` — **precisa da pessoa usuária** (I5/I6: instalar de verdade)
+- [x] T823 Commit, tag `v0.1.5` (o workflow gera o instalador com a arte e o `Espia-setup.exe`) e `specs/008-instalar-app/relatorio.md` no formato do da 007
 
 ## Dependencies
 
