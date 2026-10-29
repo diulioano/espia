@@ -5,6 +5,7 @@
   import { fetchPreview } from '../lib/api';
   import { canUseCamera } from '../lib/camera';
   import { canShareScreen } from '../lib/capture';
+  import { installStopHook, reportLive } from '../lib/desktop';
   import { loadNickname, loadSession, saveNickname } from '../lib/prefs';
   import { router } from '../lib/router.svelte';
   import { RoomStore } from '../lib/stores/room.svelte';
@@ -85,8 +86,15 @@
   const leaveGuard = () => (store?.myBroadcast ? 'Você está transmitindo. Parar e ir pra outra sala?' : null);
   router.leaveGuard = leaveGuard;
 
+  // App desktop: ícone "ao vivo" na bandeja e "Parar transmissão" pelo menu (specs/007).
+  const live = $derived(!!store?.myBroadcast);
+  $effect(() => reportLive(live));
+  const removeStopHook = installStopHook(() => store?.actions.stopGoLive());
+
   onDestroy(() => {
     if (router.leaveGuard === leaveGuard) router.leaveGuard = null;
+    removeStopHook();
+    reportLive(false);
     store?.destroy();
   });
 </script>

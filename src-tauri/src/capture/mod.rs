@@ -59,7 +59,7 @@ mod imp {
   const VERSION: u32 = 1;
 
   /// A página que chama é a do Espia, na janela principal (R9).
-  fn origin_ok<R: Runtime>(webview: &Webview<R>) -> bool {
+  pub(crate) fn origin_ok<R: Runtime>(webview: &Webview<R>) -> bool {
     if webview.label() != "main" {
       return false;
     }

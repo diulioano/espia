@@ -4,6 +4,7 @@ mod capture;
 mod links;
 #[cfg(windows)]
 mod share_bar;
+mod tray;
 
 use tauri::{Manager, Url, WebviewUrl, WebviewWindow, WebviewWindowBuilder, webview::NewWindowResponse};
 use tauri_plugin_opener::OpenerExt;
@@ -19,7 +20,7 @@ fn open_room<R: tauri::Runtime>(window: &WebviewWindow<R>, path: &str) {
   let _ = window.eval(js);
 }
 
-fn focus<R: tauri::Runtime>(window: &WebviewWindow<R>) {
+pub(crate) fn focus<R: tauri::Runtime>(window: &WebviewWindow<R>) {
   let _ = window.unminimize();
   let _ = window.show();
   let _ = window.set_focus();
@@ -55,7 +56,16 @@ pub fn run() {
       capture::capture_start,
       capture::capture_set_quality,
       capture::capture_stop,
+      tray::app_set_live,
     ]);
+    // O X esconde na bandeja (specs/007).
+    app = app.on_window_event(|window, event| {
+      if let tauri::WindowEvent::CloseRequested { api, .. } = event
+        && window.label() == "main"
+      {
+        tray::on_close_requested(window, api);
+      }
+    });
   }
   app
     // Precisa ser o primeiro plugin: a segunda abertura (atalho ou link espia://) cai aqui.
@@ -70,6 +80,7 @@ pub fn run() {
     .plugin(tauri_plugin_deep_link::init())
     .plugin(tauri_plugin_window_state::Builder::default().build())
     .plugin(tauri_plugin_opener::init())
+    .plugin(tauri_plugin_notification::init())
     .setup(|app| {
       // O instalador registra espia://; rodando sem instalar (dev), registramos aqui.
       #[cfg(debug_assertions)]
@@ -78,6 +89,12 @@ pub fn run() {
         let _ = app.deep_link().register_all();
         // A mesma ponte de captura para o Worker local (só em debug).
         app.add_capability(include_str!("../capabilities-dev/capture-dev.json"))?;
+      }
+
+      #[cfg(windows)]
+      {
+        app.manage(tray::TrayState::load(app.handle()));
+        tray::setup(app.handle())?;
       }
 
       let args: Vec<String> = std::env::args().collect();
@@ -113,6 +130,8 @@ pub fn run() {
           #[cfg(windows)]
           if payload.event() == tauri::webview::PageLoadEvent::Started {
             capture::stop_all(window.as_ref(), &window.state::<capture::Capture>());
+            // A página nova ainda não transmite (data-model.md, LiveState).
+            tray::set_live(window.app_handle(), false);
           }
           let _ = (&window, &payload);
         });

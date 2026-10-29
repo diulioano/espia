@@ -12,6 +12,7 @@
 - **Ponto de atenção**: a captura nativa da 005 entrega quadros por `Channel` (mensagem da ponte, não timer) e o `MediaStreamTrackGenerator` escreve na hora. Deve seguir igual; medir os quadros descartados no log `[espia] captura nativa:` com a janela escondida.
 - **Plano B** (só se o teste mostrar queda): passar `--disable-background-timer-throttling --disable-renderer-backgrounding --disable-backgrounding-occluded-windows` em `additional_browser_args` também no release; ou manter o controller do WebView2 com `IsVisible = true` enquanto houver transmissão.
 - **Alternatives**: minimizar em vez de esconder (fica na barra de tarefas, contraria Q1: A).
+- **Status (2026-10-29)**: plano B **não** aplicado. Falta o teste real (B2/B3) com outra pessoa assistindo.
 
 ## R3. O X
 
