@@ -38,7 +38,15 @@
     startGoLive(prefs) {
       view.goLivePrefs = prefs;
       view.goLiveOpen = false;
-      view.myBroadcast = { ...prefs, viewers: view.participants.length - 1, startedAt: Date.now() };
+      // Simula o que o seletor nativo entregaria: janela com o som dela; tela inteira sem som.
+      const screen = prefs.surface === 'monitor';
+      view.myBroadcast = {
+        ...prefs,
+        viewers: view.participants.length - 1,
+        startedAt: Date.now(),
+        audioKind: prefs.audio && !screen ? 'window' : 'none',
+        audioReason: screen ? 'monitor' : undefined,
+      };
       view.participants.forEach((p) => p.you && (p.live = true));
       toast({ kind: 'live', text: 'Você está ao vivo pra sala' });
     },

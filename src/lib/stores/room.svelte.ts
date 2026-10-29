@@ -1,6 +1,6 @@
 // Sala real: liga a sinalização e a malha WebRTC ao RoomView que as telas já usam com os mocks.
 import type { IceServer, Peer, ServerMessage } from '../../shared/protocol';
-import { canShare, isPermissionDenied, startCapture, stopCapture } from '../capture';
+import { applyAudioRule, canShare, isPermissionDenied, startCapture, stopCapture } from '../capture';
 import { untrack } from 'svelte';
 import { Mesh } from '../mesh';
 import { countFullViewers, effectiveQuality, isAdjusted, type Quality, type ViewMode } from '../quality';
@@ -19,6 +19,7 @@ import type { GoLivePrefs, MyBroadcastView, RoomActions, RoomView, StreamView, T
 
 const DEFAULT_VOLUME = 0.68;
 const TOAST_MS = 4_000;
+const SCREEN_NO_AUDIO = 'Tela inteira vai sem som. Pra levar o som, transmita a janela do jogo ou uma aba.';
 /** Sem quadro de vídeo nesse tempo depois de "começou a transmitir" → tile "falhou". */
 const FIRST_FRAME_TIMEOUT_MS = 10_000;
 /** Pede credenciais TURN novas esse tempo antes de vencerem. */
@@ -206,7 +207,7 @@ export class RoomStore {
           id: p.id,
           name: p.nickname,
           tone: p.tone,
-          quality: `${p.live!.resolution}p · ${p.live!.fps} fps`,
+          quality: `${p.live!.resolution}p · ${p.live!.fps} fps · ${p.live!.audio === 'none' ? 'sem som' : 'com som'}`,
           status: flowing ? 'ok' : failed ? 'failed' : 'loading',
           muted: a.muted,
           volume: a.volume,
@@ -313,16 +314,55 @@ export class RoomStore {
       else this.toast({ kind: 'error', text: 'Não deu pra capturar a tela' });
       return;
     }
+    // Antes de qualquer envio: tira o som que não pode sair (specs/002).
+    const wanted = prefs.audio && prefs.surface !== 'monitor';
+    const a = applyAudioRule(stream, wanted);
     this.stream = stream;
+    this.warnedScreenAudio = false;
+    const video = stream.getVideoTracks()[0];
     // Botão nativo "Parar de compartilhar".
-    stream.getVideoTracks()[0]?.addEventListener('ended', () => this.stopBroadcast(true));
-    this.myBroadcast = { ...prefs, startedAt: Date.now(), viewers: this.peers.length, stream };
+    video?.addEventListener('ended', () => this.stopBroadcast(true));
+    // Trocou o que compartilha no meio ("compartilhar esta aba"): reavalia o som (FR-205).
+    video?.addEventListener('configurationchange', () => this.reapplyAudio(stream, wanted));
+    stream.addEventListener('addtrack', () => this.reapplyAudio(stream, wanted));
+    stream.addEventListener('removetrack', () => this.reapplyAudio(stream, wanted));
+    this.myBroadcast = {
+      ...prefs,
+      startedAt: Date.now(),
+      viewers: this.peers.length,
+      stream,
+      audioKind: a.kind,
+      audioReason: a.reason,
+    };
     const q = this.quality!;
     this.appliedQuality = q;
     await this.constrainCapture(q);
     this.mesh?.setLocal(stream, q);
     this.sendLive();
     this.toast({ kind: 'live', text: 'Você está ao vivo pra sala' });
+    if (a.warn) this.warnScreenAudio();
+  }
+
+  /** Aviso do FR-208: no máximo uma vez por transmissão. */
+  private warnedScreenAudio = false;
+  private warnScreenAudio() {
+    if (this.warnedScreenAudio) return;
+    this.warnedScreenAudio = true;
+    this.toast({ kind: 'live', text: SCREEN_NO_AUDIO });
+  }
+
+  private reapplyAudio(stream: MediaStream, wanted: boolean) {
+    const b = this.myBroadcast;
+    if (!b || this.stream !== stream) return;
+    const a = applyAudioRule(stream, wanted);
+    // Faixa de áudio pode ter entrado ou saído: manda o estado atual (setLocal é idempotente).
+    if (this.quality) this.mesh?.setLocal(stream, this.quality);
+    if (a.warn) this.warnScreenAudio();
+    if (a.kind !== b.audioKind || a.reason !== b.audioReason) {
+      b.audioKind = a.kind;
+      b.audioReason = a.reason;
+      this.sendLive();
+    }
   }
 
   /** Anuncia a transmissão com a qualidade efetiva (quem assiste vê no subtítulo). */
@@ -330,7 +370,7 @@ export class RoomStore {
     const b = this.myBroadcast;
     if (!b) return;
     const q = this.quality ?? b;
-    this.signaling.send({ t: 'live', resolution: q.resolution, fps: q.fps, audio: b.audio });
+    this.signaling.send({ t: 'live', resolution: q.resolution, fps: q.fps, audio: b.audioKind });
   }
 
   private async applyQuality(q: Quality) {

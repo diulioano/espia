@@ -1,4 +1,7 @@
 // View-models: contrato entre a camada visual (src/ui) e quem fornece os dados (mocks ou lógica real).
+import type { AudioKind } from '../shared/protocol';
+
+export type { AudioKind };
 
 export type Tone = 'accent' | 'sage' | 'sand' | 'deep';
 export type TileStatus = 'ok' | 'loading' | 'failed';
@@ -6,6 +9,8 @@ export type TileSize = 'stage' | 'grid' | 'thumb';
 export type ToastKind = 'join' | 'leave' | 'live' | 'copied' | 'error';
 export type Resolution = 720 | 1080;
 export type Fps = 30 | 60;
+/** Aba do seletor (specs/004): vira a dica `displaySurface` do seletor nativo. */
+export type ShareSurface = 'window' | 'monitor';
 
 export interface ParticipantView {
   id: string;
@@ -40,7 +45,9 @@ export interface ToastView {
 export interface GoLivePrefs {
   resolution: Resolution;
   fps: Fps;
+  /** "Compartilhar áudio" ligado (vale para janela/aba; tela inteira vai sempre sem som). */
   audio: boolean;
+  surface: ShareSurface;
 }
 
 export interface MyBroadcastView extends GoLivePrefs {
@@ -49,6 +56,10 @@ export interface MyBroadcastView extends GoLivePrefs {
   adjusted?: boolean;
   viewers: number;
   stream?: MediaStream;
+  /** O som que está saindo de verdade (specs/002). */
+  audioKind: AudioKind;
+  /** Sem som porque é tela inteira. */
+  audioReason?: 'monitor';
 }
 
 export interface RoomView {

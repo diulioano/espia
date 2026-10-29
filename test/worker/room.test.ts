@@ -230,9 +230,9 @@ describe('Sala', () => {
     const code = await createRoom();
     const { c: a, welcome: wa } = await Client.join(code, 'Rafa');
     const { c: b } = await Client.join(code, 'Lu');
-    a.send({ t: 'live', resolution: 1080, fps: 60, audio: true });
+    a.send({ t: 'live', resolution: 1080, fps: 60, audio: 'tab' });
     const on = await b.next('peer-live');
-    expect(on).toMatchObject({ id: wa.you.id, live: { resolution: 1080, fps: 60, audio: true } });
+    expect(on).toMatchObject({ id: wa.you.id, live: { resolution: 1080, fps: 60, audio: 'tab' } });
     expect(on.live!.startedAt).toBeTypeOf('number');
     a.send({ t: 'unlive' });
     expect((await b.next('peer-live')).live).toBeNull();
@@ -246,11 +246,38 @@ describe('Sala', () => {
   });
 });
 
+describe('Som no live (specs/002)', () => {
+  it("repassa o tipo de som: 'window'", async () => {
+    const code = await createRoom();
+    const { c: a } = await Client.join(code, 'Rafa');
+    const { c: b } = await Client.join(code, 'Lu');
+    a.send({ t: 'live', resolution: 720, fps: 60, audio: 'window' });
+    expect((await b.next('peer-live')).live).toMatchObject({ audio: 'window' });
+  });
+
+  it('cliente antigo (boolean) é convertido', async () => {
+    const code = await createRoom();
+    const { c: a } = await Client.join(code, 'Rafa');
+    const { c: b } = await Client.join(code, 'Lu');
+    a.send(JSON.stringify({ t: 'live', resolution: 720, fps: 30, audio: true }));
+    expect((await b.next('peer-live')).live).toMatchObject({ audio: 'tab' });
+    a.send(JSON.stringify({ t: 'live', resolution: 720, fps: 30, audio: false }));
+    expect((await b.next('peer-live')).live).toMatchObject({ audio: 'none' });
+  });
+
+  it("som do sistema não existe: 'system' → bad-message", async () => {
+    const code = await createRoom();
+    const { c: a } = await Client.join(code, 'Rafa');
+    a.send(JSON.stringify({ t: 'live', resolution: 720, fps: 30, audio: 'system' }));
+    expect((await a.next('error')).code).toBe('bad-message');
+  });
+});
+
 describe('Manter a conexão', () => {
   it('caiu e voltou dentro da tolerância: mesma identidade, ninguém vê saída', async () => {
     const code = await createRoom();
     const { c: a, welcome: wa } = await Client.join(code, 'Rafa');
-    a.send({ t: 'live', resolution: 720, fps: 30, audio: false });
+    a.send({ t: 'live', resolution: 720, fps: 30, audio: 'none' });
     const { c: b } = await Client.join(code, 'Lu');
     await a.next('peer-joined');
 

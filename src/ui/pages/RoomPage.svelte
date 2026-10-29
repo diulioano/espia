@@ -1,5 +1,6 @@
 <script lang="ts">
   import { Check, Link, LogOut, MonitorUp, ScreenShareOff } from '@lucide/svelte';
+  import { audioLabelText } from '../../lib/audio-source';
   import { formatElapsed, header, watchingId } from '../../lib/room-view';
   import type { RoomActions, RoomView } from '../../lib/types';
   import GoLiveModal from '../components/GoLiveModal.svelte';
@@ -68,7 +69,7 @@
           />
         </div>
         <span class="me-live-stats">
-          {b.viewers} assistindo · {b.resolution}p · {b.fps} fps{b.adjusted ? ' · ajustado' : ''} · {b.audio ? 'com áudio' : 'sem áudio'}
+          {b.viewers} assistindo · {b.resolution}p · {b.fps} fps{b.adjusted ? ' · ajustado' : ''} · {audioLabelText(b.audioKind, b.audioReason)}
         </span>
       </div>
     {/if}

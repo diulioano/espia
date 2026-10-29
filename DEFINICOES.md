@@ -21,7 +21,7 @@ Compartilhamento de tela entre amigos, no estilo "Go Live" do Discord, focado em
 | Vida da sala | Temporária, deixa de existir quando todos saem | Nada para guardar ou limpar |
 | Transmissões | Várias ao mesmo tempo por sala | Igual ao Discord |
 | Qualidade | Seletor 720p/1080p + 30/60fps | Controle sobre o upload usado |
-| Áudio | Áudio do sistema/aba junto com a tela | Som de jogos e vídeos |
+| Áudio | Só o som da janela ou aba escolhida; tela inteira vai sem som (specs/002) | Som de jogos e vídeos sem vazar o Discord |
 | Espectador | Tela cheia, volume, lista de participantes, picture-in-picture | — |
 | Front-end | Svelte + Vite + TypeScript | Leve e fácil de reestilizar |
 | Design | Design final "Espia" em `design_handoff_espia/` (alta fidelidade, tema escuro) | Feito no Claude Design; a camada visual fica separada para ser trocada |
@@ -47,7 +47,7 @@ Compartilhamento de tela entre amigos, no estilo "Go Live" do Discord, focado em
 ## Limitações conhecidas
 - Quem transmite envia uma cópia para cada espectador: 1080p60 para 4 pessoas usa ~15–25 Mbps de upload.
 - No celular dá para assistir, mas não compartilhar a tela.
-- O áudio do sistema funciona melhor no Chrome/Edge no Windows; Firefox/Safari têm limitações.
+- Som da janela precisa de Chrome/Edge 141+ no Windows; Firefox/Safari têm limitações. Som do sistema inteiro nunca vai (vazaria o Discord).
 - Na conexão direta, quem está na sala vê o IP público dos outros participantes — aceito, já que o uso é entre amigos (D-1 em `security.md`).
 
 ## Pré-requisitos
@@ -56,7 +56,7 @@ Compartilhamento de tela entre amigos, no estilo "Go Live" do Discord, focado em
 - [x] Design final (feito no Claude Design → `design_handoff_espia/`)
 
 ## Documentação e desenvolvimento
-- Spec Kit: `specs/001-espia-screen-share/` (site), `specs/002-audio-sem-discord/` (áudio), `specs/003-espia-desktop/` (app desktop + GitHub) e `.specify/memory/constitution.md`.
+- Spec Kit: `specs/001-espia-screen-share/` (site), `specs/002-audio-sem-discord/` (áudio), `specs/003-espia-desktop/` (app desktop + GitHub), `specs/004-seletor-de-tela/` (seletor janela/tela + som) e `.specify/memory/constitution.md`.
 - App desktop: `src-tauri/` (`npm run desktop:dev`, `npm run desktop:build`).
 - Telas mockadas: `npm run dev` e abrir `/?mock` (ex.: `/?mock=room&scene=grid`).
 

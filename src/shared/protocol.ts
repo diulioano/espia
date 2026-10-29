@@ -12,10 +12,14 @@ export const MAX_MESSAGE_BYTES = 64 * 1024;
 export const PING = '{"t":"ping"}';
 export const PONG = '{"t":"pong"}';
 
+/** Som que sai na transmissão (specs/002): da aba, da janela ou nenhum. Nunca o som do sistema inteiro. */
+export type AudioKind = 'tab' | 'window' | 'none';
+export const AUDIO_KINDS: readonly AudioKind[] = ['tab', 'window', 'none'];
+
 export interface LiveInfo {
   resolution: 720 | 1080;
   fps: 30 | 60;
-  audio: boolean;
+  audio: AudioKind;
   startedAt: number;
 }
 
@@ -42,7 +46,7 @@ export type ClientMessage =
   | { t: 'join'; nickname: string }
   | { t: 'resume'; peerId: string; resumeToken: string }
   | { t: 'signal'; to: string; data: SignalData }
-  | { t: 'live'; resolution: 720 | 1080; fps: 30 | 60; audio: boolean }
+  | { t: 'live'; resolution: 720 | 1080; fps: 30 | 60; audio: AudioKind }
   | { t: 'unlive' }
   | { t: 'turn-refresh' };
 

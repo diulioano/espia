@@ -1,5 +1,5 @@
 // Validação de cada mensagem do cliente (security.md A4/A5). Escrita à mão: são poucos tipos.
-import { NICKNAME_MAX, type ClientMessage, type SignalData } from '../shared/protocol';
+import { AUDIO_KINDS, NICKNAME_MAX, type AudioKind, type ClientMessage, type SignalData } from '../shared/protocol';
 
 type Obj = Record<string, unknown>;
 
@@ -70,8 +70,10 @@ export function parseClientMessage(raw: string): ClientMessage | null {
       if (!hasOnly(m, ['t', 'resolution', 'fps', 'audio'])) return null;
       if (m.resolution !== 720 && m.resolution !== 1080) return null;
       if (m.fps !== 30 && m.fps !== 60) return null;
-      if (typeof m.audio !== 'boolean') return null;
-      return { t: 'live', resolution: m.resolution, fps: m.fps, audio: m.audio };
+      // boolean: abas abertas antes da 002 (compatibilidade temporária, contracts/signaling-delta.md).
+      if (typeof m.audio === 'boolean') return { t: 'live', resolution: m.resolution, fps: m.fps, audio: m.audio ? 'tab' : 'none' };
+      if (!AUDIO_KINDS.includes(m.audio as AudioKind)) return null;
+      return { t: 'live', resolution: m.resolution, fps: m.fps, audio: m.audio as AudioKind };
     case 'unlive':
     case 'turn-refresh':
       return hasOnly(m, ['t']) ? { t: m.t } : null;

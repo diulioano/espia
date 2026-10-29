@@ -2,9 +2,9 @@ import { describe, expect, it } from 'vitest';
 import { countFullViewers, effectiveQuality, isAdjusted, sendParams } from '../../src/lib/quality';
 
 describe('effectiveQuality', () => {
-  const p1080_60 = { resolution: 1080, fps: 60, audio: true } as const;
-  const p1080_30 = { resolution: 1080, fps: 30, audio: true } as const;
-  const p720_30 = { resolution: 720, fps: 30, audio: false } as const;
+  const p1080_60 = { resolution: 1080, fps: 60, audio: true, surface: 'window' } as const;
+  const p1080_30 = { resolution: 1080, fps: 30, audio: true, surface: 'window' } as const;
+  const p720_30 = { resolution: 720, fps: 30, audio: false, surface: 'window' } as const;
 
   it('1–4 espectadores: o que foi escolhido', () => {
     expect(effectiveQuality(p1080_60, 4)).toEqual({ resolution: 1080, fps: 60, maxBitrate: 6_000_000 });

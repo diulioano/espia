@@ -37,13 +37,13 @@ export function saveNickname(nickname: string) {
   write(local, KEY.nickname, nickname);
 }
 
-export const DEFAULT_GO_LIVE: GoLivePrefs = { resolution: 1080, fps: 30, audio: true };
+export const DEFAULT_GO_LIVE: GoLivePrefs = { resolution: 1080, fps: 30, audio: true, surface: 'window' };
 
 export function loadGoLivePrefs(): GoLivePrefs {
   try {
     const p = JSON.parse(read(local, KEY.goLive) ?? 'null');
     if (p && (p.resolution === 720 || p.resolution === 1080) && (p.fps === 30 || p.fps === 60)) {
-      return { resolution: p.resolution, fps: p.fps, audio: !!p.audio };
+      return { resolution: p.resolution, fps: p.fps, audio: !!p.audio, surface: p.surface === 'monitor' ? 'monitor' : 'window' };
     }
   } catch {
     // Valor corrompido: usa o padrão.

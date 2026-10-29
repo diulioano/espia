@@ -161,10 +161,10 @@ No celular a pessoa entra e assiste; o Go Live aparece desabilitado com a explic
 
 **Transmissão**
 - **FR-009**: Qualquer participante MUST poder transmitir; várias transmissões simultâneas por sala MUST ser suportadas.
-- **FR-010**: Antes de transmitir, o usuário MUST escolher resolução (720p/1080p), fps (30/60) e áudio (sim/não); a última escolha é lembrada.
+- **FR-010**: Antes de transmitir, o usuário MUST escolher resolução (720p/1080p), fps (30/60) e áudio (sim/não); a última escolha é lembrada. *Regras de som e seletor: ver specs/002 e specs/004.*
 - **FR-011**: Ao negar/cancelar a permissão de captura, o sistema MUST mostrar o alerta E3 com opção de tentar de novo.
 - **FR-012**: O sistema MUST detectar o fim da captura pelo navegador e encerrar a transmissão.
-- **FR-013**: A própria transmissão MUST aparecer só como prévia na sidebar, com estatísticas (assistindo · resolução · fps · áudio) e tempo ao vivo.
+- **FR-013**: A própria transmissão MUST aparecer só como prévia na sidebar, com estatísticas (assistindo · resolução · fps · áudio) e tempo ao vivo. *Texto do som: specs/002 FR-207.*
 
 **Assistir**
 - **FR-014**: Com 1 transmissão o palco mostra só ela; com 2+ mostra grade; clicar foca; Esc volta para a grade.
