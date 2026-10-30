@@ -121,7 +121,8 @@ export interface RoomPreview {
 export type GoneReason = 'deleted' | 'expired';
 
 /** Item de POST /api/rooms/status (specs/011): só números, nunca apelidos. */
-export type RoomStatus =
-  | { code: string; state: 'ok'; name: string | null; people: number; streaming: number }
-  | { code: string; state: 'gone'; reason: GoneReason }
-  | { code: string; state: 'notfound' };
+export type RoomSummary =
+  | { state: 'ok'; name: string | null; people: number; streaming: number }
+  | { state: 'gone'; reason: GoneReason }
+  | { state: 'notfound' };
+export type RoomStatus = RoomSummary & { code: string };

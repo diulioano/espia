@@ -669,3 +669,59 @@ describe('Sala fixa (specs/011)', () => {
     expect(keys).toEqual(['fixed']);
   });
 });
+
+describe('Suas salas: status (specs/011)', () => {
+  function status(codes: unknown, headers: Record<string, string> = ORIGIN) {
+    return call('/api/rooms/status', { method: 'POST', headers, body: JSON.stringify({ codes }) });
+  }
+  async function fixedRoom(name: string) {
+    const res = await call('/api/rooms', { method: 'POST', headers: ORIGIN, body: JSON.stringify({ kind: 'fixed', name }) });
+    return ((await res.json()) as { code: string }).code;
+  }
+
+  it('só números e o nome da sala fixa, nunca apelidos', async () => {
+    const fixed = await fixedRoom('CS da galera');
+    const { c: a } = await Client.join(fixed, 'Rafaela');
+    a.send({ t: 'live', resolution: 1080, fps: 60, audio: 'none' });
+    await Client.join(fixed, 'Luana');
+    const quick = await createRoom();
+    await Client.join(quick, 'Tomás');
+    await sleep(100);
+
+    const res = await status([fixed, quick, 'zzz-zzz']);
+    expect(res.status).toBe(200);
+    const text = await res.text();
+    expect(JSON.parse(text)).toEqual({
+      rooms: [
+        { code: fixed, state: 'ok', name: 'CS da galera', people: 2, streaming: 1 },
+        { code: quick, state: 'ok', name: null, people: 1, streaming: 0 },
+        { code: 'zzz-zzz', state: 'notfound' },
+      ],
+    });
+    for (const nick of ['Rafaela', 'Luana', 'Tomás']) expect(text).not.toContain(nick);
+  });
+
+  it('lista inválida: mais de 5, repetido, código ruim ou vazia → 400', async () => {
+    const six = ['aaa-aaa', 'bbb-bbb', 'ccc-ccc', 'ddd-ddd', 'eee-eee', 'fff-fff'];
+    expect((await status(six)).status).toBe(400);
+    expect((await status(['aaa-aaa', 'aaa-aaa'])).status).toBe(400);
+    expect((await status(['nada'])).status).toBe(400);
+    expect((await status([])).status).toBe(400);
+  });
+
+  it('de outro site → 403', async () => {
+    expect((await status(['aaa-aaa'], { Origin: 'https://outro.site' })).status).toBe(403);
+  });
+
+  it('sala fixa expirada → gone; consultar não renova o prazo', async () => {
+    const code = await fixedRoom('Minecraft do Caio');
+    for (let i = 0; i < 4; i++) {
+      await sleep(400);
+      await status([code]);
+    }
+    await sleep(300);
+    expect(((await (await status([code])).json()) as { rooms: unknown[] }).rooms).toEqual([
+      { code, state: 'gone', reason: 'expired' },
+    ]);
+  });
+});

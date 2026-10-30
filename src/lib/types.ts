@@ -168,8 +168,33 @@ export interface HomeView {
   creating?: boolean;
   /** Convite do app desktop (specs/008): oferta, ou a dica depois de baixar. Ausente = não mostra. */
   appInvite?: 'offer' | 'hint';
+  /** Suas salas (specs/011 US3). null = nenhuma neste aparelho → a ilustração de sempre. */
+  rooms?: SavedRoomsView | null;
   /** Modal "Criar sala fixa" aberto (specs/011 F7). */
   fixedDialog?: NameDialogView;
+}
+
+/** Uma linha de Suas salas (specs/011, SavedRoom.dc.html). Só números, nunca apelidos. */
+export interface SavedRoomView {
+  code: string;
+  name: string;
+  /** Este aparelho criou a sala (tem a chave do dono). */
+  own: boolean;
+  tone: Tone;
+  /** loading = números ainda não chegaram; gone = apagada, expirada ou não existe mais. */
+  state: 'loading' | 'ok' | 'gone';
+  people: number;
+  streaming: number;
+  /** "usada ontem", "há 3 dias"… */
+  recent: string;
+  menuOpen?: boolean;
+}
+
+export interface SavedRoomsView {
+  /** Com 4+ salas e gente em umas e vazias em outras: "Com gente agora" / "Usadas recentemente". */
+  groups: { label: string | null; rooms: SavedRoomView[] }[];
+  /** "neste aparelho" ou "5 salas neste aparelho". */
+  note: string;
 }
 
 /** Modal de nome da sala fixa: criar (F7) ou renomear (S3). */
@@ -191,6 +216,11 @@ export interface HomeActions {
   openFixedDialog(): void;
   closeFixedDialog(): void;
   createFixedRoom(nickname: string, name: string): void;
+  /** Suas salas (specs/011 US3). */
+  enterSaved(code: string, nickname: string): void;
+  forgetSaved(code: string): void;
+  /** Abre o "⋯" de uma linha (null fecha). */
+  toggleSavedMenu(code: string | null): void;
 }
 
 export interface JoinPreviewPerson {

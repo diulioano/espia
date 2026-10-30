@@ -1,5 +1,5 @@
 // Chamadas HTTP do Worker (contracts/http-api.md).
-import type { GoneReason, RoomPreview } from '../shared/protocol';
+import type { GoneReason, RoomPreview, RoomStatus } from '../shared/protocol';
 
 export type CreateResult = { ok: true; code: string } | { ok: false; reason: 'rate-limited' | 'network' };
 
@@ -32,6 +32,22 @@ export async function createFixedRoom(name: string): Promise<CreateFixedResult> 
     return { ok: false, reason: res.status === 429 ? 'rate-limited' : res.status === 400 ? 'name' : 'network' };
   } catch {
     return { ok: false, reason: 'network' };
+  }
+}
+
+/** Suas salas (specs/011): quantas pessoas em cada uma, numa consulta só. null = não deu (rede, limite). */
+export async function fetchStatuses(codes: string[]): Promise<RoomStatus[] | null> {
+  if (codes.length === 0) return [];
+  try {
+    const res = await fetch('/api/rooms/status', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ codes }),
+    });
+    if (!res.ok) return null;
+    return ((await res.json()) as { rooms: RoomStatus[] }).rooms;
+  } catch {
+    return null;
   }
 }
 

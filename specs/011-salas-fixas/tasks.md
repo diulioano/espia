@@ -247,25 +247,25 @@
 
 **Independent Test**: quickstart §1 (`status`) e §3 passos 6 e 8.
 
-- [ ] T1139 [US3] `src/worker/room.ts`: RPC `summary()` → `{ state: 'ok'; name: string | null; people; streaming } | { state: 'gone'; reason } | { state: 'notfound' }`:
+- [X] T1139 [US3] `src/worker/room.ts`: RPC `summary()` → `{ state: 'ok'; name: string | null; people; streaming } | { state: 'gone'; reason } | { state: 'notfound' }`:
   - `people` = `everyone().length`;
   - `streaming` = quantos têm `live !== null`;
   - **sem nenhum campo de pessoa**;
   - não mexe em `lastUsed`.
-- [ ] T1140 [US3] `src/worker/validate.ts` `parseStatusBody(text)`: JSON `{ codes: string[] }`, 1–`SAVED_ROOMS_MAX` (5) itens, todos em `ROOM_ID_RE`, sem repetidos, até 1 KB. Senão, null.
-- [ ] T1141 [US3] `src/worker/index.ts` rota `POST /api/rooms/status` (**antes** do match de `/api/rooms/:code`):
+- [X] T1140 [US3] `src/worker/validate.ts` `parseStatusBody(text)`: JSON `{ codes: string[] }`, 1–`SAVED_ROOMS_MAX` (5) itens, todos em `ROOM_ID_RE`, sem repetidos, até 1 KB. Senão, null.
+- [X] T1141 [US3] `src/worker/index.ts` rota `POST /api/rooms/status` (**antes** do match de `/api/rooms/:code`):
   - `sameOrigin` senão 403;
   - **um** `allowed(env.RL_LOOKUP)`;
   - `parseStatusBody` senão 400;
   - `Promise.all(codes.map(c => room(env, c).summary()))` → `200 { rooms: [{ code, ...s }] }` na mesma ordem.
-- [ ] T1142 [US3] Testes em `test/worker/room.test.ts`, bloco `describe('Suas salas: status (specs/011)')`:
+- [X] T1142 [US3] Testes em `test/worker/room.test.ts`, bloco `describe('Suas salas: status (specs/011)')`:
   - 3 códigos (fixa com 2 pessoas e 1 ao vivo, rápida com 1, inexistente) → `ok{name,2,1}`, `ok{null,1,0}` e `notfound`;
   - `JSON.stringify(resposta)` não contém nenhum dos apelidos usados (SC-006);
   - 6 códigos, repetido ou código ruim → 400;
   - Origin de fora → 403;
   - fixa expirada → `gone{expired}`;
   - `status` não muda o prazo de 30 dias (consultar perto do fim e ver que expira mesmo assim).
-- [ ] T1143 [P] [US3] Criar `src/lib/saved-rooms.ts` (funções puras + storage, `contracts/local-storage.md`):
+- [X] T1143 [P] [US3] Criar `src/lib/saved-rooms.ts` (funções puras + storage, `contracts/local-storage.md`):
   - `loadSavedRooms(): SavedRoom[]` (descarta inválidos) e `saveSavedRooms(list)` na chave `espia:rooms`;
   - `rememberRoom(list, { code, name }, now)`: upsert com `lastUsed = now`, ordena por `lastUsed` desc e **corta em `SAVED_ROOMS_MAX` (5)**;
   - `forgetRoom(list, code)` e `renameSaved(list, code, name)`;
@@ -273,7 +273,7 @@
   - `recentLabel(lastUsed, now)`: "usada hoje", "usada ontem", "há N dias" (2–6), "há 1 semana", "há N semanas", "há mais de um mês";
   - `savedRoomSub(view)`: "N pessoa agora"/"N pessoas agora" + " · M transmitindo" se M>0; "Vazia · <recent>"; "Vazia";
   - `buildSavedRooms(list, statuses | null, owned: (code) => boolean, now): SavedRoomsView`. Ordem: `people > 0` primeiro (mais gente antes), depois `lastUsed` desc; `gone` fica no lugar do seu `lastUsed`. Grupos "Com gente agora" / "Usadas recentemente" só se `rooms.length >= 4` e os dois grupos não estiverem vazios, senão um grupo sem rótulo. `note` = "neste aparelho", ou "N salas neste aparelho" quando agrupado. `statuses === null` → todas `loading`.
-- [ ] T1144 [P] [US3] `test/lib/saved-rooms.test.ts`:
+- [X] T1144 [P] [US3] `test/lib/saved-rooms.test.ts`:
   - limite 5: a 6ª entrada tira a de `lastUsed` mais antigo;
   - upsert não duplica;
   - ordem com gente/sem gente;
@@ -281,16 +281,16 @@
   - todos os `recentLabel`;
   - textos do `savedRoomSub`;
   - `loadSavedRooms` com JSON corrompido → [].
-- [ ] T1145 [US3] `src/lib/api.ts`: `fetchStatuses(codes)` → `RoomStatus[] | null` (null em erro/429; a tela fica em `loading` e "Entrar" continua funcionando).
-- [ ] T1146 [US3] Lembrar a sala:
+- [X] T1145 [US3] `src/lib/api.ts`: `fetchStatuses(codes)` → `RoomStatus[] | null` (null em erro/429; a tela fica em `loading` e "Entrar" continua funcionando).
+- [X] T1146 [US3] Lembrar a sala:
   - `src/lib/stores/room.svelte.ts`: no `welcome` com `room.kind === 'fixed'`, `saveSavedRooms(rememberRoom(loadSavedRooms(), { code, name }, Date.now()))`;
   - `src/routes/RoomRoute.svelte`: `NotFoundView.name`/`saved` vêm de `loadSavedRooms()`. `forget()` faz `forgetRoom` + `forgetOwnerKey` e vai pra `/`;
   - prévia ou status `gone`/`notfound` de uma sala com chave de dono → `forgetOwnerKey`.
-- [ ] T1147 [US3] `src/lib/types.ts`:
+- [X] T1147 [US3] `src/lib/types.ts`:
   - `SavedRoomView` e `SavedRoomsView` exatamente como em `data-model.md`;
   - `HomeView += { rooms: SavedRoomsView | null }` (null = lista vazia → ilustração);
   - `HomeActions += { enterSaved(code); forgetSaved(code); toggleSavedMenu(code | null) }`.
-- [ ] T1148 [P] [US3] Criar `src/ui/components/SavedRoom.svelte` (SavedRoom.dc.html):
+- [X] T1148 [P] [US3] Criar `src/ui/components/SavedRoom.svelte` (SavedRoom.dc.html):
   - linha 26px de raio e avatar com a inicial (46px; 42 no compacto), cores pelo `tone`. Com alguém transmitindo, anel `0 0 0 2px #26231f, 0 0 0 4px var(--color-accent)`. Em `gone`, fundo `rgba(245,234,216,0.08)`;
   - nome 16px/600 com reticências e selo "Sua";
   - `loading` → barrinha 128×10; `ok` → `savedRoomSub`; `gone` → "Esta sala não existe mais" (`--color-accent-300`) e nome com opacidade 0.6;
@@ -298,20 +298,20 @@
   - "Entrar" (`btn-secondary`, 40px; escondido no `compact`) + "⋯" (44px); em `gone`, só "Tirar da lista";
   - no `compact`, a linha inteira é um botão que entra;
   - o menu (`RoomMenu`, T1158) abre a partir do "⋯".
-- [ ] T1149 [P] [US3] Criar `src/ui/components/SavedRoomsPanel.svelte` (Home.dc.html `hasRooms`):
+- [X] T1149 [P] [US3] Criar `src/ui/components/SavedRoomsPanel.svelte` (Home.dc.html `hasRooms`):
   - cartão 600px, raio 36px, fundo `--color-surface`, sombra `0 30px 70px rgba(0,0,0,0.35)`;
   - `Mascot mood="peek" size=92` girado 4° em cima à direita;
   - título "Suas salas" (26px) + `note`;
   - grupos com rótulo em 12px/700 maiúsculas;
   - versão `compact` do celular (M4): sem cartão, título 22px, linhas `compact`.
-- [ ] T1150 [US3] `src/ui/pages/HomePage.svelte`: `view.rooms` não nulo → `SavedRoomsPanel` no lugar da ilustração (mascote + duas `StreamTile`), no computador e no celular (M4, entre o formulário e "Colar link da sala").
-- [ ] T1151 [US3] `src/routes/HomeRoute.svelte`:
+- [X] T1150 [US3] `src/ui/pages/HomePage.svelte`: `view.rooms` não nulo → `SavedRoomsPanel` no lugar da ilustração (mascote + duas `StreamTile`), no computador e no celular (M4, entre o formulário e "Colar link da sala").
+- [X] T1151 [US3] `src/routes/HomeRoute.svelte`:
   - ao montar, `list = loadSavedRooms()`. Se vazia, `view.rooms = null`. Senão, `buildSavedRooms(list, null, …)` e depois `fetchStatuses(codes)` → `buildSavedRooms(list, statuses, …)`;
   - nome mudou no status → `renameSaved` + salvar;
   - `enterSaved(code)` → `router.go(roomPath(code), { nickname })` se já houver apelido, senão vai pra tela de entrada;
   - `forgetSaved` → `forgetRoom` + salvar + reconstruir (a chave de dono fica);
   - `toggleSavedMenu`.
-- [ ] T1152 [US3] Mocks em `src/mocks/home.ts`, com os dados do `Home.dc.html`:
+- [X] T1152 [US3] Mocks em `src/mocks/home.ts`, com os dados do `Home.dc.html`:
   - `few`: CS da galera (3 pessoas, 1 transmitindo, Sua, accent), Trampo do TCC (2, sand) e Filme de sexta (vazia, "usada ontem", sage);
   - `loading`: as 3 em `loading`;
   - `gone`: + "Minecraft do Caio" em `gone`, deep;

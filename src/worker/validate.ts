@@ -1,5 +1,6 @@
 // Validação de cada mensagem do cliente (security.md A4/A5). Escrita à mão: são poucos tipos.
-import { AUDIO_KINDS, LIVE_SOURCES, NICKNAME_MAX, type AudioKind, type ClientMessage, type LiveSource, type SignalData } from '../shared/protocol';
+import { AUDIO_KINDS, LIVE_SOURCES, NICKNAME_MAX, SAVED_ROOMS_MAX, type AudioKind, type ClientMessage, type LiveSource, type SignalData } from '../shared/protocol';
+import { ROOM_ID_RE } from '../lib/room-id';
 import { normalizeRoomName } from '../shared/room-name';
 
 type Obj = Record<string, unknown>;
@@ -106,4 +107,20 @@ export function parseCreateBody(text: string): { kind: 'quick' } | { kind: 'fixe
   if (body.kind !== 'fixed' || !hasOnly(body, ['kind', 'name']) || typeof body.name !== 'string') return null;
   const name = normalizeRoomName(body.name);
   return name ? { kind: 'fixed', name } : null;
+}
+
+/** Corpo do POST /api/rooms/status: `{ codes }` com 1–SAVED_ROOMS_MAX códigos válidos, sem repetir. */
+export function parseStatusBody(text: string): string[] | null {
+  if (text.length > MAX_BODY) return null;
+  let body: unknown;
+  try {
+    body = JSON.parse(text);
+  } catch {
+    return null;
+  }
+  if (!isObj(body) || !hasOnly(body, ['codes']) || !Array.isArray(body.codes)) return null;
+  const codes = body.codes;
+  if (codes.length < 1 || codes.length > SAVED_ROOMS_MAX) return null;
+  if (!codes.every((c): c is string => typeof c === 'string' && ROOM_ID_RE.test(c))) return null;
+  return new Set(codes).size === codes.length ? codes : null;
 }

@@ -31,6 +31,7 @@ import {
   saveVolume,
 } from '../prefs';
 import { roomPath } from '../room-id';
+import { loadSavedRooms, rememberRoom, saveSavedRooms } from '../saved-rooms';
 import { Signaling, type SignalingEnd } from '../signaling';
 import type { CameraView, CaptureSource, GoLivePrefs, MyBroadcastView, RoomActions, RoomView, ShareSurface, StreamView, ToastView } from '../types';
 
@@ -236,6 +237,10 @@ export class RoomStore {
         this.capacity = msg.capacity;
         this.connected = true;
         this.roomInfo = msg.room ?? { kind: 'quick' };
+        // Entrou numa sala fixa: fica em Suas salas deste aparelho (specs/011 FR-016).
+        if (this.roomInfo.kind === 'fixed') {
+          saveSavedRooms(rememberRoom(loadSavedRooms(), { code: this.code, name: this.roomInfo.name }, Date.now()));
+        }
         if (this.justCreated) {
           this.justCreated = false;
           this.copyInvite('Sala criada — fixe o link no grupo');

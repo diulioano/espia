@@ -6,6 +6,7 @@
   import Logo from '../components/Logo.svelte';
   import Mascot from '../components/Mascot.svelte';
   import NameDialog from '../components/NameDialog.svelte';
+  import SavedRoomsPanel from '../components/SavedRoomsPanel.svelte';
   import StreamTile from '../components/StreamTile.svelte';
 
   let { view, actions }: { view: HomeView; actions: HomeActions } = $props();
@@ -16,9 +17,31 @@
   let link = $state(view.link);
 
   const canCreate = $derived(cleanNickname(nickname).length > 0);
+
+  // Celular (M4): Suas salas vai no meio do formulário, compacta. Um painel só no DOM (o menu "⋯" fecha
+  // com clique fora; dois painéis se atrapalhariam).
+  const narrowQuery = matchMedia('(max-width: 639px)');
+  let narrow = $state(narrowQuery.matches);
+  $effect(() => {
+    const onchange = (e: MediaQueryListEvent) => (narrow = e.matches);
+    narrowQuery.addEventListener('change', onchange);
+    return () => narrowQuery.removeEventListener('change', onchange);
+  });
 </script>
 
-<div class="home">
+{#snippet savedRooms(compact: boolean)}
+  {#if view.rooms}
+    <SavedRoomsPanel
+      view={view.rooms}
+      {compact}
+      onenter={(code) => actions.enterSaved(code, cleanNickname(nickname))}
+      onmenu={actions.toggleSavedMenu}
+      onforget={actions.forgetSaved}
+    />
+  {/if}
+{/snippet}
+
+<div class="home" class:has-rooms={!!view.rooms}>
   <div class="deco" aria-hidden="true">
     <div class="blob blob-a"></div>
     <div class="blob blob-b"></div>
@@ -81,6 +104,8 @@
       {#if view.createError}<span class="error" role="alert">{view.createError}</span>{/if}
     </form>
 
+    {#if narrow}{@render savedRooms(true)}{/if}
+
     <form
       class="join"
       onsubmit={(e) => {
@@ -110,6 +135,9 @@
       <AppInvite state={view.appInvite} ondownload={actions.downloadApp} ondismiss={actions.dismissAppInvite} />
     {/if}
   </main>
+
+  <!-- Suas salas (specs/011 F2): toma o lugar da ilustração. -->
+  {#if !narrow && view.rooms}<div class="saved">{@render savedRooms(false)}</div>{/if}
 
   {#if view.fixedDialog}
     <NameDialog
@@ -142,6 +170,9 @@
   }
 
   .top { position: relative; padding: 36px 72px; }
+  /* Com Suas salas, a ilustração sai e o painel entra no lugar. */
+  .has-rooms .art { display: none; }
+  .saved { position: absolute; right: 72px; top: 104px; z-index: 1; }
   .content {
     position: relative; max-width: 640px; padding: 56px 72px 72px;
     display: flex; flex-direction: column; gap: 22px; box-sizing: content-box;
@@ -179,6 +210,10 @@
     .content:has(:global(.invite)) .join { margin-top: 12px; }
   }
 
+  /* Sem espaço ao lado do texto: o painel desce pra baixo dele. */
+  @media (max-width: 1399px) {
+    .saved { position: relative; right: auto; top: auto; padding: 0 72px 72px; }
+  }
   @media (max-width: 1279px) {
     .art-main { right: -120px; opacity: 0.6; }
     .art-thumb { right: 140px; opacity: 0.6; }

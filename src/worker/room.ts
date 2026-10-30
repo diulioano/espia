@@ -21,6 +21,7 @@ import {
   type LiveInfo,
   type Peer,
   type RoomPreview,
+  type RoomSummary,
   type ServerMessage,
   type Tone,
 } from '../shared/protocol';
@@ -121,6 +122,24 @@ export class Room extends DurableObject<Env> {
       people: people.map((p) => ({ nickname: p.nickname, tone: p.tone, live: p.live !== null })),
       capacity: CAPACITY,
       ...(fixed ? { fixed: { name: fixed.name } } : {}),
+    };
+  }
+
+  /**
+   * Suas salas (specs/011 R7): só números e o nome da sala fixa, **nunca apelidos**. Não conta como
+   * uso para os 30 dias.
+   */
+  async summary(): Promise<RoomSummary> {
+    const tomb = await this.tombstone();
+    if (tomb) return { state: 'gone', reason: tomb.reason };
+    if (!(await this.exists())) return { state: 'notfound' };
+    const people = await this.everyone();
+    const fixed = await this.fixed();
+    return {
+      state: 'ok',
+      name: fixed?.name ?? null,
+      people: people.length,
+      streaming: people.filter((p) => p.live !== null).length,
     };
   }
 

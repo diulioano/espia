@@ -1,9 +1,9 @@
 // Worker do Espia: API das salas e WebSocket (contracts/http-api.md). O resto é o site em dist/.
 import { generateRoomId, ROOM_ID_RE } from '../lib/room-id';
-import type { RoomPreview } from '../shared/protocol';
+import type { RoomPreview, RoomStatus } from '../shared/protocol';
 import { randomHex, sha256Hex } from './crypto';
 import { Room } from './room';
-import { parseCreateBody } from './validate';
+import { parseCreateBody, parseStatusBody } from './validate';
 
 export { Room };
 
@@ -49,6 +49,19 @@ async function route(request: Request, env: Env, url: URL): Promise<Response> {
       if (await room(env, code).reserve(fixed)) return json(ownerKey ? { code, ownerKey } : { code }, 201);
     }
     return json({ error: 'busy' }, 503);
+  }
+
+  // Suas salas (specs/011 R7): uma consulta só, conta uma vez no limite; só números, nunca apelidos.
+  if (pathname === '/api/rooms/status') {
+    if (request.method !== 'POST') return json({ error: 'method' }, 405);
+    if (!sameOrigin(request, url)) return json({ error: 'origin' }, 403);
+    if (!(await allowed(env.RL_LOOKUP, request))) return tooMany();
+    const codes = parseStatusBody(await request.text());
+    if (!codes) return json({ error: 'codes' }, 400);
+    const rooms: RoomStatus[] = await Promise.all(
+      codes.map(async (code) => ({ code, ...(await room(env, code).summary()) })),
+    );
+    return json({ rooms });
   }
 
   const api = pathname.match(/^\/api\/rooms\/([^/]+)$/);

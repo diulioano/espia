@@ -6,7 +6,8 @@
   import { canUseCamera } from '../lib/camera';
   import { canShareScreen } from '../lib/capture';
   import { installStopHook, reportLive, reportRoom } from '../lib/desktop';
-  import { loadNickname, loadSession, saveNickname } from '../lib/prefs';
+  import { forgetOwnerKey, loadNickname, loadSession, saveNickname } from '../lib/prefs';
+  import { forgetRoom, loadSavedRooms, saveSavedRooms } from '../lib/saved-rooms';
   import { router } from '../lib/router.svelte';
   import { RoomStore } from '../lib/stores/room.svelte';
   import type { JoinActions, JoinView, NotFoundActions, NotFoundView } from '../lib/types';
@@ -51,7 +52,11 @@
   }
 
   function notFound(reason: NotFoundView['reason']) {
-    gone = { reason, name: null, saved: false };
+    // O nome vem de Suas salas, se este aparelho conhecia a sala; o servidor não guarda (research R5).
+    const saved = loadSavedRooms().find((r) => r.code === code);
+    gone = { reason, name: saved?.name ?? null, saved: !!saved };
+    // A sala acabou: a chave de dono não serve mais pra nada.
+    forgetOwnerKey(code);
   }
 
   async function loadPreview() {
@@ -96,7 +101,10 @@
   const notFoundActions: NotFoundActions = {
     createRoom: () => router.go('/'),
     pasteOtherLink: () => router.go('/'),
-    forget: () => router.go('/'),
+    forget: () => {
+      saveSavedRooms(forgetRoom(loadSavedRooms(), code));
+      router.go('/');
+    },
   };
 
   // App desktop: link de outra sala enquanto você transmite pergunta antes (src/lib/desktop.ts).

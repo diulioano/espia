@@ -36,6 +36,20 @@
     createFixedRoom() {
       onnavigate('room', 'created');
     },
+    enterSaved() {
+      onnavigate('room', 'fixed');
+    },
+    forgetSaved(code) {
+      if (!view.rooms) return;
+      const groups = view.rooms.groups
+        .map((g) => ({ ...g, rooms: g.rooms.filter((r) => r.code !== code) }))
+        .filter((g) => g.rooms.length > 0);
+      view.rooms = groups.length ? { ...view.rooms, groups } : null;
+    },
+    toggleSavedMenu(code) {
+      if (!view.rooms) return;
+      view.rooms.groups.forEach((g) => g.rooms.forEach((r) => (r.menuOpen = r.code === code)));
+    },
   };
 </script>
 
