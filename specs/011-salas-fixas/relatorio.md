@@ -9,9 +9,9 @@ Uma publicação reinicia o Durable Object e corta os WebSockets **sem rodar `we
 | Parte | Commit | Publicada |
 |---|---|---|
 | MVP US1 — queda não é sair | `c84ad06` | 2026-10-30, versão `ed41d3d1` |
-| US2 — sala fixa | `5087b51` | — |
-| US3 — Suas salas (máx. 5, pedido de 30/10) | `d1d1a1c` | — |
-| US4 — dono renomeia/apaga + acabamento | este commit | — |
+| US2 — sala fixa | `5087b51` | `2bda13dc` |
+| US3 — Suas salas (máx. 5, pedido de 30/10) | `d1d1a1c` | `2bda13dc` |
+| US4 — dono renomeia/apaga + acabamento | `49b9f21` | 2026-10-30, versão `2bda13dc` (com US2 e US3) |
 
 ## Testes automáticos
 
@@ -39,5 +39,5 @@ Scripts no scratchpad da sessão (queda.mjs, fixa.mjs, suas.mjs, dono.mjs, dono-
 
 ## Pendências
 
-- Publicar (`npm run deploy`) e conferir em produção: publicar de novo com a galera numa sala (todos voltam sozinhos), e sala fixa pelo app 0.1.7 (lista separada da do navegador).
+- Publicado (versão `2bda13dc`); `POST /api/rooms/status` conferido em produção. Falta conferir com a galera: publicar de novo com a galera numa sala (todos voltam sozinhos), e sala fixa pelo app 0.1.7 (lista separada da do navegador).
 - Limites por IP (`RL_CREATE` 10/min, `RL_LOOKUP` 20/min) atrapalham testes locais que criam/consultam muito; em uso normal sobram.

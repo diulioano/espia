@@ -382,7 +382,7 @@
 - [X] T1164 [P] `specs/001-espia-screen-share/contracts/http-api.md` e `signaling.md`: links para os deltas da 011 e a tabela de tempos atualizada (20 s → 60 s).
 - [X] T1165 `npm run check`, `npm run build` e `npm test` sem erros nem avisos novos.
 - [X] T1166 Roteiro do quickstart §3 inteiro com `npm run dev:worker` e 2 janelas do Edge (uma InPrivate). Registrar o resultado em `specs/011-salas-fixas/relatorio.md`.
-- [ ] T1167 Publicar (`npm run deploy`; se o auto mode bloquear, a pessoa usuária roda `! npm run deploy`), depois de avisar a galera que essa publicação ainda derruba as salas abertas. Fazer a checagem do quickstart §4 com o app 0.1.7 e anotar no `relatorio.md`.
+- [X] T1167 Publicar (`npm run deploy`; se o auto mode bloquear, a pessoa usuária roda `! npm run deploy`), depois de avisar a galera que essa publicação ainda derruba as salas abertas. Fazer a checagem do quickstart §4 com o app 0.1.7 e anotar no `relatorio.md`.
 - [X] T1168 Commit "011: salas fixas e chamada que sobrevive a quedas" (sem push, sem GitHub).
 
 ## Dependencies
