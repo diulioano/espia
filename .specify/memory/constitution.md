@@ -1,13 +1,14 @@
 <!--
 Sync Impact Report
-- Versão: 1.4.0 → 1.5.0 (restrição técnica do app desktop: + aviso de sala, `app_set_room`) — feature 009, pedido de 2026-10-29 (soltar o motor de página escondido fora de sala, Q1: A)
+- Versão: 1.5.0 → 2.0.0 (MAJOR: III redefinido — "Sem contas e nada sobre as pessoas": sala fixa guarda nome/último uso/hash da chave do dono no servidor; Suas salas e chaves de dono no navegador) — feature 011, pedido de 2026-10-29/30 (salas fixas e chamada que sobrevive a quedas)
+- Anterior: 1.4.0 → 1.5.0 (restrição técnica do app desktop: + aviso de sala, `app_set_room`) — feature 009, pedido de 2026-10-29 (soltar o motor de página escondido fora de sala, Q1: A)
 - Anterior: 1.3.0 → 1.4.0 (restrição técnica do app desktop: + aviso de ao vivo para a bandeja, `app_set_live`) — feature 007, pedido de 2026-10-29 (fechar para a bandeja sem perder a transmissão)
 - Anterior: 1.2.0 → 1.3.0 (I: som de uma câmera transmitida permitido; restrição: celular transmite câmera) — feature 006, pedido de 2026-10-29 (Q1: C, Q3: B)
 - Anterior: 1.1.0 → 1.2.0 (restrição técnica do app desktop: ponte de captura nativa, só para a origem do site) — feature 005, pedido de 2026-10-29
 - Anterior: 1.0.1 → 1.1.0 (I: app desktop opcional permitido; restrição técnica do app desktop) — feature 003
 - Anterior: 1.0.0 → 1.0.1 (VI: código curto de sala + limite de consultas)
 - Anterior: (template) → 1.0.0
-- Princípios definidos: I. Simplicidade para quem usa; II. Sem servidor de mídia; III. Efêmero e sem contas;
+- Princípios definidos: I. Simplicidade para quem usa; II. Sem servidor de mídia; III. Efêmero e sem contas (2.0.0: Sem contas e nada sobre as pessoas);
   IV. Camada visual separada; V. Telas mockáveis; VI. Segredos fora do navegador
 - Seções adicionadas: Restrições técnicas; Fluxo de desenvolvimento
 - Templates: plan-template.md ✅ (Constitution Check usa os gates abaixo) · spec/tasks ✅ sem mudança
@@ -32,10 +33,13 @@ sinalização e entrega credenciais de TURN. Salas são limitadas a 10 pessoas (
 conforme o número de espectadores, para manter o custo de
 upload P2P viável. Qualquer proposta de SFU/MCU é uma mudança de arquitetura e precisa de emenda.
 
-### III. Efêmero e sem contas
-Uma sala existe enquanto houver alguém nela. Nada é persistido no servidor além do estado em
-memória do Durable Object da sala. No navegador só guardamos preferências locais (apelido,
-qualidade do Go Live, volume por pessoa) em `localStorage`.
+### III. Sem contas e nada sobre as pessoas
+Não existem contas, login nem perfis. O servidor pode guardar **a sala**: código, nome de uma sala
+fixa, último uso e o hash da chave do dono. Nada disso identifica uma pessoa. O servidor MUST NOT guardar apelidos, quem
+entrou nem quando, depois que a sala esvazia. Uma sala rápida existe enquanto houver alguém nela, ou
+por até 5 min depois que todos caíram. Uma sala fixa some depois de 30 dias sem uso ou quando o dono apaga.
+No navegador guardamos só preferências locais (apelido, qualidade, volume por pessoa), as salas fixas
+em que se entrou naquele aparelho e as chaves de dono das que ele criou, em `localStorage` (2.0.0).
 
 ### IV. Camada visual separada
 Componentes de tela recebem **estado pronto** (view-models) e emitem eventos; não falam com
@@ -82,4 +86,4 @@ Esta constituição prevalece sobre preferências de implementação. Emendas: e
 subir a versão (MAJOR remove/redefine princípio; MINOR adiciona princípio/seção; PATCH esclarece)
 e registrar o motivo no Sync Impact Report. Todo `plan.md` passa pelo Constitution Check.
 
-**Version**: 1.5.0 | **Ratified**: 2026-10-28 | **Last Amended**: 2026-10-29
+**Version**: 2.0.0 | **Ratified**: 2026-10-28 | **Last Amended**: 2026-10-30

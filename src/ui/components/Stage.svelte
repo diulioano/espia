@@ -4,6 +4,8 @@
   import type { RoomActions, RoomView } from '../../lib/types';
   import PermissionAlert from './PermissionAlert.svelte';
   import Mascot from './Mascot.svelte';
+  import ReconnectFail from './ReconnectFail.svelte';
+  import ReconnectPill from './ReconnectPill.svelte';
   import StreamTile from './StreamTile.svelte';
   import ToastStack from './ToastStack.svelte';
 
@@ -102,6 +104,13 @@
         <span class="strip-hint">Clique pra trocar · Esc volta pra grade</span>
       </div>
     </div>
+  {/if}
+
+  <!-- Queda (specs/011 Q1/Q3): o palco continua por baixo. -->
+  {#if view.link === 'reconnecting'}
+    <ReconnectPill />
+  {:else if view.link === 'failed'}
+    <ReconnectFail onretry={actions.retryConnection} onleave={actions.leave} />
   {/if}
 
   <!-- Alerta e toasts dividem o canto superior direito: o alerta em cima, os toasts embaixo. -->

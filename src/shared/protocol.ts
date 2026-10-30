@@ -7,6 +7,10 @@ export const TONES: readonly Tone[] = ['deep', 'accent', 'sage', 'sand'];
 export const CAPACITY = 10;
 export const NICKNAME_MAX = 24;
 export const MAX_MESSAGE_BYTES = 64 * 1024;
+/** Nome de sala fixa (specs/011): 1–40 caracteres, nunca no link. */
+export const ROOM_NAME_MAX = 40;
+/** Suas salas: quantas salas fixas cada aparelho lembra (pedido de 2026-10-30). */
+export const SAVED_ROOMS_MAX = 5;
 
 /** Mensagem de keep-alive. Precisa ser exatamente esta string: o DO responde sem acordar. */
 export const PING = '{"t":"ping"}';
@@ -46,6 +50,9 @@ export interface IceServer {
   credential?: string;
 }
 
+/** Tipo da sala (specs/011): rápida (some vazia) ou fixa (com nome, link que não muda). */
+export type RoomInfo = { kind: 'quick' } | { kind: 'fixed'; name: string };
+
 /** SDP ou candidato ICE; o servidor só repassa, sem olhar dentro. */
 export type SignalData =
   | { description: { type: string; sdp?: string } }
@@ -70,6 +77,8 @@ export type ServerMessage =
       iceExpiresAt: number;
       resumeToken: string;
       capacity: number;
+      /** specs/011. Servidor antigo não manda: trate como sala rápida. */
+      room?: RoomInfo;
     }
   | { t: 'room-not-found' }
   | { t: 'room-full'; capacity: number }
@@ -80,6 +89,10 @@ export type ServerMessage =
   | { t: 'signal'; from: string; data: SignalData }
   | { t: 'ice-servers'; iceServers: IceServer[]; iceExpiresAt: number }
   | { t: 'error'; code: ErrorCode; message: string }
+  /** O dono renomeou a sala fixa (specs/011). */
+  | { t: 'room-renamed'; name: string }
+  /** O dono apagou a sala: vem antes do fechamento 4410 (specs/011). */
+  | { t: 'room-deleted' }
   | { t: 'pong' };
 
 /** Códigos de fechamento do WebSocket. */
@@ -89,8 +102,10 @@ export const CLOSE = {
   full: 4409,
   /** Outra conexão retomou a mesma identidade. */
   replaced: 4000,
-  /** Saída voluntária: não espera a tolerância de 20 s. */
+  /** Saída voluntária: não espera a tolerância de 60 s. */
   leave: 4001,
+  /** O dono apagou a sala fixa (specs/011): não reconecta. */
+  deleted: 4410,
 } as const;
 
 /** Resposta de GET /api/rooms/:code. */
@@ -98,4 +113,15 @@ export interface RoomPreview {
   code: string;
   people: { nickname: string; tone: Tone; live: boolean }[];
   capacity: number;
+  /** Só em sala fixa (specs/011). */
+  fixed?: { name: string };
 }
+
+/** Por que uma sala fixa deixou de existir (specs/011): o link responde 410. */
+export type GoneReason = 'deleted' | 'expired';
+
+/** Item de POST /api/rooms/status (specs/011): só números, nunca apelidos. */
+export type RoomStatus =
+  | { code: string; state: 'ok'; name: string | null; people: number; streaming: number }
+  | { code: string; state: 'gone'; reason: GoneReason }
+  | { code: string; state: 'notfound' };

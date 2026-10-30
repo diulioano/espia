@@ -1,9 +1,12 @@
 // Durable Object de uma sala (contracts/signaling.md, architecture.md §2).
 //
-// Onde fica cada coisa, para sobreviver à hibernação do WebSocket:
-// - quem está conectado: no attachment de cada socket (serializeAttachment);
-// - quem caiu e ainda pode voltar (tolerância de 20 s), a reserva de 60 s e o contador de tons: no
-//   storage do DO, apagado inteiro quando a sala esvazia. Nada sobre a pessoa fica depois disso.
+// Onde fica cada coisa, para sobreviver à hibernação do WebSocket e ao reinício do DO:
+// - quem está conectado: no attachment de cada socket (serializeAttachment) e, espelhado, no
+//   `roster` do storage. Uma publicação reinicia o DO e corta os sockets sem rodar webSocketClose
+//   (specs/011 research R1); o roster é o que deixa essas pessoas voltarem com `resume`;
+// - quem caiu e ainda pode voltar (tolerância de 60 s), a reserva de 60 s, a sala rápida segurada
+//   5 min depois que todos caíram (`holdUntil`) e o contador de tons: no storage do DO, apagado
+//   inteiro quando a sala esvazia. Nada sobre a pessoa fica depois disso.
 import { DurableObject } from 'cloudflare:workers';
 import {
   CAPACITY,
@@ -53,10 +56,15 @@ export class Room extends DurableObject<Env> {
     super(ctx, env);
     // Keep-alive respondido pelo runtime, sem acordar o DO.
     ctx.setWebSocketAutoResponse(new WebSocketRequestResponsePair(PING, PONG));
+    void ctx.blockConcurrencyWhile(() => this.recover());
   }
 
   private get graceMs() {
-    return Number(this.env.GRACE_MS) || 20_000;
+    return Number(this.env.GRACE_MS) || 60_000;
+  }
+
+  private get holdMs() {
+    return Number(this.env.HOLD_MS) || 300_000;
   }
 
   private get reserveMs() {
@@ -154,9 +162,10 @@ export class Room extends DurableObject<Env> {
       turn: username ? [username] : [],
     };
     await this.ctx.storage.put('joins', joins + 1);
-    await this.ctx.storage.delete('reservedUntil');
+    await this.ctx.storage.delete(['reservedUntil', 'holdUntil']);
 
     ws.serializeAttachment({ joined: true, member } satisfies Attachment);
+    await this.saveMember(member);
     await this.welcome(ws, member, ice);
     this.broadcast({ t: 'peer-joined', peer: publicPeer(member) }, member.id);
   }
@@ -186,8 +195,10 @@ export class Room extends DurableObject<Env> {
     if (ws.readyState === WebSocket.OPEN && ghost && tokensEqual(ghost.member.token, token)) {
       delete ghosts[peerId];
       await this.ctx.storage.put('ghosts', ghosts);
+      await this.ctx.storage.delete('holdUntil');
       const member = withTurn(ghost.member);
       ws.serializeAttachment({ joined: true, member } satisfies Attachment);
+      await this.saveMember(member);
       // Para os outros a pessoa nunca saiu: nada de peer-joined.
       return this.welcome(ws, member, ice);
     }
@@ -198,6 +209,7 @@ export class Room extends DurableObject<Env> {
       old.ws.serializeAttachment({ joined: false } satisfies Attachment);
       const member = withTurn(old.member);
       ws.serializeAttachment({ joined: true, member } satisfies Attachment);
+      await this.saveMember(member);
       try {
         old.ws.close(CLOSE.replaced, 'reconectou em outra conexão');
       } catch {
@@ -230,7 +242,9 @@ export class Room extends DurableObject<Env> {
       const att = ws.deserializeAttachment() as Attachment | null;
       if (att?.joined && att.member.id === me.id) {
         const turn = keepTurn([...att.member.turn, username], this.env);
-        ws.serializeAttachment({ joined: true, member: { ...att.member, turn } } satisfies Attachment);
+        const member = { ...att.member, turn };
+        ws.serializeAttachment({ joined: true, member } satisfies Attachment);
+        await this.saveMember(member);
       } else {
         // Saiu enquanto gerava: não deixa credencial solta.
         await revokeTurn(this.env, [username]);
@@ -262,6 +276,7 @@ export class Room extends DurableObject<Env> {
             : null;
         const member = { ...me, live };
         ws.serializeAttachment({ joined: true, member } satisfies Attachment);
+        await this.saveMember(member);
         return this.broadcast({ t: 'peer-live', id: me.id, live }, me.id);
       }
       case 'turn-refresh':
@@ -283,14 +298,51 @@ export class Room extends DurableObject<Env> {
 
     if (code === CLOSE.leave) {
       this.broadcast({ t: 'peer-left', id: member.id });
+      await this.dropMembers([member.id]);
       await revokeTurn(this.env, member.turn);
+      // Saiu o último conectado, mas tem gente que caiu: a sala espera por eles.
+      if (this.members().length === 0 && Object.keys(await this.ghosts()).length > 0) {
+        await this.holdIfQuick();
+        await this.scheduleAlarm();
+      }
       return this.disposeIfEmpty();
     }
 
     const ghosts = await this.ghosts();
     ghosts[member.id] = { member, until: Date.now() + this.graceMs };
     await this.ctx.storage.put('ghosts', ghosts);
+    // Caiu o último conectado (todos caíram): sala rápida espera 5 min (specs/011 R2).
+    if (this.members().length === 0) await this.holdIfQuick();
     await this.scheduleAlarm();
+  }
+
+  /**
+   * Depois de um reinício (publicação), quem estava no roster e não tem mais socket vira fantasma,
+   * como numa queda comum. Acordar da hibernação não cria fantasma: os sockets continuam lá.
+   */
+  private async recover() {
+    const roster = await this.roster();
+    const ids = Object.keys(roster);
+    if (ids.length === 0) return;
+    const connected = new Set(this.members().map((m) => m.member.id));
+    const ghosts = await this.ghosts();
+    const until = Date.now() + this.graceMs;
+    let created = false;
+    for (const id of ids) {
+      if (connected.has(id) || ghosts[id]) continue;
+      ghosts[id] = { member: roster[id], until };
+      created = true;
+    }
+    if (!created) return;
+    await this.ctx.storage.put('ghosts', ghosts);
+    if (connected.size === 0) await this.holdIfQuick();
+    await this.scheduleAlarm();
+  }
+
+  /** Sala rápida em que todos caíram fica de pé por HOLD_MS. */
+  private async holdIfQuick() {
+    if (await this.ctx.storage.get('fixed')) return;
+    await this.ctx.storage.put('holdUntil', Date.now() + this.holdMs);
   }
 
   async alarm() {
@@ -298,12 +350,17 @@ export class Room extends DurableObject<Env> {
     const ghosts = await this.ghosts();
     const expired = Object.values(ghosts).filter((g) => g.until <= now);
     for (const g of expired) delete ghosts[g.member.id];
-    if (expired.length) await this.ctx.storage.put('ghosts', ghosts);
+    if (expired.length) {
+      await this.ctx.storage.put('ghosts', ghosts);
+      await this.dropMembers(expired.map((g) => g.member.id));
+    }
     for (const g of expired) this.broadcast({ t: 'peer-left', id: g.member.id });
     await revokeTurn(this.env, expired.flatMap((g) => g.member.turn));
 
     const reservedUntil = await this.ctx.storage.get<number>('reservedUntil');
     if (reservedUntil !== undefined && reservedUntil <= now) await this.ctx.storage.delete('reservedUntil');
+    const holdUntil = await this.ctx.storage.get<number>('holdUntil');
+    if (holdUntil !== undefined && holdUntil <= now) await this.ctx.storage.delete('holdUntil');
 
     if (!(await this.disposeIfEmpty(true))) await this.scheduleAlarm();
   }
@@ -315,7 +372,7 @@ export class Room extends DurableObject<Env> {
   private async disposeIfEmpty(inAlarm = false): Promise<boolean> {
     if (await this.exists()) return false;
     if (!inAlarm) await this.ctx.storage.deleteAlarm();
-    await this.ctx.storage.delete(['ghosts', 'reservedUntil', 'joins']);
+    await this.ctx.storage.delete(['ghosts', 'reservedUntil', 'joins', 'roster', 'holdUntil']);
     return true;
   }
 
@@ -337,6 +394,23 @@ export class Room extends DurableObject<Env> {
     return [...this.members().map((m) => m.member), ...ghosts].sort((a, b) => a.seq - b.seq);
   }
 
+  private async roster(): Promise<Record<string, Member>> {
+    return (await this.ctx.storage.get<Record<string, Member>>('roster')) ?? {};
+  }
+
+  /** Espelha a pessoa no roster (entrada, retomada, live, TURN). */
+  private async saveMember(member: Member) {
+    const roster = await this.roster();
+    roster[member.id] = member;
+    await this.ctx.storage.put('roster', roster);
+  }
+
+  private async dropMembers(ids: string[]) {
+    const roster = await this.roster();
+    for (const id of ids) delete roster[id];
+    await this.ctx.storage.put('roster', roster);
+  }
+
   private async ghosts(): Promise<Record<string, Ghost>> {
     return (await this.ctx.storage.get<Record<string, Ghost>>('ghosts')) ?? {};
   }
@@ -344,14 +418,19 @@ export class Room extends DurableObject<Env> {
   private async exists(): Promise<boolean> {
     if (this.members().length > 0) return true;
     if (Object.keys(await this.ghosts()).length > 0) return true;
+    const now = Date.now();
     const reservedUntil = await this.ctx.storage.get<number>('reservedUntil');
-    return reservedUntil !== undefined && reservedUntil > Date.now();
+    if (reservedUntil !== undefined && reservedUntil > now) return true;
+    const holdUntil = await this.ctx.storage.get<number>('holdUntil');
+    return holdUntil !== undefined && holdUntil > now;
   }
 
   private async scheduleAlarm() {
     const times = Object.values(await this.ghosts()).map((g) => g.until);
     const reservedUntil = await this.ctx.storage.get<number>('reservedUntil');
     if (reservedUntil !== undefined) times.push(reservedUntil);
+    const holdUntil = await this.ctx.storage.get<number>('holdUntil');
+    if (holdUntil !== undefined) times.push(holdUntil);
     if (times.length) await this.ctx.storage.setAlarm(Math.min(...times));
   }
 

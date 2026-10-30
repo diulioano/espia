@@ -24,6 +24,8 @@
   const watching = $derived(watchingId(view));
   const me = $derived(view.participants.find((p) => p.you));
   const connecting = $derived(view.status === 'connecting');
+  /** Caiu (specs/011 US1): a sala fica, a lista esmaece e transmitir espera a volta. */
+  const down = $derived(view.link !== 'ok');
   const inviteLabel = $derived(view.inviteUrl.replace(/^https?:\/\//, ''));
 
   let now = $state(Date.now());
@@ -53,7 +55,7 @@
           {/each}
         </div>
       {:else}
-        <ul class="list">
+        <ul class="list" class:faded={down}>
           {#each view.participants as p (p.id)}
             <Participant person={p} watching={p.id === watching} />
           {/each}
@@ -78,7 +80,11 @@
           />
         </div>
         <span class="me-live-stats">
+          {#if down}
+            Sua transmissão continua · volta sozinha
+          {:else}
           {b.viewers} assistindo · {b.resolution}p · {b.fps} fps{b.adjusted ? ' · ajustado' : ''} · {audioLabelText(b.audioKind, b.audioReason)}{b.source === 'camera' && b.sourceTitle ? ` · câmera ${b.sourceTitle}` : ''}
+          {/if}
         </span>
       </div>
     {/if}
@@ -111,10 +117,10 @@
           Parar transmissão
         </button>
         <span class="live-pill">
-          <span class="dot"></span>Você está ao vivo há {formatElapsed(now - view.myBroadcast.startedAt)}
+          <span class="dot"></span>{#if down}Ao vivo · reconectando…{:else}Você está ao vivo há {formatElapsed(now - view.myBroadcast.startedAt)}{/if}
         </span>
       {:else}
-        <button class="btn btn-primary footer-main" disabled={connecting || !view.canShare} onclick={actions.openGoLive}>
+        <button class="btn btn-primary footer-main" disabled={connecting || down || !view.canShare} onclick={actions.openGoLive}>
           <MonitorUp size={20} strokeWidth={2.75} />
           Transmitir
         </button>
@@ -157,8 +163,9 @@
   .people-count { font-size: 13px; color: var(--color-text-muted); }
   .list {
     list-style: none; margin: 0 0 0 -8px; padding: 0; display: flex; flex-direction: column; gap: 4px;
-    min-height: 0; overflow-y: auto;
+    min-height: 0; overflow-y: auto; transition: opacity 0.3s;
   }
+  .list.faded { opacity: 0.55; }
   .skeletons { display: flex; flex-direction: column; gap: 14px; padding-top: 6px; }
   .skeleton { display: flex; align-items: center; gap: 12px; }
   .sk-avatar { width: 38px; height: 38px; border-radius: 50%; background: rgba(245, 234, 216, 0.08); }

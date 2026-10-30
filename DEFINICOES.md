@@ -18,7 +18,8 @@ Compartilhamento de tela entre amigos, no estilo "Go Live" do Discord, focado em
 | Transporte | WebRTC P2P em malha (mesh) | Sem custo de servidor de vídeo |
 | Acesso | Sala por link com código curto aleatório, sem contas | Fácil de ditar/digitar; salas são temporárias e o servidor limita tentativas |
 | Senha | Não tem | O link já é o "segredo"; menos atrito |
-| Vida da sala | Temporária, deixa de existir quando todos saem | Nada para guardar ou limpar |
+| Vida da sala | **Rápida** (padrão): some quando todos saem, ou 5 min depois de todos caírem. **Fixa**: some depois de 30 dias sem ninguém entrar ou quando o dono apaga (specs/011) | Queda (internet, publicação do site) não é sair; o grupo quer um link que não muda |
+| Sala fixa / Suas salas | "Criar sala fixa" pede um nome (nunca no link). Dono = chave guardada no aparelho que criou, sem conta. A tela inicial lista até 5 salas fixas por aparelho, só com números (nunca apelidos) | Entrar sem procurar o link; servidor guarda só a sala, nada sobre as pessoas (constituição 2.0.0) |
 | Transmissões | Várias ao mesmo tempo por sala | Igual ao Discord |
 | Qualidade | Seletor 720p/1080p + 30/60fps | Controle sobre o upload usado |
 | Áudio | Só o som da janela ou aba escolhida; tela inteira vai sem som (specs/002) | Som de jogos e vídeos sem vazar o Discord |
@@ -56,7 +57,7 @@ Compartilhamento de tela entre amigos, no estilo "Go Live" do Discord, focado em
 - [x] Design final (feito no Claude Design → `design_handoff_espia/`)
 
 ## Documentação e desenvolvimento
-- Spec Kit: `specs/001-espia-screen-share/` (site), `specs/002-audio-sem-discord/` (áudio), `specs/003-espia-desktop/` (app desktop + GitHub), `specs/004-seletor-de-tela/` (seletor janela/tela + som) e `.specify/memory/constitution.md`.
+- Spec Kit: `specs/001-espia-screen-share/` (site), `specs/002-audio-sem-discord/` (áudio), `specs/003-espia-desktop/` (app desktop + GitHub), `specs/004-seletor-de-tela/` (seletor janela/tela + som), `specs/011-salas-fixas/` (salas fixas, queda não é sair) e `.specify/memory/constitution.md`.
 - App desktop: `src-tauri/` (`npm run desktop:dev`, `npm run desktop:build`).
 - Telas mockadas: `npm run dev` e abrir `/?mock` (ex.: `/?mock=room&scene=grid`).
 

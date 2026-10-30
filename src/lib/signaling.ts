@@ -15,6 +15,8 @@ export interface SignalingOptions {
   onStatus(status: SignalingStatus): void;
   onSession(session: RoomSession | null): void;
   onEnd(reason: SignalingEnd): void;
+  /** Voltou depois de uma queda (welcome depois de 'reconnecting'). */
+  onBack?(): void;
 }
 
 const PING_EVERY_MS = 20_000;
@@ -26,6 +28,8 @@ export class Signaling {
   private session: RoomSession | null;
   private attempt = 0;
   private done = false;
+  /** Caiu desde o último welcome: o próximo avisa onBack. */
+  private wasDown = false;
   private pingTimer: ReturnType<typeof setInterval> | undefined;
   private pongTimer: ReturnType<typeof setTimeout> | undefined;
   private retryTimer: ReturnType<typeof setTimeout> | undefined;
@@ -77,6 +81,8 @@ export class Signaling {
         this.session = { peerId: msg.you.id, resumeToken: msg.resumeToken };
         this.opts.onSession(this.session);
         this.opts.onStatus('open');
+        if (this.wasDown) this.opts.onBack?.();
+        this.wasDown = false;
         break;
       case 'resume-failed':
         // Passou da tolerância: entra de novo como pessoa nova.
@@ -99,6 +105,7 @@ export class Signaling {
     if (code === CLOSE.policy) return this.end('kicked');
     if (code === CLOSE.notFound) return this.end('not-found');
     if (code === CLOSE.full) return this.end('full');
+    this.wasDown = true;
     this.opts.onStatus('reconnecting');
     const delay = BACKOFF_MS[Math.min(this.attempt, BACKOFF_MS.length - 1)];
     this.attempt++;
@@ -132,13 +139,16 @@ export class Signaling {
     clearTimeout(this.pongTimer);
   }
 
-  /** A internet voltou: não espera o próximo intervalo do backoff. */
-  private onOnline = () => {
+  /** "Tentar de novo" (specs/011): tenta já, sem esperar o próximo intervalo do backoff. */
+  retryNow() {
     if (this.done || this.ws?.readyState === WebSocket.OPEN) return;
     clearTimeout(this.retryTimer);
     this.attempt = 0;
     this.abandon();
-  };
+  }
+
+  /** A internet voltou: não espera o próximo intervalo do backoff. */
+  private onOnline = () => this.retryNow();
 
   private end(reason: SignalingEnd) {
     this.finish();

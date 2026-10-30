@@ -135,6 +135,14 @@
     dismissToast(id) {
       view.toasts = view.toasts.filter((t) => t.id !== id);
     },
+    // Mock da queda (specs/011): "Tentar de novo" volta a reconectar e, logo depois, "De volta!".
+    retryConnection() {
+      view.link = 'reconnecting';
+      setTimeout(() => {
+        view.link = 'ok';
+        toast({ kind: 'copied', text: 'De volta!' });
+      }, 1500);
+    },
     leave() {
       onnavigate('home', 'default');
     },

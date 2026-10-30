@@ -7,6 +7,8 @@
   import Participant from '../components/Participant.svelte';
   import Mascot from '../components/Mascot.svelte';
   import StreamTile from '../components/StreamTile.svelte';
+  import ReconnectFail from '../components/ReconnectFail.svelte';
+  import ReconnectPill from '../components/ReconnectPill.svelte';
   import ToastStack from '../components/ToastStack.svelte';
 
   let { view, actions }: { view: RoomView; actions: RoomActions } = $props();
@@ -21,6 +23,8 @@
   };
 
   const connecting = $derived(view.status === 'connecting');
+  /** Caiu (specs/011 M5): a sala fica, a lista esmaece e transmitir espera a volta. */
+  const down = $derived(view.link !== 'ok');
   // No celular sempre há uma transmissão em destaque: a focada ou a primeira.
   const selected = $derived(view.streams.find((s) => s.id === view.focusedId) ?? view.streams[0]);
   const title = $derived(connecting ? 'Entrando na sala…' : selected ? `Vendo ${selected.name}` : 'Sala da galera');
@@ -62,6 +66,7 @@
           <span class="stage-sub">Quando alguém transmitir, aparece aqui.</span>
         </div>
       {/if}
+      {#if view.link === 'reconnecting'}<ReconnectPill compact />{/if}
     </div>
 
     {#if view.streams.length > 1}
@@ -84,7 +89,7 @@
       </section>
     {/if}
 
-    <section class="section people">
+    <section class="section people" class:faded={down}>
       <span class="label">Na sala · {view.participants.length} de {view.capacity}</span>
       <ul class="list">
         {#each view.participants as p (p.id)}
@@ -112,7 +117,7 @@
         <!-- Transmitindo a câmera do celular (specs/006 US4): parar fica à mão. -->
         <button class="btn btn-stop golive" onclick={actions.stopGoLive}>Parar câmera</button>
       {:else}
-        <button class="btn btn-primary golive" disabled={!view.canShare || connecting} onclick={actions.openGoLive}>Transmitir</button>
+        <button class="btn btn-primary golive" disabled={!view.canShare || connecting || down} onclick={actions.openGoLive}>Transmitir</button>
       {/if}
       <button class="btn btn-secondary leave" onclick={actions.leave}>Sair</button>
     </div>
@@ -121,6 +126,10 @@
   <div class="toasts">
     <ToastStack toasts={view.toasts} placement="bottom-center" onaction={actions.toastAction} ondismiss={actions.dismissToast} />
   </div>
+
+  {#if view.link === 'failed'}
+    <ReconnectFail onretry={actions.retryConnection} onleave={actions.leave} />
+  {/if}
 
   {#if view.goLiveOpen}
     <GoLiveModal
@@ -182,6 +191,7 @@
 
   .people { gap: 4px; padding: 0 8px; }
   .people .label { padding: 0 8px 4px; }
+  .people.faded { opacity: 0.55; transition: opacity 0.3s; }
   .list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 4px; }
 
   .bar {

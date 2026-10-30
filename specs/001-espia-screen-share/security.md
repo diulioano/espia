@@ -14,6 +14,7 @@ e (5) guardamos o mínimo possível sobre as pessoas.
 | IP de cada pessoa | Revela localização aproximada |
 | Apelidos | Dado pessoal leve |
 | Cota TURN / Workers | Abuso vira custo |
+| Chave do dono de uma sala fixa (specs/011) | Quem tem renomeia ou apaga a sala |
 
 ## 2. Criptografia — quem consegue ver o quê
 
@@ -44,12 +45,17 @@ risco (é o mesmo modelo do Google Meet, Discord etc. em P2P).
 | A10 | **Script injetado / dependência comprometida** | CSP restritiva (abaixo), poucas dependências, `package-lock.json` versionado, `npm audit` no CI, sem CDNs de terceiros em produção. |
 | A11 | **Captura da tela errada** | Seletor nativo do navegador (o site nunca escolhe sozinho); `selfBrowserSurface: 'exclude'`; card "Você está ao vivo" com prévia sempre visível e botão Parar a um clique. |
 | A12 | **Segredos vazarem** | `TURN_KEY_API_TOKEN` só como *secret* do wrangler; `.dev.vars` no `.gitignore`; o navegador nunca recebe a chave, só credenciais temporárias. |
+| A13 | **Roubo da chave do dono** (specs/011) | A chave (32 bytes, CSPRNG) nasce no servidor e só aparece na resposta de criação; o servidor guarda só o SHA-256 e compara em tempo constante. Quem lê o `localStorage` do aparelho pode renomear/apagar a sala — impacto baixo: não há dados de pessoas e a sala some sozinha em 30 dias. Renomear/apagar só do próprio site (`Origin`) e limitados a 10/min por IP. |
+| A14 | **Descobrir quem está nas salas pela lista Suas salas** (specs/011) | `POST /api/rooms/status` devolve só contagens (pessoas, transmitindo) e o nome da sala fixa — nunca apelidos; até 5 códigos por chamada e conta no limite de 20/min. |
 
 ## 4. Privacidade
 
 | Dado | Onde fica | Por quanto tempo |
 |---|---|---|
-| Apelido, tom, quem está ao vivo | Memória do DO da sala | Até a sala esvaziar (+20 s) |
+| Apelido, tom, quem está ao vivo | Storage do DO da sala (`roster`, para sobreviver a publicações — specs/011) | Até a sala esvaziar (+60 s por pessoa; sala rápida +5 min se todos caíram) |
+| Sala fixa: código, nome, último uso, SHA-256 da chave do dono | Storage do DO da sala | Até 30 dias sem ninguém entrar ou o dono apagar |
+| Lápide de sala fixa apagada/expirada: só o motivo | Storage do DO da sala | 30 dias |
+| Suas salas (código, nome, último uso) e chaves de dono | `localStorage` do seu aparelho (o app tem o seu) | Até você tirar da lista / limpar |
 | Apelido, preferências, volumes | `localStorage` do seu navegador | Até você limpar |
 | Vídeo / áudio | Em trânsito, cifrado; **nunca gravado** | — |
 | Logs | Logs do Worker **sem** apelidos, códigos de sala ou IPs | Retenção padrão da Cloudflare |

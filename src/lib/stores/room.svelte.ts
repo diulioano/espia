@@ -44,6 +44,8 @@ const NATIVE_AUDIO_WARN: Record<AudioWarn, string> = {
 const BLACK_WARN = 'A tela tá saindo preta — tenta deixar o jogo em modo janela ou sem bordas.';
 /** Sem quadro de vídeo nesse tempo depois de "começou a transmitir" → tile "falhou". */
 const FIRST_FRAME_TIMEOUT_MS = 10_000;
+/** Sem voltar nesse tempo → "Não deu pra voltar pra sala" (specs/011 FR-004). */
+const RECONNECT_FAIL_MS = 60_000;
 /** Pede credenciais TURN novas esse tempo antes de vencerem. */
 const TURN_REFRESH_EARLY_MS = 10 * 60_000;
 
@@ -57,6 +59,8 @@ interface RemoteMedia {
 export class RoomStore {
   connected = $state(false);
   ended = $state<SignalingEnd | null>(null);
+  /** Ligação com o servidor (specs/011 US1). */
+  link = $state<'ok' | 'reconnecting' | 'failed'>('ok');
   me = $state<Peer | null>(null);
   peers = $state<Peer[]>([]);
   focusedId = $state<string | null>(null);
@@ -118,7 +122,8 @@ export class RoomStore {
   private toastSeq = 0;
   /** Toast "começou a transmitir" → quem focar no "Assistir". */
   private toastPeer = new Map<string, string>();
-  private reconnectToast: string | null = null;
+  /** Vira 'failed' depois de RECONNECT_FAIL_MS em 'reconnecting'. */
+  private downTimer: ReturnType<typeof setTimeout> | undefined;
   private stream: MediaStream | null = null;
   private mesh: Mesh | null = null;
   private frameTimers = new Map<string, ReturnType<typeof setTimeout>>();
@@ -144,10 +149,15 @@ export class RoomStore {
       session: loadSession(code),
       onMessage: (m) => this.receive(m),
       onSession: (s) => saveSession(code, s),
+      // Queda não é sair (specs/011 US1): a sala continua na tela, com o aviso no palco.
       onStatus: (s) => {
-        if (s === 'reconnecting' && this.connected && !this.reconnectToast) {
-          this.reconnectToast = this.toast({ kind: 'error', text: 'A conexão com a sala caiu. Reconectando…' });
-        }
+        if (s === 'reconnecting' && this.connected && this.link === 'ok') this.markDown();
+      },
+      onBack: () => {
+        if (this.link === 'ok') return;
+        clearTimeout(this.downTimer);
+        this.link = 'ok';
+        this.toast({ kind: 'copied', text: 'De volta!' });
       },
       onEnd: (reason) => {
         this.closeMedia();
@@ -193,7 +203,15 @@ export class RoomStore {
     this.stopEffects();
     this.closeMedia();
     this.stopBroadcast(false);
+    clearTimeout(this.downTimer);
     if (!this.ended) this.signaling.leave();
+  }
+
+  /** Caiu (ou "Tentar de novo"): 'reconnecting' e, sem volta em 60 s, 'failed'. */
+  private markDown() {
+    clearTimeout(this.downTimer);
+    this.link = 'reconnecting';
+    this.downTimer = setTimeout(() => (this.link = 'failed'), RECONNECT_FAIL_MS);
   }
 
   // ---------- Mensagens do servidor ----------
@@ -205,8 +223,6 @@ export class RoomStore {
         this.peers = msg.peers;
         this.capacity = msg.capacity;
         this.connected = true;
-        if (this.reconnectToast) this.dismiss(this.reconnectToast);
-        this.reconnectToast = null;
         if (this.focusedId && !this.peers.some((p) => p.id === this.focusedId)) this.focusedId = null;
         // Voltou como pessoa nova (passou da tolerância) com a captura ainda rodando: avisa de novo.
         if (this.myBroadcast && !msg.you.live) this.sendLive();
@@ -304,6 +320,7 @@ export class RoomStore {
         adjusted: !!this.quality && isAdjusted(this.myBroadcast, this.quality),
         viewers: Object.values(this.media).filter((m) => m.conn === 'connected').length,
       },
+      link: this.link,
       copied: this.copied,
       goLiveOpen: this.goLiveOpen,
       goLivePrefs: this.goLivePrefs,
@@ -332,6 +349,8 @@ export class RoomStore {
         setTimeout(() => (this.copied = false), 2000);
       },
       openGoLive: () => {
+        // Sem servidor não dá pra avisar a sala (FR-007).
+        if (this.link !== 'ok') return;
         this.permissionDenied = false;
         this.goLiveOpen = true;
         this.startPicker();
@@ -404,6 +423,10 @@ export class RoomStore {
         this.dismiss(id);
       },
       dismissToast: (id) => this.dismiss(id),
+      retryConnection: () => {
+        this.markDown();
+        this.signaling.retryNow();
+      },
       leave: () => {
         this.destroy();
         this.onLeave();

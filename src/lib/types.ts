@@ -148,6 +148,11 @@ export interface RoomView {
   canShare: boolean;
   /** Pode transmitir tela (só desktop). Sem isso, o seletor mostra só câmeras. */
   canShareScreen: boolean;
+  /**
+   * Ligação com o servidor (specs/011 US1). Queda não é sair: 'reconnecting' mantém a sala na tela;
+   * 'failed' depois de 60 s sem voltar (continua tentando em segundo plano).
+   */
+  link: 'ok' | 'reconnecting' | 'failed';
 }
 
 export interface HomeView {
@@ -218,5 +223,7 @@ export interface RoomActions {
   retry(id: string): void;
   toastAction(id: string): void;
   dismissToast(id: string): void;
+  /** "Tentar de novo" na tela "Não deu pra voltar pra sala" (specs/011). */
+  retryConnection(): void;
   leave(): void;
 }

@@ -8,6 +8,7 @@ export const MOBILE_SCENES = [
   { id: 'connecting', code: 'M·E1', label: 'Conectando', device: 'mobile' },
   { id: 'streamfail', code: 'M·E4', label: 'Falha na transmissão', device: 'mobile' },
   { id: 'camera', code: 'M·A5', label: 'Transmitir a câmera do celular', device: 'mobile' },
+  { id: 'reconnecting', code: 'M5', label: 'Assistindo · reconectando', device: 'mobile' },
 ] as const;
 
 export type MobileScene = (typeof MOBILE_SCENES)[number]['id'];
@@ -19,6 +20,7 @@ export function buildMobileScene(scene: MobileScene): RoomView {
     connecting: 'connecting',
     streamfail: 'streamfail',
     camera: 'empty',
+    reconnecting: 'grid',
   };
   const view = buildRoomScene(base[scene]);
   // Celular: não transmite tela; só a câmera (specs/006 US4) na cena 'camera'.
@@ -31,7 +33,7 @@ export function buildMobileScene(scene: MobileScene): RoomView {
   }
   view.toasts = [];
 
-  if (scene === 'watching') {
+  if (scene === 'watching' || scene === 'reconnecting') {
     // M2: Lu e Bia ao vivo, vendo Lu.
     view.streams = view.streams.filter((s) => s.id !== 'tomas');
     view.participants.forEach((p) => (p.live = p.id === 'lu' || p.id === 'bia'));
@@ -42,5 +44,7 @@ export function buildMobileScene(scene: MobileScene): RoomView {
     view.participants = view.participants.filter((p) => p.id !== 'tomas');
     view.toasts = [{ id: 'scene-m3', kind: 'join', text: 'Bia entrou na sala' }];
   }
+  // M5 (specs/011): caiu enquanto assistia a Lu.
+  if (scene === 'reconnecting') view.link = 'reconnecting';
   return view;
 }

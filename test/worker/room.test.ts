@@ -1,11 +1,14 @@
-// Testes do Worker + Durable Object no runtime real (Miniflare). GRACE_MS = 400, RESERVE_MS = 600 (vitest.config.ts).
-import { exports } from 'cloudflare:workers';
+// Testes do Worker + Durable Object no runtime real (Miniflare). GRACE_MS = 400, RESERVE_MS = 600,
+// HOLD_MS = 800, FIXED_TTL_MS = 1500 (vitest.config.ts).
+import { evictDurableObject } from 'cloudflare:test';
+import { env, exports } from 'cloudflare:workers';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { CLOSE, PING, type ServerMessage } from '../../src/shared/protocol';
 
 const BASE = 'http://espia.test';
 const ORIGIN = { Origin: BASE };
 const GRACE = 400;
+const HOLD = 800;
 
 let ipSeq = 0;
 /** IP novo a cada chamada, para os limites por IP não atrapalharem testes que não são sobre eles. */
@@ -379,14 +382,100 @@ describe('Manter a conexão', () => {
     expect((await b.next('peer-left', 300)).id).toBe(wa.you.id);
   });
 
-  it('sala vazia some depois da tolerância', async () => {
+  it('sala rápida em que todos caíram some depois da espera de HOLD_MS (specs/011)', async () => {
     const code = await createRoom();
     const { c: a } = await Client.join(code, 'Rafa');
     a.ws.close(1000);
-    await sleep(100);
+    await sleep(GRACE + 150);
     expect((await call(`/api/rooms/${code}`)).status).toBe(200);
-    await sleep(GRACE + 600);
+    await sleep(HOLD + 400);
     expect((await call(`/api/rooms/${code}`)).status).toBe(404);
+  });
+});
+
+describe('Publicação e queda (specs/011)', () => {
+  const stubOf = (code: string) => env.ROOM.get(env.ROOM.idFromName(code));
+
+  it('publicação: todo mundo volta com a mesma identidade e ninguém vê saída nem entrada', async () => {
+    const code = await createRoom();
+    const { c: a, welcome: wa } = await Client.join(code, 'Rafa');
+    a.send({ t: 'live', resolution: 1080, fps: 60, audio: 'none' });
+    const { c: b, welcome: wb } = await Client.join(code, 'Lu');
+    const { c: c, welcome: wc } = await Client.join(code, 'Bia');
+    await a.next('peer-joined');
+    await a.next('peer-joined');
+    await b.next('peer-joined');
+
+    // Reinício do DO como numa publicação: sockets cortados sem webSocketClose na instância antiga.
+    await evictDurableObject(stubOf(code), { webSockets: 'close' });
+    await Promise.all([a, b, c].map((x) => x.waitClose()));
+
+    const back = await Promise.all(
+      [wa, wb, wc].map(async (w) => {
+        const x = await Client.open(code);
+        x.send({ t: 'resume', peerId: w.you.id, resumeToken: w.resumeToken });
+        return { x, welcome: await x.next('welcome') };
+      }),
+    );
+    expect(back.map((r) => r.welcome.you.id)).toEqual([wa.you.id, wb.you.id, wc.you.id]);
+    expect(back[0].welcome.you.live).toMatchObject({ resolution: 1080, fps: 60 });
+    expect(back[1].welcome.peers.map((p) => p.id).sort()).toEqual([wa.you.id, wc.you.id].sort());
+    await sleep(GRACE + 300);
+    for (const { x } of back) {
+      expect(x.has('peer-left')).toBe(false);
+      expect(x.has('peer-joined')).toBe(false);
+    }
+  });
+
+  it('publicação e ninguém volta: a sala rápida espera HOLD_MS e depois some', async () => {
+    const code = await createRoom();
+    const { c: a } = await Client.join(code, 'Rafa');
+    await evictDurableObject(stubOf(code), { webSockets: 'close' });
+    await a.waitClose();
+    await sleep(GRACE + 150);
+    expect((await call(`/api/rooms/${code}`)).status).toBe(200);
+    await sleep(HOLD + 400);
+    expect((await call(`/api/rooms/${code}`)).status).toBe(404);
+  });
+
+  it('todos caem e um volta depois da tolerância, antes de HOLD_MS: mesma sala, como pessoa nova', async () => {
+    const code = await createRoom();
+    const { c: a, welcome: wa } = await Client.join(code, 'Rafa');
+    const { c: b } = await Client.join(code, 'Lu');
+    a.ws.close(1000);
+    b.ws.close(1000);
+    await sleep(GRACE + 150);
+    const late = await Client.open(code);
+    late.send({ t: 'resume', peerId: wa.you.id, resumeToken: wa.resumeToken });
+    await late.next('resume-failed');
+    late.send({ t: 'join', nickname: 'Rafa' });
+    const again = await late.next('welcome');
+    expect(again.you.id).not.toBe(wa.you.id);
+    expect(again.you.nickname).toBe('Rafa');
+  });
+
+  it('todos saem com "Sair da sala": a sala some na hora, sem esperar', async () => {
+    const code = await createRoom();
+    const { c: a } = await Client.join(code, 'Rafa');
+    const { c: b } = await Client.join(code, 'Lu');
+    a.ws.close(CLOSE.leave, 'saiu');
+    b.ws.close(CLOSE.leave, 'saiu');
+    await sleep(150);
+    expect((await call(`/api/rooms/${code}`)).status).toBe(404);
+  });
+
+  it('um cai e o outro sai: a sala espera quem caiu', async () => {
+    const code = await createRoom();
+    const { c: a, welcome: wa } = await Client.join(code, 'Rafa');
+    const { c: b } = await Client.join(code, 'Lu');
+    a.ws.close(1000);
+    await sleep(80);
+    b.ws.close(CLOSE.leave, 'saiu');
+    await sleep(GRACE + 150);
+    expect((await call(`/api/rooms/${code}`)).status).toBe(200);
+    const late = await Client.open(code);
+    late.send({ t: 'join', nickname: 'Rafa' });
+    expect((await late.next('welcome')).you.id).not.toBe(wa.you.id);
   });
 });
 

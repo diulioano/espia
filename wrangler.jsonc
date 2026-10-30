@@ -14,10 +14,11 @@
   "durable_objects": {
     "bindings": [{ "name": "ROOM", "class_name": "Room" }]
   },
-  // Tolerância de reconexão e reserva do código (ms). Os testes encurtam.
+  // Tolerância de reconexão por pessoa, reserva do código, sala rápida segurada depois que todos
+  // caíram (specs/011 R2) e vida da sala fixa sem uso / da lápide (30 dias), em ms. Os testes encurtam.
   // TURN_KEY_ID não é segredo. O TURN_KEY_API_TOKEN é: fica em .dev.vars (local) e
   // `wrangler secret put TURN_KEY_API_TOKEN` (produção). Sem ele, só STUN.
-  "vars": { "GRACE_MS": "20000", "RESERVE_MS": "60000", "TURN_KEY_ID": "5763b3ccb03eddac764bd1f400e9df54" },
+  "vars": { "GRACE_MS": "60000", "RESERVE_MS": "60000", "HOLD_MS": "300000", "FIXED_TTL_MS": "2592000000", "TURN_KEY_ID": "5763b3ccb03eddac764bd1f400e9df54" },
   "migrations": [{ "tag": "v1", "new_sqlite_classes": ["Room"] }],
   // Limites por IP (contracts/http-api.md). O período só pode ser 10 ou 60 s.
   "ratelimits": [

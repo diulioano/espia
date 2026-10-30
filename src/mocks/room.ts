@@ -27,6 +27,10 @@ export const ROOM_SCENES = [
   { id: 'livepc', code: 'D7·app', label: 'Ao vivo · tela inteira com som do PC (app)' },
   { id: 'livecam', code: 'D7·cam', label: 'Ao vivo · câmera (Lu também de câmera)' },
   { id: 'crowd', code: 'D5+', label: 'Sala cheia (10, 6 ao vivo)' },
+  // Queda não é sair (specs/011).
+  { id: 'reconnecting', code: 'Q1', label: 'Reconectando… (você ao vivo)' },
+  { id: 'back', code: 'Q2', label: 'De volta!' },
+  { id: 'reconnectfail', code: 'Q3', label: 'Não deu pra voltar' },
 ] as const;
 
 export type RoomScene = (typeof ROOM_SCENES)[number]['id'];
@@ -195,6 +199,13 @@ export function isRoomScene(value: string | null): value is RoomScene {
 }
 
 export function buildRoomScene(scene: RoomScene): RoomView {
+  // Queda (specs/011 Q1–Q3): a mesma sala de "Você ao vivo", com o aviso por cima.
+  if (scene === 'reconnecting' || scene === 'back' || scene === 'reconnectfail') {
+    const view = buildRoomScene('live');
+    view.link = scene === 'back' ? 'ok' : scene === 'reconnecting' ? 'reconnecting' : 'failed';
+    view.toasts = scene === 'back' ? [{ id: 'scene-back', kind: 'copied', text: 'De volta!' }] : [];
+    return view;
+  }
   const liveIds: Record<string, string[]> = {
     single: ['lu'],
     grid: ['lu', 'bia', 'tomas'],
@@ -258,5 +269,6 @@ export function buildRoomScene(scene: RoomScene): RoomView {
     toasts: toast ? [{ id: `scene-${scene}`, ...toast }] : [],
     canShare: true,
     canShareScreen: true,
+    link: 'ok',
   };
 }
