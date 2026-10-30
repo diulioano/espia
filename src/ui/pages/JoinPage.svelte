@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { ArrowRight } from '@lucide/svelte';
+  import { ArrowRight, Pin } from '@lucide/svelte';
   import { cleanNickname, liveLabel, NICKNAME_MAX, whoIsThere, whoIsThereLong } from '../../lib/join-view';
   import type { JoinActions, JoinView } from '../../lib/types';
   import AvatarStack from '../components/AvatarStack.svelte';
@@ -16,6 +16,8 @@
   const canJoin = $derived(cleanNickname(nickname).length > 0);
   const badge = $derived(view.people ? liveLabel(view.people) : null);
   const subtitle = $derived.by(() => {
+    // Sala fixa (F8): o nome já é o título.
+    if (view.fixedName) return view.people?.length ? `Te chamaram pra cá. ${whoIsThere(view.people)}.` : 'Te chamaram pra cá.';
     if (!view.people || view.people.length === 0) return `Sala ${view.roomId} · até ${view.capacity} pessoas`;
     return view.canShare ? `${whoIsThere(view.people)} · sala ${view.roomId}` : whoIsThereLong(view.people);
   });
@@ -42,7 +44,12 @@
         </div>
       {/if}
       <div class="titles">
-        <h1>Te chamaram pra uma sala.</h1>
+        {#if view.fixedName}
+          <span class="fixed-pill"><Pin size={14} strokeWidth={2.75} />Sala fixa</span>
+          <h1 class="fixed-name">{view.fixedName}</h1>
+        {:else}
+          <h1>Te chamaram pra uma sala.</h1>
+        {/if}
         <p class="sub">{subtitle}</p>
       </div>
       <form
@@ -70,6 +77,9 @@
             Entrar pra assistir
           {/if}
         </button>
+        {#if view.fixedName}
+          <span class="saved-note">Ao entrar, ela fica em Suas salas neste aparelho.</span>
+        {/if}
         {#if !view.canShare}
           <span class="mobile-note">No celular dá pra assistir. Transmitir só no computador.</span>
         {/if}
@@ -77,24 +87,14 @@
     {:else}
       <Mascot mood="sad" size={96} />
       <div class="titles">
-        {#if view.status === 'notfound'}
-          <h1>Essa sala não existe mais.</h1>
-          <p class="sub">O link pode estar incompleto, ou todo mundo saiu — salas somem quando ficam vazias.</p>
-        {:else}
-          <h1>Essa sala está cheia ({view.capacity} de {view.capacity}).</h1>
-          <p class="sub">
-            Cabem até {view.capacity} pessoas pra transmissão não pesar pra ninguém. Quando alguém sair, dá pra entrar.
-          </p>
-        {/if}
+        <h1>Essa sala está cheia ({view.capacity} de {view.capacity}).</h1>
+        <p class="sub">
+          Cabem até {view.capacity} pessoas pra transmissão não pesar pra ninguém. Quando alguém sair, dá pra entrar.
+        </p>
       </div>
       <div class="actions">
-        {#if view.status === 'notfound'}
-          <button class="btn btn-primary act-primary" onclick={actions.createRoom}>Criar uma sala nova</button>
-          <button class="btn btn-secondary act-secondary" onclick={actions.pasteOtherLink}>Colar outro link</button>
-        {:else}
-          <button class="btn btn-primary act-primary" disabled>Entrar</button>
-          <button class="btn btn-secondary act-secondary" onclick={actions.createRoom}>Criar uma sala nova</button>
-        {/if}
+        <button class="btn btn-primary act-primary" disabled>Entrar</button>
+        <button class="btn btn-secondary act-secondary" onclick={actions.createRoom}>Criar uma sala nova</button>
       </div>
     {/if}
   </main>
@@ -133,6 +133,13 @@
   .form { display: flex; flex-direction: column; gap: 26px; }
   .nick :global(.input) { min-height: 56px; font-size: 17px; padding-inline: 22px; background: var(--color-bg); }
   .enter { min-height: 58px; font-size: 19px; }
+  .fixed-pill {
+    align-self: flex-start; display: inline-flex; align-items: center; gap: 6px; padding: 4px 12px 4px 10px;
+    border-radius: var(--radius-pill); background: rgba(174, 191, 146, 0.16); color: var(--color-accent-2-300);
+    font-size: 13px; font-weight: 600;
+  }
+  .fixed-name { font-size: 52px; line-height: 1; overflow-wrap: anywhere; }
+  .saved-note { margin-top: -16px; font-size: 13px; color: color-mix(in srgb, var(--color-text) 55%, transparent); }
   .mobile-note { font-size: 13px; text-align: center; color: color-mix(in srgb, var(--color-text) 55%, transparent); }
 
   .actions { display: flex; flex-wrap: wrap; gap: 10px; }
@@ -155,6 +162,8 @@
     .stack-desktop { display: none; }
     .stack-mobile { display: block; }
     h1 { font-size: 36px; }
+    .fixed-name { font-size: 40px; }
+    .titles:has(.fixed-pill) { gap: 8px; }
     .titles { gap: 0; }
     .sub { font-size: 16px; margin-top: 4px; }
     .form { gap: 20px; margin-top: 8px; }

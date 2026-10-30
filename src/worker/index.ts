@@ -1,7 +1,9 @@
 // Worker do Espia: API das salas e WebSocket (contracts/http-api.md). O resto é o site em dist/.
 import { generateRoomId, ROOM_ID_RE } from '../lib/room-id';
 import type { RoomPreview } from '../shared/protocol';
+import { randomHex, sha256Hex } from './crypto';
 import { Room } from './room';
+import { parseCreateBody } from './validate';
 
 export { Room };
 
@@ -36,10 +38,15 @@ async function route(request: Request, env: Env, url: URL): Promise<Response> {
     if (request.method !== 'POST') return json({ error: 'method' }, 405);
     if (!sameOrigin(request, url)) return json({ error: 'origin' }, 403);
     if (!(await allowed(env.RL_CREATE, request))) return tooMany();
+    const body = parseCreateBody(await request.text());
+    if (!body) return json({ error: 'name' }, 400);
+    // Sala fixa (specs/011 R4): a chave do dono vai uma vez só pro aparelho; o DO guarda o hash.
+    const ownerKey = body.kind === 'fixed' ? randomHex(32) : null;
+    const fixed = body.kind === 'fixed' ? { name: body.name, ownerHash: await sha256Hex(ownerKey!) } : undefined;
     // O código nasce no servidor. Colisão é raríssima, mas tenta de novo se acontecer.
     for (let i = 0; i < 5; i++) {
       const code = generateRoomId();
-      if (await room(env, code).reserve()) return json({ code }, 201);
+      if (await room(env, code).reserve(fixed)) return json(ownerKey ? { code, ownerKey } : { code }, 201);
     }
     return json({ error: 'busy' }, 503);
   }
@@ -50,8 +57,11 @@ async function route(request: Request, env: Env, url: URL): Promise<Response> {
     const code = api[1];
     if (!ROOM_ID_RE.test(code)) return json({ error: 'code' }, 400);
     if (!(await allowed(env.RL_LOOKUP, request))) return tooMany();
-    const preview: RoomPreview | null = await room(env, code).preview(code);
-    return preview ? json(preview) : json({ error: 'not-found' }, 404);
+    const preview = await room(env, code).preview(code);
+    if (!preview) return json({ error: 'not-found' }, 404);
+    // Sala fixa apagada ou expirada (specs/011 R5): só o motivo.
+    if ('gone' in preview) return json({ reason: preview.gone }, 410);
+    return json(preview satisfies RoomPreview);
   }
 
   const ws = pathname.match(/^\/ws\/([^/]+)$/);

@@ -34,6 +34,8 @@ export function header(view: RoomView): { title: string; subtitle: string } {
   const n = view.streams.length;
   const layout = stageLayout(view);
   if (layout === 'connecting') return { title: `Sala ${view.roomId}`, subtitle: 'Conectando…' };
+  // Sala fixa (specs/011): o nome é o título; o subtítulo resume o que está acontecendo.
+  if (view.room?.kind === 'fixed') return { title: view.room.name, subtitle: fixedSubtitle(view, layout, n) };
   if (layout === 'empty') {
     return view.myBroadcast
       ? { title: 'Você está ao vivo', subtitle: 'Ninguém mais transmitindo agora' }
@@ -48,6 +50,16 @@ export function header(view: RoomView): { title: string; subtitle: string } {
   }
   if (layout === 'grid') return { title: `${n} telas ao vivo`, subtitle: 'Escolha qual assistir' };
   return { title: `Vendo ${focusedStream(view)!.name}`, subtitle: `${n} telas ao vivo` };
+}
+
+function fixedSubtitle(view: RoomView, layout: StageLayout, n: number): string {
+  if (layout === 'empty') return view.myBroadcast ? 'Você está ao vivo · ninguém mais transmitindo' : 'Ninguém transmitindo agora';
+  if (layout === 'single') {
+    const s = view.streams[0];
+    return `${s.name} está ao vivo · ${view.myBroadcast ? 'você também está transmitindo' : (s.quality ?? '')}`;
+  }
+  if (layout === 'grid') return `${n} telas ao vivo · escolha qual assistir`;
+  return `Vendo ${focusedStream(view)!.name} · ${n} telas ao vivo`;
 }
 
 /** "12:04" ou "1:02:03". */

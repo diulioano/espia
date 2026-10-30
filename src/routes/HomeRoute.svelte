@@ -1,8 +1,8 @@
 <script lang="ts">
   // "/" real: cria sala no servidor ou abre um link colado.
-  import { createRoom } from '../lib/api';
+  import { createFixedRoom, createRoom } from '../lib/api';
   import { appInviteVisible, readInviteEnv } from '../lib/app-invite';
-  import { loadAppInviteDismissed, loadNickname, saveAppInviteDismissed, saveNickname } from '../lib/prefs';
+  import { loadAppInviteDismissed, loadNickname, saveAppInviteDismissed, saveNickname, saveOwnerKey } from '../lib/prefs';
   import { parseRoomId, roomPath } from '../lib/room-id';
   import { router } from '../lib/router.svelte';
   import type { HomeActions, HomeView } from '../lib/types';
@@ -45,6 +45,29 @@
     dismissAppInvite() {
       saveAppInviteDismissed();
       view.appInvite = undefined;
+    },
+    openFixedDialog() {
+      view.fixedDialog = { mode: 'create', value: '', busy: false, error: null };
+    },
+    closeFixedDialog() {
+      view.fixedDialog = undefined;
+    },
+    async createFixedRoom(nickname, name) {
+      if (!view.fixedDialog) return;
+      saveNickname(nickname);
+      view.fixedDialog = { ...view.fixedDialog, value: name, busy: true, error: null };
+      const res = await createFixedRoom(name);
+      if (res.ok) {
+        saveOwnerKey(res.code, res.ownerKey);
+        router.go(roomPath(res.code), { nickname, created: true });
+        return;
+      }
+      const error = {
+        'rate-limited': 'Muitas salas criadas daqui agora. Tenta de novo em um minuto.',
+        name: 'Esse nome não dá. Use letras, números e espaços.',
+        network: 'Não deu pra falar com o servidor. Confere a internet e tenta de novo.',
+      }[res.reason];
+      if (view.fixedDialog) view.fixedDialog = { ...view.fixedDialog, busy: false, error };
     },
   };
 </script>

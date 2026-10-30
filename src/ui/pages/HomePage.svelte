@@ -1,9 +1,11 @@
 <script lang="ts">
   import { cleanNickname, NICKNAME_MAX } from '../../lib/join-view';
+  import { Pin } from '@lucide/svelte';
   import type { HomeActions, HomeView } from '../../lib/types';
   import AppInvite from '../components/AppInvite.svelte';
   import Logo from '../components/Logo.svelte';
   import Mascot from '../components/Mascot.svelte';
+  import NameDialog from '../components/NameDialog.svelte';
   import StreamTile from '../components/StreamTile.svelte';
 
   let { view, actions }: { view: HomeView; actions: HomeActions } = $props();
@@ -60,7 +62,21 @@
           autocomplete="nickname"
           placeholder="Como a galera te chama?"
         />
-        <button class="btn btn-primary big-btn" disabled={!canCreate || view.creating}>Criar sala</button>
+        <div class="buttons">
+          <button class="btn btn-primary big-btn" disabled={!canCreate || view.creating}>Criar sala</button>
+          <!-- Celular (M4): "Sala fixa" ao lado de "Criar sala". -->
+          <button type="button" class="btn fixed-chip" disabled={!canCreate || view.creating} onclick={actions.openFixedDialog}>
+            <Pin size={14} strokeWidth={2.75} />Sala fixa
+          </button>
+        </div>
+      </div>
+      <!-- Sala fixa (specs/011 F1): com nome e um link que não muda. -->
+      <div class="fixed-row">
+        <button type="button" class="btn fixed-btn" disabled={!canCreate || view.creating} onclick={actions.openFixedDialog}>
+          <Pin size={17} strokeWidth={2.75} />
+          Criar sala fixa
+        </button>
+        <span class="fixed-note">Com nome e um link que não muda.</span>
       </div>
       {#if view.createError}<span class="error" role="alert">{view.createError}</span>{/if}
     </form>
@@ -94,6 +110,14 @@
       <AppInvite state={view.appInvite} ondownload={actions.downloadApp} ondismiss={actions.dismissAppInvite} />
     {/if}
   </main>
+
+  {#if view.fixedDialog}
+    <NameDialog
+      view={view.fixedDialog}
+      onsubmit={(name) => actions.createFixedRoom(cleanNickname(nickname), name)}
+      onclose={actions.closeFixedDialog}
+    />
+  {/if}
 </div>
 
 <style>
@@ -130,6 +154,14 @@
   .row { display: flex; gap: 10px; }
   .big { flex: 1; min-width: 0; min-height: 56px; font-size: 17px; padding-inline: 22px; }
   .big-btn { padding: 0 28px; font-size: 18px; min-height: 56px; }
+  .buttons { display: flex; gap: 8px; }
+  .fixed-chip { display: none; }
+  .fixed-row { display: flex; align-items: center; gap: 12px; margin-left: -6px; }
+  .fixed-btn {
+    min-height: 44px; padding: 0 16px 0 12px; font-size: 16px; color: var(--color-accent-400); background: transparent;
+  }
+  .fixed-btn:hover:not(:disabled) { background: rgba(198, 113, 57, 0.12); }
+  .fixed-note { font-size: 14px; color: rgba(245, 234, 216, 0.55); }
 
   .join { display: flex; align-items: flex-start; gap: 10px; width: min(480px, 100%); margin-top: 22px; }
   .join-label { font-size: 14px; white-space: nowrap; color: var(--color-text-muted); line-height: 44px; }
@@ -162,6 +194,12 @@
     h1 { font-size: 44px; }
     .lead { font-size: 17px; }
     .row { flex-direction: column; }
+    .buttons .big-btn { flex: 1; min-height: 52px; font-size: 17px; }
+    .fixed-chip {
+      display: inline-flex; min-height: 52px; padding: 0 16px; font-size: 15px;
+      color: var(--color-accent-400); background: rgba(198, 113, 57, 0.12);
+    }
+    .fixed-row { display: none; }
     .join { flex-wrap: wrap; }
     .join-label { width: 100%; line-height: 1.4; }
   }

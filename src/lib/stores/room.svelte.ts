@@ -1,5 +1,5 @@
 // Sala real: liga a sinalização e a malha WebRTC ao RoomView que as telas já usam com os mocks.
-import type { IceServer, Peer, ServerMessage } from '../../shared/protocol';
+import type { IceServer, Peer, RoomInfo, ServerMessage } from '../../shared/protocol';
 import { applyAudioRule, canShareScreen, isPermissionDenied, startCapture, stopCapture } from '../capture';
 import {
   cameraPermission,
@@ -23,6 +23,7 @@ import { countFullViewers, effectiveQuality, isAdjusted, stepDown, type Quality,
 import { stageLayout } from '../room-view';
 import {
   loadGoLivePrefs,
+  loadOwnerKey,
   loadSession,
   loadVolume,
   saveGoLivePrefs,
@@ -61,6 +62,8 @@ export class RoomStore {
   ended = $state<SignalingEnd | null>(null);
   /** Ligação com o servidor (specs/011 US1). */
   link = $state<'ok' | 'reconnecting' | 'failed'>('ok');
+  /** Rápida ou fixa (vem no welcome, specs/011). */
+  roomInfo = $state<RoomInfo>({ kind: 'quick' });
   me = $state<Peer | null>(null);
   peers = $state<Peer[]>([]);
   focusedId = $state<string | null>(null);
@@ -142,6 +145,8 @@ export class RoomStore {
     readonly code: string,
     nickname: string,
     private onLeave: () => void,
+    /** Acabou de criar a sala fixa (specs/011 S1): copia o convite e avisa no primeiro welcome. */
+    private justCreated = false,
   ) {
     this.signaling = new Signaling({
       code,
@@ -207,6 +212,13 @@ export class RoomStore {
     if (!this.ended) this.signaling.leave();
   }
 
+  private copyInvite(text: string) {
+    navigator.clipboard?.writeText(this.view.inviteUrl).catch(() => {});
+    this.copied = true;
+    this.toast({ kind: 'copied', text });
+    setTimeout(() => (this.copied = false), 2000);
+  }
+
   /** Caiu (ou "Tentar de novo"): 'reconnecting' e, sem volta em 60 s, 'failed'. */
   private markDown() {
     clearTimeout(this.downTimer);
@@ -223,6 +235,11 @@ export class RoomStore {
         this.peers = msg.peers;
         this.capacity = msg.capacity;
         this.connected = true;
+        this.roomInfo = msg.room ?? { kind: 'quick' };
+        if (this.justCreated) {
+          this.justCreated = false;
+          this.copyInvite('Sala criada — fixe o link no grupo');
+        }
         if (this.focusedId && !this.peers.some((p) => p.id === this.focusedId)) this.focusedId = null;
         // Voltou como pessoa nova (passou da tolerância) com a captura ainda rodando: avisa de novo.
         if (this.myBroadcast && !msg.you.live) this.sendLive();
@@ -321,6 +338,7 @@ export class RoomStore {
         viewers: Object.values(this.media).filter((m) => m.conn === 'connected').length,
       },
       link: this.link,
+      room: this.roomInfo.kind === 'fixed' ? { ...this.roomInfo, own: !!loadOwnerKey(this.code) } : { kind: 'quick' },
       copied: this.copied,
       goLiveOpen: this.goLiveOpen,
       goLivePrefs: this.goLivePrefs,
@@ -342,12 +360,7 @@ export class RoomStore {
 
   private buildActions(): RoomActions {
     return {
-      copyInvite: () => {
-        navigator.clipboard?.writeText(this.view.inviteUrl).catch(() => {});
-        this.copied = true;
-        this.toast({ kind: 'copied', text: 'Link copiado — é só mandar pra galera' });
-        setTimeout(() => (this.copied = false), 2000);
-      },
+      copyInvite: () => this.copyInvite('Link copiado — é só mandar pra galera'),
       openGoLive: () => {
         // Sem servidor não dá pra avisar a sala (FR-007).
         if (this.link !== 'ok') return;

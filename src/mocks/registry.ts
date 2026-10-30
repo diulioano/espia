@@ -2,6 +2,7 @@
 import { HOME_SCENES } from './home';
 import { JOIN_SCENES } from './join';
 import { MOBILE_SCENES } from './mobile';
+import { NOTFOUND_SCENES } from './notfound';
 import { DEFAULT_ROOM_SCENE, ROOM_SCENES } from './room';
 
 export interface MockScene {
@@ -26,6 +27,7 @@ export const MOCK_SCREENS: MockScreen[] = [
   { id: 'join', label: 'Entrar por link', scenes: JOIN_SCENES, defaultScene: 'default' },
   { id: 'room', label: 'Sala', scenes: ROOM_SCENES, defaultScene: DEFAULT_ROOM_SCENE },
   { id: 'mobile', label: 'Sala no celular', scenes: MOBILE_SCENES, defaultScene: 'watching' },
+  { id: 'notfound', label: 'Sala não encontrada', scenes: NOTFOUND_SCENES, defaultScene: 'quick' },
 ];
 
 /** Telas do handoff que ainda não têm mock (aparecem no índice como "em breve"). */

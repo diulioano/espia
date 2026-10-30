@@ -16,6 +16,7 @@ import {
   PONG,
   TONES,
   type ClientMessage,
+  type GoneReason,
   type IceServer,
   type LiveInfo,
   type Peer,
@@ -23,6 +24,7 @@ import {
   type ServerMessage,
   type Tone,
 } from '../shared/protocol';
+import { randomHex, tokensEqual } from './crypto';
 import { mintIceServers, revokeTurn } from './turn';
 import { parseClientMessage } from './validate';
 
@@ -35,6 +37,22 @@ interface Member extends Peer {
 }
 
 type Attachment = { joined: false } | { joined: true; member: Member };
+
+/** Sala fixa (specs/011 R3): nada sobre as pessoas, só a sala. */
+interface FixedRoom {
+  name: string;
+  /** SHA-256 da chave do dono; a chave fica só no aparelho que criou. */
+  ownerHash: string;
+  createdAt: number;
+  /** Último join (não resume, não prévia, não status). */
+  lastUsed: number;
+}
+
+/** Sala fixa que deixou de existir: só o motivo, sem nome (research R5). */
+interface Tombstone {
+  reason: GoneReason;
+  until: number;
+}
 
 /** Alguém cujo socket fechou, esperando `resume` até `until`. */
 interface Ghost {
@@ -67,28 +85,42 @@ export class Room extends DurableObject<Env> {
     return Number(this.env.HOLD_MS) || 300_000;
   }
 
+  /** Vida da sala fixa sem ninguém entrar, e da lápide (30 dias). */
+  private get fixedTtlMs() {
+    return Number(this.env.FIXED_TTL_MS) || 30 * 24 * 60 * 60_000;
+  }
+
   private get reserveMs() {
     return Number(this.env.RESERVE_MS) || 60_000;
   }
 
   // ---------- RPC chamado pelo Worker ----------
 
-  /** Reserva o código por 60 s para o criador conectar. false se a sala já existe. */
-  async reserve(): Promise<boolean> {
-    if (await this.exists()) return false;
-    await this.ctx.storage.put('reservedUntil', Date.now() + this.reserveMs);
+  /**
+   * Reserva o código por 60 s para o criador conectar. Com `fixed`, a sala já nasce fixa (specs/011).
+   * false se a sala já existe ou se o código tem lápide (não reaproveita link de sala apagada).
+   */
+  async reserve(fixed?: { name: string; ownerHash: string }): Promise<boolean> {
+    if ((await this.tombstone()) || (await this.exists())) return false;
+    const now = Date.now();
+    await this.ctx.storage.put('reservedUntil', now + this.reserveMs);
+    if (fixed) await this.ctx.storage.put('fixed', { ...fixed, createdAt: now, lastUsed: now } satisfies FixedRoom);
     await this.scheduleAlarm();
     return true;
   }
 
-  /** Prévia para a tela de entrada; null se a sala não existe. */
-  async preview(code: string): Promise<RoomPreview | null> {
+  /** Prévia para a tela de entrada; `gone` se a sala fixa foi apagada/expirou; null se não existe. */
+  async preview(code: string): Promise<RoomPreview | { gone: GoneReason } | null> {
+    const tomb = await this.tombstone();
+    if (tomb) return { gone: tomb.reason };
     if (!(await this.exists())) return null;
     const people = await this.everyone();
+    const fixed = await this.fixed();
     return {
       code,
       people: people.map((p) => ({ nickname: p.nickname, tone: p.tone, live: p.live !== null })),
       capacity: CAPACITY,
+      ...(fixed ? { fixed: { name: fixed.name } } : {}),
     };
   }
 
@@ -163,6 +195,9 @@ export class Room extends DurableObject<Env> {
     };
     await this.ctx.storage.put('joins', joins + 1);
     await this.ctx.storage.delete(['reservedUntil', 'holdUntil']);
+    // Sala fixa: entrar é o que conta como uso para os 30 dias (resume, prévia e status não contam).
+    const fixed = await this.fixed();
+    if (fixed) await this.ctx.storage.put('fixed', { ...fixed, lastUsed: Date.now() } satisfies FixedRoom);
 
     ws.serializeAttachment({ joined: true, member } satisfies Attachment);
     await this.saveMember(member);
@@ -224,6 +259,7 @@ export class Room extends DurableObject<Env> {
 
   private async welcome(ws: WebSocket, me: Member, ice: { iceServers: IceServer[]; iceExpiresAt: number }) {
     const others = (await this.everyone()).filter((p) => p.id !== me.id);
+    const fixed = await this.fixed();
     send(ws, {
       t: 'welcome',
       you: publicPeer(me),
@@ -231,6 +267,7 @@ export class Room extends DurableObject<Env> {
       ...ice,
       resumeToken: me.token,
       capacity: CAPACITY,
+      room: fixed ? { kind: 'fixed', name: fixed.name } : { kind: 'quick' },
     });
   }
 
@@ -362,18 +399,35 @@ export class Room extends DurableObject<Env> {
     const holdUntil = await this.ctx.storage.get<number>('holdUntil');
     if (holdUntil !== undefined && holdUntil <= now) await this.ctx.storage.delete('holdUntil');
 
+    // Lápide venceu: o código vira "não existe" comum.
+    const tomb = await this.tombstone();
+    if (tomb && tomb.until <= now) await this.ctx.storage.delete('tombstone');
+    // Sala fixa 30 dias sem ninguém entrar (specs/011 FR-012).
+    const fixed = await this.fixed();
+    if (fixed && !(await this.occupied()) && fixed.lastUsed + this.fixedTtlMs <= now) await this.bury('expired');
+
     if (!(await this.disposeIfEmpty(true))) await this.scheduleAlarm();
   }
 
   /**
-   * Sala sem ninguém, sem fantasmas e sem reserva: apaga tudo. O código volta a "não existe".
+   * Sala sem ninguém, sem fantasmas e sem reserva: apaga tudo sobre as pessoas. A sala rápida volta a
+   * "não existe"; a fixa (e a lápide) continuam, com o alarme da expiração.
    * Apaga chave por chave: `deleteAll()` dentro do próprio alarme dá erro interno no runtime.
    */
   private async disposeIfEmpty(inAlarm = false): Promise<boolean> {
-    if (await this.exists()) return false;
-    if (!inAlarm) await this.ctx.storage.deleteAlarm();
+    if (await this.occupied()) return false;
     await this.ctx.storage.delete(['ghosts', 'reservedUntil', 'joins', 'roster', 'holdUntil']);
+    if ((await this.fixed()) || (await this.tombstone())) await this.scheduleAlarm();
+    else if (!inAlarm) await this.ctx.storage.deleteAlarm();
     return true;
+  }
+
+  /** Sala fixa apagada pelo dono ou expirada: some tudo, fica só o motivo por FIXED_TTL_MS (research R5). */
+  private async bury(reason: GoneReason) {
+    await this.ctx.storage.delete(['fixed', 'ghosts', 'reservedUntil', 'joins', 'roster', 'holdUntil']);
+    const tombstone: Tombstone = { reason, until: Date.now() + this.fixedTtlMs };
+    await this.ctx.storage.put('tombstone', tombstone);
+    await this.ctx.storage.setAlarm(tombstone.until);
   }
 
   // ---------- Utilitários ----------
@@ -415,7 +469,23 @@ export class Room extends DurableObject<Env> {
     return (await this.ctx.storage.get<Record<string, Ghost>>('ghosts')) ?? {};
   }
 
+  private async fixed(): Promise<FixedRoom | undefined> {
+    return this.ctx.storage.get<FixedRoom>('fixed');
+  }
+
+  private async tombstone(): Promise<Tombstone | undefined> {
+    return this.ctx.storage.get<Tombstone>('tombstone');
+  }
+
+  /** A sala existe: não tem lápide e é fixa ou tem alguém/reserva/espera. */
   private async exists(): Promise<boolean> {
+    if (await this.tombstone()) return false;
+    if (await this.fixed()) return true;
+    return this.occupied();
+  }
+
+  /** Alguém conectado ou na tolerância, reserva ou espera de sala rápida. */
+  private async occupied(): Promise<boolean> {
     if (this.members().length > 0) return true;
     if (Object.keys(await this.ghosts()).length > 0) return true;
     const now = Date.now();
@@ -431,6 +501,10 @@ export class Room extends DurableObject<Env> {
     if (reservedUntil !== undefined) times.push(reservedUntil);
     const holdUntil = await this.ctx.storage.get<number>('holdUntil');
     if (holdUntil !== undefined) times.push(holdUntil);
+    const tomb = await this.tombstone();
+    if (tomb) times.push(tomb.until);
+    const fixed = await this.fixed();
+    if (fixed && !(await this.occupied())) times.push(fixed.lastUsed + this.fixedTtlMs);
     if (times.length) await this.ctx.storage.setAlarm(Math.min(...times));
   }
 
@@ -481,15 +555,4 @@ function tooBig(raw: string) {
   // Cada caractere ocupa de 1 a 3 bytes em UTF-8; só codifica quando pode passar do limite.
   if (raw.length > MAX_MESSAGE_BYTES) return true;
   return raw.length * 3 > MAX_MESSAGE_BYTES && new TextEncoder().encode(raw).byteLength > MAX_MESSAGE_BYTES;
-}
-
-function randomHex(bytes: number) {
-  return [...crypto.getRandomValues(new Uint8Array(bytes))].map((b) => b.toString(16).padStart(2, '0')).join('');
-}
-
-function tokensEqual(a: string, b: string) {
-  const enc = new TextEncoder();
-  const x = enc.encode(a);
-  const y = enc.encode(b);
-  return x.byteLength === y.byteLength && crypto.subtle.timingSafeEqual(x, y);
 }

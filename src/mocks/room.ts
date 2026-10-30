@@ -31,6 +31,10 @@ export const ROOM_SCENES = [
   { id: 'reconnecting', code: 'Q1', label: 'Reconectando… (você ao vivo)' },
   { id: 'back', code: 'Q2', label: 'De volta!' },
   { id: 'reconnectfail', code: 'Q3', label: 'Não deu pra voltar' },
+  // Sala fixa (specs/011).
+  { id: 'fixed', code: 'S·', label: 'Sala fixa vazia (dono)' },
+  { id: 'created', code: 'S1', label: 'Sala fixa recém-criada' },
+  { id: 'guest', code: 'S5', label: 'Sala fixa (não é o dono)' },
 ] as const;
 
 export type RoomScene = (typeof ROOM_SCENES)[number]['id'];
@@ -200,6 +204,13 @@ export function isRoomScene(value: string | null): value is RoomScene {
 
 export function buildRoomScene(scene: RoomScene): RoomView {
   // Queda (specs/011 Q1–Q3): a mesma sala de "Você ao vivo", com o aviso por cima.
+  // Sala fixa: a mesma sala, com o nome no lugar do título.
+  if (scene === 'fixed' || scene === 'created' || scene === 'guest') {
+    const view = buildRoomScene(scene === 'guest' ? 'single' : scene === 'created' ? 'copied' : 'empty');
+    view.room = { kind: 'fixed', name: 'CS da galera', own: scene !== 'guest' };
+    if (scene === 'created') view.toasts = [{ id: 'scene-created', kind: 'copied', text: 'Sala criada — fixe o link no grupo' }];
+    return view;
+  }
   if (scene === 'reconnecting' || scene === 'back' || scene === 'reconnectfail') {
     const view = buildRoomScene('live');
     view.link = scene === 'back' ? 'ok' : scene === 'reconnecting' ? 'reconnecting' : 'failed';
@@ -270,5 +281,6 @@ export function buildRoomScene(scene: RoomScene): RoomView {
     canShare: true,
     canShareScreen: true,
     link: 'ok',
+    room: { kind: 'quick' },
   };
 }

@@ -27,6 +27,15 @@
     dismissAppInvite() {
       view.appInvite = undefined;
     },
+    openFixedDialog() {
+      view.fixedDialog = { mode: 'create', value: '', busy: false, error: null };
+    },
+    closeFixedDialog() {
+      view.fixedDialog = undefined;
+    },
+    createFixedRoom() {
+      onnavigate('room', 'created');
+    },
   };
 </script>
 

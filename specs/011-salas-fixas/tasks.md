@@ -134,27 +134,27 @@
 
 ### Servidor
 
-- [ ] T1121 [US2] `src/worker/room.ts`, sala fixa no storage (research R3), `interface FixedRoom { name; ownerHash; createdAt; lastUsed }`:
+- [X] T1121 [US2] `src/worker/room.ts`, sala fixa no storage (research R3), `interface FixedRoom { name; ownerHash; createdAt; lastUsed }`:
   - `reserve()` vira `reserve(fixed?: { name: string; ownerHash: string })`. Recusa (false) se `exists()` **ou** se houver `tombstone`. Com `fixed`, grava `fixed = { ...fixed, createdAt: agora, lastUsed: agora }` além do `reservedUntil`;
   - `exists()`: false se houver `tombstone`; true se houver `fixed`;
   - `join()` com sucesso: se houver `fixed`, `lastUsed = agora` (`resume` não mexe);
   - `welcome` manda `room: fixed ? { kind: 'fixed', name } : { kind: 'quick' }`;
   - `holdIfQuick()` não faz nada em sala fixa;
   - `disposeIfEmpty()` nunca apaga `fixed`/`tombstone`. Numa sala fixa vazia, ele só limpa `roster`, `ghosts`, `holdUntil`, `reservedUntil` e `joins`, e retorna false.
-- [ ] T1122 [US2] `src/worker/room.ts`, expiração e lápide (research R5):
+- [X] T1122 [US2] `src/worker/room.ts`, expiração e lápide (research R5):
   - `private get fixedTtlMs()` (`FIXED_TTL_MS`, padrão 30 dias);
   - `scheduleAlarm()` inclui `fixed.lastUsed + fixedTtlMs` quando não há ninguém (sem membros, fantasmas nem reserva) e `tombstone.until`;
   - `alarm()`: se for sala fixa, sem ninguém e com `lastUsed + ttl <= agora` → `bury('expired')`. Se `tombstone.until <= agora`, apaga a lápide;
   - `bury(reason)`: apaga `fixed`, `roster`, `ghosts`, `holdUntil`, `reservedUntil` e `joins`, grava `tombstone = { reason, until: agora + fixedTtlMs }` e marca o alarme.
-- [ ] T1123 [US2] `src/worker/room.ts` `preview()`: devolve `{ gone: reason }` se houver lápide (o Worker responde 410), `fixed: { name }` se for sala fixa, e o resto igual. Mudar o tipo de retorno para `RoomPreview | { gone: GoneReason } | null`.
-- [ ] T1124 [US2] `src/worker/validate.ts`: `parseCreateBody(text: string)` → `{ kind: 'quick' } | { kind: 'fixed'; name: string } | null`. Corpo vazio = `quick`. JSON inválido, `kind` desconhecido ou nome que não passa no `normalizeRoomName` → null. Corpo com mais de 1 KB → null.
-- [ ] T1125 [US2] `src/worker/index.ts` `POST /api/rooms`:
+- [X] T1123 [US2] `src/worker/room.ts` `preview()`: devolve `{ gone: reason }` se houver lápide (o Worker responde 410), `fixed: { name }` se for sala fixa, e o resto igual. Mudar o tipo de retorno para `RoomPreview | { gone: GoneReason } | null`.
+- [X] T1124 [US2] `src/worker/validate.ts`: `parseCreateBody(text: string)` → `{ kind: 'quick' } | { kind: 'fixed'; name: string } | null`. Corpo vazio = `quick`. JSON inválido, `kind` desconhecido ou nome que não passa no `normalizeRoomName` → null. Corpo com mais de 1 KB → null.
+- [X] T1125 [US2] `src/worker/index.ts` `POST /api/rooms`:
   - lê o corpo com `parseCreateBody` (null → `400 { error: 'name' }`);
   - `quick` → igual a hoje;
   - `fixed` → `ownerKey = randomHex(32)` (CSPRNG, função local igual à do `room.ts`) e `ownerHash = sha256Hex(ownerKey)` (`crypto.subtle.digest`);
   - `reserve({ name, ownerHash })` com as mesmas 5 tentativas → `201 { code, ownerKey }`;
   - `GET /api/rooms/:code`: `{ gone }` → `410 { reason }`.
-- [ ] T1126 [US2] Testes em `test/worker/room.test.ts`, bloco `describe('Sala fixa (specs/011)')`:
+- [X] T1126 [US2] Testes em `test/worker/room.test.ts`, bloco `describe('Sala fixa (specs/011)')`:
   - criar com nome válido → 201 com `ownerKey` de 64 hex;
   - nome vazio, de 41 caracteres ou com U+202E → 400;
   - corpo vazio continua criando sala rápida;
@@ -166,31 +166,31 @@
 
 ### Cliente
 
-- [ ] T1127 [US2] `src/lib/api.ts`:
+- [X] T1127 [US2] `src/lib/api.ts`:
   - `createFixedRoom(name)` → `{ ok: true; code; ownerKey } | { ok: false; reason: 'rate-limited' | 'name' | 'network' }` (POST com `Content-Type: application/json`);
   - `fetchPreview` trata `410` → `{ status: 'gone'; reason: GoneReason }` e devolve `fixedName` quando vier `fixed`.
-- [ ] T1128 [P] [US2] `src/lib/prefs.ts`:
+- [X] T1128 [P] [US2] `src/lib/prefs.ts`:
   - `loadOwnerKey(code)`, `saveOwnerKey(code, key)` e `forgetOwnerKey(code)` com a chave `espia:owner:<code>` (`contracts/local-storage.md`), validando o valor como 64 hex;
   - `KEY.owner`.
-- [ ] T1129 [US2] `src/lib/types.ts`:
+- [X] T1129 [US2] `src/lib/types.ts`:
   - `NameDialogView { mode: 'create' | 'rename'; value: string; busy: boolean; error: string | null }`;
   - `HomeView += { fixedDialog?: NameDialogView }` e `HomeActions += { openFixedDialog(); closeFixedDialog(); createFixedRoom(nickname, name) }`;
   - `JoinView += { fixedName?: string }`;
   - `RoomView += { room: { kind: 'quick' } | { kind: 'fixed'; name: string; own: boolean } }`;
   - `NotFoundView { reason: 'quick' | 'deleted' | 'kicked' | 'expired'; name: string | null; saved: boolean }` e `NotFoundActions { createRoom(); pasteOtherLink(); forget() }`.
-- [ ] T1130 [US2] `src/lib/stores/room.svelte.ts`:
+- [X] T1130 [US2] `src/lib/stores/room.svelte.ts`:
   - `roomInfo = $state<RoomInfo>({ kind: 'quick' })`, atualizado no `welcome` (`msg.room ?? { kind: 'quick' }`);
   - `own = !!loadOwnerKey(code)`;
   - `buildView()` monta `room`;
   - prop de construtor `opts.justCreated` → depois do primeiro `welcome`, copia o convite e mostra o toast `{ kind: 'copied', text: 'Sala criada — fixe o link no grupo' }` (S1), no lugar do "Link copiado".
-- [ ] T1131 [US2] `src/lib/room-view.ts` `header()`: se `view.room.kind === 'fixed'`, `title = view.room.name` e o subtítulo vem dos casos de hoje (Room.dc.html `fixedSub`):
+- [X] T1131 [US2] `src/lib/room-view.ts` `header()`: se `view.room.kind === 'fixed'`, `title = view.room.name` e o subtítulo vem dos casos de hoje (Room.dc.html `fixedSub`):
   - vazio: "Ninguém transmitindo agora";
   - single: "Lu está ao vivo · 1080p · 60 fps";
   - eu e outro ao vivo: "Lu está ao vivo · você também está transmitindo";
   - grade: "3 telas ao vivo";
   - foco: "Vendo Bia · 3 telas ao vivo".
   - Teste novo em `test/lib/room-view.test.ts`.
-- [ ] T1132 [P] [US2] Criar `src/ui/components/NameDialog.svelte` (Home.dc.html `showCreate` e Room.dc.html `showRename`):
+- [X] T1132 [P] [US2] Criar `src/ui/components/NameDialog.svelte` (Home.dc.html `showCreate` e Room.dc.html `showRename`):
   - `mode='create'`: ícone `Pin` em círculo sage, "Criar sala fixa", "O link não muda. Fixe no grupo e use sempre o mesmo. Some se ficar 30 dias sem uso.", rótulo "Nome da sala", dica "Aparece só na tela, nunca no link." e o contador `n/40`. Botões "Cancelar" / "Criar e entrar";
   - `mode='rename'`: "Renomear sala", "O link continua o mesmo.", só o contador. "Cancelar" / "Salvar";
   - `maxlength` = 40 contando code points (cortar no `input`);
@@ -198,22 +198,22 @@
   - `error` aparece embaixo do campo;
   - Esc e o X fecham;
   - usar as classes `dialog-backdrop`/`dialog` de `base.css`, como o `GoLiveModal`.
-- [ ] T1133 [US2] `src/ui/pages/HomePage.svelte` (Home.dc.html):
+- [X] T1133 [US2] `src/ui/pages/HomePage.svelte` (Home.dc.html):
   - embaixo da linha apelido + "Criar sala", botão sem fundo, cor `--color-accent-400`, ícone `Pin` 17px, "Criar sala fixa", mais o texto "Com nome e um link que não muda." (14px, 55%);
   - "Tem um link?" continua embaixo;
   - `view.fixedDialog` → `NameDialog mode="create"`;
   - no celular (M4), o botão vira "Sala fixa" ao lado de "Criar sala", com fundo `rgba(198,113,57,0.12)`.
-- [ ] T1134 [US2] `src/routes/HomeRoute.svelte`:
+- [X] T1134 [US2] `src/routes/HomeRoute.svelte`:
   - ações `openFixedDialog`, `closeFixedDialog` e `createFixedRoom(nickname, name)`;
   - `createFixedRoom` salva o apelido e chama `api.createFixedRoom`. Se der certo, `saveOwnerKey` e `router.go(roomPath(code), { nickname, created: true })`. Erros: `rate-limited` → "Muitas salas criadas daqui agora. Tenta de novo em um minuto.", `name` → "Esse nome não dá. Use letras, números e espaços.", `network` → a mensagem de hoje;
   - `NavState` (`src/lib/router.svelte.ts`) ganha `created?: boolean`.
-- [ ] T1135 [US2] `src/ui/pages/JoinPage.svelte` (Espia.dc.html F8), com `view.fixedName`:
+- [X] T1135 [US2] `src/ui/pages/JoinPage.svelte` (Espia.dc.html F8), com `view.fixedName`:
   - selo "Sala fixa" (ícone `Pin` 14px, fundo `rgba(174,191,146,0.16)`, cor `--color-accent-2-300`, 13px/600) acima do título;
   - título = o nome (52px);
   - subtítulo "Te chamaram pra cá. Lu, Bia e Tomás já estão lá." (`whoIsThere`);
   - embaixo do Entrar: "Ao entrar, ela fica em Suas salas neste aparelho." (13px, 55%);
   - sala rápida: igual a hoje.
-- [ ] T1136 [US2] Criar `src/ui/pages/NotFoundPage.svelte` (NotFound.dc.html):
+- [X] T1136 [US2] Criar `src/ui/pages/NotFoundPage.svelte` (NotFound.dc.html):
   - logo + cartão 560px com `Mascot` (`sleepy` se `expired`, senão `sad`, 96);
   - `name` em 15px/600/60% acima do título, quando `reason !== 'quick'` e houver nome;
   - título e texto por motivo, **literalmente** do design:
@@ -224,14 +224,14 @@
   - botões "Criar uma sala nova" e, como segundo, `saved` ? "Tirar de Suas salas" : "Colar outro link";
   - celular: mesmo layout do "não existe" de hoje da `JoinPage`;
   - **remover** o ramo `notfound` da `JoinPage` (o ramo `full` fica).
-- [ ] T1137 [US2] `src/routes/RoomRoute.svelte`:
+- [X] T1137 [US2] `src/routes/RoomRoute.svelte`:
   - estado `gone: NotFoundView | null`. Prévia `notfound` → `{ reason: 'quick' }`, `gone` → `{ reason }`. `ended === 'not-found'` → pergunta a prévia de novo pra decidir entre quick/expired/deleted;
   - renderiza `NotFoundPage` quando `gone`;
   - `name`/`saved` vêm de Suas salas (T1146; até lá, `null`/`false`);
   - passa `fixedName` pra `JoinPage`;
   - passa `justCreated: router.state.created` pro `RoomStore`;
   - `forget()` (T1146).
-- [ ] T1138 [US2] Mocks:
+- [X] T1138 [US2] Mocks:
   - `src/mocks/home.ts`: cena `create` (F7: `fixedDialog: { mode:'create', value:'CS da galera', … }`) e `first` (F1);
   - `src/mocks/join.ts`: cena `fixed` (F8: `fixedName:'CS da galera'`, Lu ao vivo, Bia e Tomás);
   - `src/mocks/room.ts`: cenas `fixed` (base `empty`, fixa, own), `created` (base `copied` + toast S1, own) e `guest` (base `single`, fixa, `own:false`);

@@ -8,6 +8,7 @@ const KEY = {
   volume: (name: string) => `espia:volume:${name.toLowerCase()}`,
   session: (code: string) => `espia:session:${code}`,
   appInvite: 'espia:appinvite',
+  owner: (code: string) => `espia:owner:${code}`,
 };
 
 function read(storage: () => Storage, key: string): string | null {
@@ -36,6 +37,21 @@ export function loadNickname(): string {
 
 export function saveNickname(nickname: string) {
   write(local, KEY.nickname, nickname);
+}
+
+/** Chave de dono de uma sala fixa criada neste aparelho (specs/011, contracts/local-storage.md). */
+export function loadOwnerKey(code: string): string | null {
+  const key = read(local, KEY.owner(code));
+  return key && /^[0-9a-f]{64}$/.test(key) ? key : null;
+}
+
+export function saveOwnerKey(code: string, key: string) {
+  write(local, KEY.owner(code), key);
+}
+
+/** Só quando a sala deixou de existir: tirar da lista não tira a posse. */
+export function forgetOwnerKey(code: string) {
+  write(local, KEY.owner(code), null);
 }
 
 /** "Agora não" no convite do app (specs/008): vale para sempre nesse navegador. */

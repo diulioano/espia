@@ -7,6 +7,9 @@ export const HOME_SCENES = [
   { id: 'error', code: 'D1', label: 'Link inválido' },
   { id: 'invite', code: 'D1', label: 'Convite do app (Windows)' },
   { id: 'invitehint', code: 'D1', label: 'Convite: baixando' },
+  // Salas fixas (specs/011).
+  { id: 'first', code: 'F1', label: 'Sem salas fixas · convite' },
+  { id: 'create', code: 'F7', label: 'Modal Criar sala fixa' },
 ] as const;
 
 export type HomeScene = (typeof HOME_SCENES)[number]['id'];
@@ -19,5 +22,6 @@ export function buildHomeScene(scene: HomeScene): HomeView {
     link: scene === 'error' ? 'https://youtu.be/dQw4w9WgXcQ' : '',
     linkError: scene === 'error' ? LINK_ERROR : null,
     appInvite: scene === 'invite' ? 'offer' : scene === 'invitehint' ? 'hint' : undefined,
+    fixedDialog: scene === 'create' ? { mode: 'create', value: 'CS da galera', busy: false, error: null } : undefined,
   };
 }

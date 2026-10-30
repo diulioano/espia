@@ -2,12 +2,14 @@
   import MockHome from './MockHome.svelte';
   import MockIndex from './MockIndex.svelte';
   import MockJoin from './MockJoin.svelte';
+  import MockNotFound from './MockNotFound.svelte';
   import MockRoom from './MockRoom.svelte';
   import MockSwitcher from './MockSwitcher.svelte';
   import type { HomeScene } from './home';
   import type { JoinScene } from './join';
   import { MOCK_SCREENS, mockHref } from './registry';
   import { buildMobileScene, type MobileScene } from './mobile';
+  import type { NotFoundScene } from './notfound';
   import { buildRoomScene, type RoomScene } from './room';
 
   let params = $state(new URLSearchParams(location.search));
@@ -41,6 +43,8 @@
         <MockJoin scene={scene.id as JoinScene} onnavigate={navigate} />
       {:else if screen.id === 'room'}
         <MockRoom initial={buildRoomScene(scene.id as RoomScene)} onnavigate={navigate} />
+      {:else if screen.id === 'notfound'}
+        <MockNotFound scene={scene.id as NotFoundScene} saved={params.get('saved') === '1'} onnavigate={navigate} />
       {:else if screen.id === 'mobile'}
         <MockRoom initial={buildMobileScene(scene.id as MobileScene)} mobile onnavigate={navigate} />
       {/if}

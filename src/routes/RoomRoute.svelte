@@ -9,17 +9,22 @@
   import { loadNickname, loadSession, saveNickname } from '../lib/prefs';
   import { router } from '../lib/router.svelte';
   import { RoomStore } from '../lib/stores/room.svelte';
-  import type { JoinActions, JoinView } from '../lib/types';
+  import type { JoinActions, JoinView, NotFoundActions, NotFoundView } from '../lib/types';
   import JoinPage from '../ui/pages/JoinPage.svelte';
   import MobileRoomPage from '../ui/pages/MobileRoomPage.svelte';
+  import NotFoundPage from '../ui/pages/NotFoundPage.svelte';
   import RoomPage from '../ui/pages/RoomPage.svelte';
 
   let { code }: { code: string } = $props();
 
   // svelte-ignore state_referenced_locally
   const directNickname = router.state.nickname ?? (loadSession(code) ? loadNickname() : '');
+  // svelte-ignore state_referenced_locally
+  const justCreated = !!router.state.created;
 
   let store = $state<RoomStore | null>(null);
+  /** A sala não existe (mais): rápida que acabou, fixa apagada/expirada (specs/011). */
+  let gone = $state<NotFoundView | null>(null);
   // svelte-ignore state_referenced_locally
   let join = $state<JoinView>({
     roomId: code,
@@ -42,13 +47,18 @@
 
   function enter(nickname: string) {
     store?.destroy();
-    store = new RoomStore(code, nickname, () => router.go('/'));
+    store = new RoomStore(code, nickname, () => router.go('/'), justCreated);
+  }
+
+  function notFound(reason: NotFoundView['reason']) {
+    gone = { reason, name: null, saved: false };
   }
 
   async function loadPreview() {
     const res = await fetchPreview(code);
     if (store) return;
-    if (res.status === 'notfound') join = { ...join, status: 'notfound', people: null };
+    if (res.status === 'notfound') notFound('quick');
+    else if (res.status === 'gone') notFound(res.reason);
     else if (res.status === 'unknown') join = { ...join, status: 'ready', people: null };
     else
       join = {
@@ -56,6 +66,7 @@
         status: res.status,
         capacity: res.preview.capacity,
         people: res.preview.people.map((p) => ({ name: p.nickname, tone: p.tone, live: p.live })),
+        fixedName: res.preview.fixed?.name,
       };
   }
 
@@ -67,8 +78,8 @@
     const ended = store?.ended;
     if (!ended) return;
     store = null;
-    if (ended === 'not-found') join = { ...join, status: 'notfound', people: null };
-    else if (ended === 'full') join = { ...join, status: 'full' };
+    // Não existe: a prévia diz se era rápida (404) ou fixa apagada/expirada (410).
+    if (ended === 'full') join = { ...join, status: 'full' };
     else loadPreview();
   });
 
@@ -80,6 +91,12 @@
     },
     createRoom: () => router.go('/'),
     pasteOtherLink: () => router.go('/'),
+  };
+
+  const notFoundActions: NotFoundActions = {
+    createRoom: () => router.go('/'),
+    pasteOtherLink: () => router.go('/'),
+    forget: () => router.go('/'),
   };
 
   // App desktop: link de outra sala enquanto você transmite pergunta antes (src/lib/desktop.ts).
@@ -103,7 +120,9 @@
   });
 </script>
 
-{#if store}
+{#if gone}
+  <NotFoundPage view={gone} actions={notFoundActions} />
+{:else if store}
   {#if mobile}
     <MobileRoomPage view={store.view} actions={store.actions} />
   {:else}

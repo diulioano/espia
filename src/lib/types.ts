@@ -153,6 +153,8 @@ export interface RoomView {
    * 'failed' depois de 60 s sem voltar (continua tentando em segundo plano).
    */
   link: 'ok' | 'reconnecting' | 'failed';
+  /** Sala rápida, ou fixa com nome (specs/011). `own` = este aparelho criou (tem a chave do dono). */
+  room: { kind: 'quick' } | { kind: 'fixed'; name: string; own: boolean };
 }
 
 export interface HomeView {
@@ -166,6 +168,16 @@ export interface HomeView {
   creating?: boolean;
   /** Convite do app desktop (specs/008): oferta, ou a dica depois de baixar. Ausente = não mostra. */
   appInvite?: 'offer' | 'hint';
+  /** Modal "Criar sala fixa" aberto (specs/011 F7). */
+  fixedDialog?: NameDialogView;
+}
+
+/** Modal de nome da sala fixa: criar (F7) ou renomear (S3). */
+export interface NameDialogView {
+  mode: 'create' | 'rename';
+  value: string;
+  busy: boolean;
+  error: string | null;
 }
 
 export interface HomeActions {
@@ -175,6 +187,10 @@ export interface HomeActions {
   /** Clicou em "Baixar o app" (o link baixa sozinho; aqui só troca para a dica). */
   downloadApp(): void;
   dismissAppInvite(): void;
+  /** Sala fixa (specs/011). */
+  openFixedDialog(): void;
+  closeFixedDialog(): void;
+  createFixedRoom(nickname: string, name: string): void;
 }
 
 export interface JoinPreviewPerson {
@@ -185,12 +201,31 @@ export interface JoinPreviewPerson {
 
 export interface JoinView {
   roomId: string;
-  status: 'ready' | 'notfound' | 'full';
+  /** "Não existe" virou a NotFoundPage (specs/011). */
+  status: 'ready' | 'full';
   /** null = não deu pra buscar a sala antes de entrar (esconde a pilha de avatares). */
   people: JoinPreviewPerson[] | null;
   capacity: number;
   nickname: string;
   canShare: boolean;
+  /** Sala fixa (specs/011 F8): selo "Sala fixa" e o nome no título. */
+  fixedName?: string;
+}
+
+/** "Sala não encontrada" (specs/011 N1–N4). */
+export interface NotFoundView {
+  /** quick = sala rápida que acabou ou link errado; kicked = apagada com você dentro. */
+  reason: 'quick' | 'deleted' | 'kicked' | 'expired';
+  /** Nome conhecido neste aparelho (Suas salas). */
+  name: string | null;
+  /** Está em Suas salas: a ação secundária vira "Tirar de Suas salas". */
+  saved: boolean;
+}
+
+export interface NotFoundActions {
+  createRoom(): void;
+  pasteOtherLink(): void;
+  forget(): void;
 }
 
 export interface JoinActions {

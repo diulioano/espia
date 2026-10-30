@@ -1,6 +1,6 @@
 // Testes do Worker + Durable Object no runtime real (Miniflare). GRACE_MS = 400, RESERVE_MS = 600,
 // HOLD_MS = 800, FIXED_TTL_MS = 1500 (vitest.config.ts).
-import { evictDurableObject } from 'cloudflare:test';
+import { evictDurableObject, runInDurableObject } from 'cloudflare:test';
 import { env, exports } from 'cloudflare:workers';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { CLOSE, PING, type ServerMessage } from '../../src/shared/protocol';
@@ -579,5 +579,93 @@ describe('Abuso', () => {
     expect((await c.next('error')).code).toBe('bad-message');
     c.send({ t: 'join', nickname: 'x'.repeat(25) });
     expect((await c.next('error')).code).toBe('bad-message');
+  });
+});
+
+describe('Sala fixa (specs/011)', () => {
+  const TTL = 1500;
+
+  async function createFixed(name: string) {
+    return call('/api/rooms', {
+      method: 'POST',
+      headers: { ...ORIGIN, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ kind: 'fixed', name }),
+    });
+  }
+
+  it('cria com nome: devolve o código e a chave do dono (64 hex) uma vez', async () => {
+    const res = await createFixed('  CS   da galera ');
+    expect(res.status).toBe(201);
+    const body = (await res.json()) as { code: string; ownerKey: string };
+    expect(body.ownerKey).toMatch(/^[0-9a-f]{64}$/);
+    const preview = (await (await call(`/api/rooms/${body.code}`)).json()) as { fixed?: { name: string } };
+    expect(preview.fixed).toEqual({ name: 'CS da galera' });
+  });
+
+  it('nome vazio, longo demais ou com caractere invisível: 400', async () => {
+    expect((await createFixed('   ')).status).toBe(400);
+    expect((await createFixed('a'.repeat(41))).status).toBe(400);
+    expect((await createFixed('a‮b')).status).toBe(400);
+    const junk = await call('/api/rooms', { method: 'POST', headers: ORIGIN, body: '{"kind":"vip"}' });
+    expect(junk.status).toBe(400);
+  });
+
+  it('corpo vazio continua criando sala rápida, sem chave', async () => {
+    const res = await call('/api/rooms', { method: 'POST', headers: ORIGIN });
+    expect(await res.json()).not.toHaveProperty('ownerKey');
+  });
+
+  it('continua existindo vazia depois da tolerância (sem a espera da rápida); welcome diz que é fixa', async () => {
+    const { code } = (await (await createFixed('CS da galera')).json()) as { code: string };
+    const { c: a, welcome } = await Client.join(code, 'Rafa');
+    expect(welcome.room).toEqual({ kind: 'fixed', name: 'CS da galera' });
+    a.ws.close(1000);
+    // Depois da tolerância, sem esperar HOLD_MS: sala fixa não precisa da espera (o TTL de teste é curto).
+    await sleep(GRACE + 300);
+    const res = await call(`/api/rooms/${code}`);
+    expect(res.status).toBe(200);
+    expect(((await res.json()) as { people: unknown[] }).people).toEqual([]);
+  });
+
+  it('sala rápida: welcome diz que é rápida', async () => {
+    const { welcome } = await Client.join(await createRoom(), 'Rafa');
+    expect(welcome.room).toEqual({ kind: 'quick' });
+  });
+
+  it('sem ninguém entrar por FIXED_TTL_MS: expira (410), o link recusa e a lápide some depois', async () => {
+    const { code } = (await (await createFixed('Filme de sexta')).json()) as { code: string };
+    await sleep(TTL + 400);
+    const res = await call(`/api/rooms/${code}`);
+    expect(res.status).toBe(410);
+    expect(await res.json()).toEqual({ reason: 'expired' });
+    const c = await Client.open(code);
+    c.send({ t: 'join', nickname: 'Rafa' });
+    await c.next('room-not-found');
+    // Código com lápide não é sorteado de novo.
+    expect(await env.ROOM.get(env.ROOM.idFromName(code)).reserve()).toBe(false);
+    await sleep(TTL + 400);
+    expect((await call(`/api/rooms/${code}`)).status).toBe(404);
+  });
+
+  it('entrar renova o prazo; consultar a prévia não', async () => {
+    const { code } = (await (await createFixed('Trampo do TCC')).json()) as { code: string };
+    await sleep(TTL - 600);
+    const { c } = await Client.join(code, 'Rafa');
+    c.ws.close(CLOSE.leave, 'saiu');
+    await sleep(TTL - 600);
+    expect((await call(`/api/rooms/${code}`)).status).toBe(200);
+    await sleep(800);
+    expect((await call(`/api/rooms/${code}`)).status).toBe(410);
+  });
+
+  it('não guarda apelidos depois que a sala fixa esvazia', async () => {
+    const { code } = (await (await createFixed('Família')).json()) as { code: string };
+    const { c } = await Client.join(code, 'Rafa');
+    c.ws.close(CLOSE.leave, 'saiu');
+    await sleep(150);
+    const keys = await runInDurableObject(env.ROOM.get(env.ROOM.idFromName(code)), async (_i, state) =>
+      [...(await state.storage.list()).keys()].sort(),
+    );
+    expect(keys).toEqual(['fixed']);
   });
 });

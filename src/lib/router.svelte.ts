@@ -7,6 +7,8 @@ export type Route = { name: 'home' } | { name: 'room'; code: string };
 export interface NavState {
   /** Apelido já escolhido: pula a tela de entrada e vai direto pra sala. */
   nickname?: string;
+  /** Acabou de criar a sala fixa (specs/011 S1): a sala copia o convite e avisa. */
+  created?: boolean;
 }
 
 function parse(pathname: string): Route {

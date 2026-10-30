@@ -1,5 +1,6 @@
 // Validação de cada mensagem do cliente (security.md A4/A5). Escrita à mão: são poucos tipos.
 import { AUDIO_KINDS, LIVE_SOURCES, NICKNAME_MAX, type AudioKind, type ClientMessage, type LiveSource, type SignalData } from '../shared/protocol';
+import { normalizeRoomName } from '../shared/room-name';
 
 type Obj = Record<string, unknown>;
 
@@ -84,4 +85,25 @@ export function parseClientMessage(raw: string): ClientMessage | null {
     default:
       return null;
   }
+}
+
+// ---------- HTTP (specs/011) ----------
+
+const MAX_BODY = 1024;
+
+/** Corpo do POST /api/rooms: vazio = sala rápida; `{ kind: 'fixed', name }` = sala fixa. null = inválido. */
+export function parseCreateBody(text: string): { kind: 'quick' } | { kind: 'fixed'; name: string } | null {
+  if (text.trim() === '') return { kind: 'quick' };
+  if (text.length > MAX_BODY) return null;
+  let body: unknown;
+  try {
+    body = JSON.parse(text);
+  } catch {
+    return null;
+  }
+  if (!isObj(body)) return null;
+  if (body.kind === 'quick' && hasOnly(body, ['kind'])) return { kind: 'quick' };
+  if (body.kind !== 'fixed' || !hasOnly(body, ['kind', 'name']) || typeof body.name !== 'string') return null;
+  const name = normalizeRoomName(body.name);
+  return name ? { kind: 'fixed', name } : null;
 }
