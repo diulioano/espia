@@ -23,6 +23,13 @@ describe('header (cabeçalho da sala)', () => {
     expect(header(view({ room: fixed, streams: [lu, bia], focusedId: 'bia' })).subtitle).toBe('Vendo Bia · 2 telas ao vivo');
   });
 
+  it('uma transmissão: o que está sendo transmitido vem antes da qualidade (specs/012)', () => {
+    expect(header(view({ streams: [{ ...lu, label: 'Hollow Knight' }] })).subtitle).toBe('Hollow Knight · 1080p · 60 fps · com som');
+    expect(header(view({ room: fixed, streams: [{ ...lu, label: 'Hollow Knight' }] })).subtitle).toBe(
+      'Lu está ao vivo · Hollow Knight · 1080p · 60 fps · com som',
+    );
+  });
+
   it('sala fixa conectando: ainda não sabe o nome', () => {
     expect(header(view({ room: fixed, status: 'connecting' })).subtitle).toBe('Conectando…');
   });

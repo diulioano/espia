@@ -53,9 +53,9 @@ const PEOPLE: ParticipantView[] = [
 ];
 
 const STREAMS: Record<string, StreamView> = {
-  lu: { id: 'lu', name: 'Lu', tone: 'accent', quality: '1080p · 60 fps · com som', caption: 'tela de Lu · Hollow Knight', status: 'ok', muted: false, volume: 0.68 },
-  bia: { id: 'bia', name: 'Bia', tone: 'sage', quality: '720p · 30 fps · com som', caption: 'aba de Bia · YouTube', status: 'ok', muted: true, volume: 0.68 },
-  tomas: { id: 'tomas', name: 'Tomás', tone: 'sand', quality: '1080p · 30 fps · sem som', caption: 'janela de Tomás · VS Code', status: 'loading', muted: true, volume: 0.68 },
+  lu: { id: 'lu', name: 'Lu', tone: 'accent', quality: '1080p · 60 fps · com som', caption: 'tela de Lu · Hollow Knight', label: 'Hollow Knight', status: 'ok', muted: false, volume: 0.68 },
+  bia: { id: 'bia', name: 'Bia', tone: 'sage', quality: '720p · 30 fps · com som', caption: 'aba de Bia · YouTube', label: 'Aba do navegador', status: 'ok', muted: true, volume: 0.68 },
+  tomas: { id: 'tomas', name: 'Tomás', tone: 'sand', quality: '1080p · 30 fps · sem som', caption: 'janela de Tomás · VS Code', label: 'Visual Studio Code', status: 'loading', muted: true, volume: 0.68 },
 };
 
 /** Cena `crowd`: o grupo inteiro (10) na mesma sala. Tons em rodízio, como no servidor. */
@@ -69,7 +69,9 @@ const CROWD: ParticipantView[] = (['Caio', 'Duda', 'Gabi', 'Nina', 'Theo', 'Vini
 
 function crowdStream(id: string): StreamView {
   const p = CROWD.find((c) => c.id === id)!;
-  return { id, name: p.name, tone: p.tone, quality: '1080p · 30 fps · sem som', caption: `tela de ${p.name}`, status: 'ok', muted: true, volume: 0.68 };
+  // Um texto comprido (cortado) e um de versão antiga (sem texto), specs/012.
+  const label = id === 'caio' ? 'Microsoft Flight Simulator 2024 — Edição Premium Deluxe' : id === 'duda' ? undefined : 'Tela inteira';
+  return { id, name: p.name, tone: p.tone, quality: '1080p · 30 fps · sem som', caption: `tela de ${p.name}`, label, status: 'ok', muted: true, volume: 0.68 };
 }
 
 const TOASTS: Partial<Record<RoomScene, Omit<ToastView, 'id'>>> = {
@@ -242,7 +244,8 @@ export function buildRoomScene(scene: RoomScene): RoomView {
   if (scene === 'streamfail') streams.find((s) => s.id === 'bia')!.status = 'failed';
 
   const meLive = scene === 'live' || scene === 'livescreen' || scene === 'livepc' || scene === 'livecam';
-  if (scene === 'livecam') streams.forEach((s) => (s.source = 'camera'));
+  if (scene === 'livecam') streams.forEach((s) => ((s.source = 'camera'), (s.label = 'Câmera · Logitech Brio')));
+  const myLabel = { live: 'Celeste', livecam: 'Câmera · HD Pro Webcam C920', livepc: 'Tela inteira', livescreen: 'Tela inteira' }[scene as string];
   const toast = TOASTS[scene];
 
   return {
@@ -252,6 +255,7 @@ export function buildRoomScene(scene: RoomScene): RoomView {
     participants: (scene === 'crowd' ? [...PEOPLE, ...CROWD] : PEOPLE).map((p) => ({
       ...p,
       live: ids.includes(p.id) || (p.you && meLive),
+      liveLabel: p.you ? (meLive ? myLabel : undefined) : streams.find((s) => s.id === p.id)?.label,
     })),
     capacity: 10,
     streams,
@@ -263,6 +267,7 @@ export function buildRoomScene(scene: RoomScene): RoomView {
           fps: 60,
           viewers: 3,
           startedAt: Date.now() - (12 * 60 + 4) * 1000,
+          label: myLabel,
           ...(scene === 'live'
             ? { audioKind: 'window' as const }
             : scene === 'livecam'

@@ -86,7 +86,7 @@
           {#if down}
             Sua transmissão continua · volta sozinha
           {:else}
-          {b.viewers} assistindo · {b.resolution}p · {b.fps} fps{b.adjusted ? ' · ajustado' : ''} · {audioLabelText(b.audioKind, b.audioReason)}{b.source === 'camera' && b.sourceTitle ? ` · câmera ${b.sourceTitle}` : ''}
+          {b.label ? `${b.label} · ` : ''}{b.viewers} assistindo · {b.resolution}p · {b.fps} fps{b.adjusted ? ' · ajustado' : ''} · {audioLabelText(b.audioKind, b.audioReason)}{!b.label && b.source === 'camera' && b.sourceTitle ? ` · câmera ${b.sourceTitle}` : ''}
           {/if}
         </span>
       </div>

@@ -7,6 +7,8 @@ export const TONES: readonly Tone[] = ['deep', 'accent', 'sage', 'sand'];
 export const CAPACITY = 10;
 export const NICKNAME_MAX = 24;
 export const MAX_MESSAGE_BYTES = 64 * 1024;
+/** Texto do que está sendo transmitido (specs/012). */
+export const LIVE_LABEL_MAX = 60;
 /** Nome de sala fixa (specs/011): 1–40 caracteres, nunca no link. */
 export const ROOM_NAME_MAX = 40;
 /** Suas salas: quantas salas fixas cada aparelho lembra (pedido de 2026-10-30). */
@@ -34,6 +36,11 @@ export interface LiveInfo {
   audio: AudioKind;
   source: LiveSource;
   startedAt: number;
+  /**
+   * O que está sendo transmitido (specs/012): "Hollow Knight", "Tela inteira", "Aba do navegador",
+   * "Câmera · C920". Nunca o título de uma janela. Ausente = cliente antigo.
+   */
+  label?: string;
 }
 
 export interface Peer {
@@ -62,7 +69,7 @@ export type ClientMessage =
   | { t: 'join'; nickname: string }
   | { t: 'resume'; peerId: string; resumeToken: string }
   | { t: 'signal'; to: string; data: SignalData }
-  | { t: 'live'; resolution: 720 | 1080; fps: 30 | 60; audio: AudioKind; source?: LiveSource }
+  | { t: 'live'; resolution: 720 | 1080; fps: 30 | 60; audio: AudioKind; source?: LiveSource; label?: string }
   | { t: 'unlive' }
   | { t: 'turn-refresh' };
 

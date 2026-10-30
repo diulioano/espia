@@ -31,6 +31,7 @@ import {
   saveSession,
   saveVolume,
 } from '../prefs';
+import { liveLabel } from '../live-label';
 import { roomPath } from '../room-id';
 import { forgetRoom, loadSavedRooms, rememberRoom, renameSaved, saveSavedRooms } from '../saved-rooms';
 import { deleteRoom, ownerErrorText, renameRoom } from '../api';
@@ -344,8 +345,8 @@ export class RoomStore {
   private buildView(): RoomView {
     const me = this.me;
     const participants = [
-      ...(me ? [{ id: me.id, name: me.nickname, tone: me.tone, you: true, live: !!this.myBroadcast }] : []),
-      ...this.peers.map((p) => ({ id: p.id, name: p.nickname, tone: p.tone, you: false, live: !!p.live })),
+      ...(me ? [{ id: me.id, name: me.nickname, tone: me.tone, you: true, live: !!this.myBroadcast, liveLabel: this.myBroadcast?.label }] : []),
+      ...this.peers.map((p) => ({ id: p.id, name: p.nickname, tone: p.tone, you: false, live: !!p.live, liveLabel: p.live?.label })),
     ];
     const streams: StreamView[] = this.peers
       .filter((p) => p.live)
@@ -364,6 +365,7 @@ export class RoomStore {
           volume: a.volume,
           stream: flowing ? m.stream! : undefined,
           source: p.live!.source,
+          label: p.live!.label,
         };
       });
     return {
@@ -607,6 +609,8 @@ export class RoomStore {
       stream,
       audioKind: a.kind,
       audioReason: a.reason,
+      // O tipo que o navegador entregou (specs/012 FR-004): ele não conta o nome da janela/aba.
+      label: liveLabel({ kind: 'browser', surface: video?.getSettings().displaySurface }),
     };
     const q = this.quality!;
     this.appliedQuality = q;
@@ -668,6 +672,12 @@ export class RoomStore {
       stream,
       audioKind: session.result.audio,
       sourceTitle: source.title,
+      // Só o programa, nunca o título da janela (specs/012 FR-002).
+      label: liveLabel(
+        source.kind === 'monitor'
+          ? { kind: 'native-monitor', title: source.title, monitors: this.sources.filter((s) => s.kind === 'monitor').length }
+          : { kind: 'native-window', app: source.app },
+      ),
     };
     const q = this.quality!;
     this.appliedQuality = q;
@@ -856,6 +866,8 @@ export class RoomStore {
       audioKind: stream.getAudioTracks().length ? 'device' : 'none',
       source: 'camera',
       sourceTitle: video?.label ?? (this.camFacing === 'user' ? 'câmera frontal' : 'câmera traseira'),
+      // No celular, "frontal/traseira" diz mais que o nome técnico do sensor (specs/012).
+      label: liveLabel(canShareScreen() ? { kind: 'camera', title: video?.label } : { kind: 'camera', title: undefined, facing: this.camFacing }),
     };
     const q = this.quality!;
     this.appliedQuality = q;
@@ -877,10 +889,14 @@ export class RoomStore {
     const b = this.myBroadcast;
     if (!b || this.stream !== stream) return;
     const a = applyAudioRule(stream, wanted);
+    // "Compartilhar esta aba" no meio: o tipo pode ter mudado (specs/012).
+    const label = liveLabel({ kind: 'browser', surface: stream.getVideoTracks()[0]?.getSettings().displaySurface });
+    const relabel = label !== b.label;
+    b.label = label;
     // Faixa de áudio pode ter entrado ou saído: manda o estado atual (setLocal é idempotente).
     if (this.quality) this.mesh?.setLocal(stream, this.quality);
     if (a.warn) this.warnScreenAudio();
-    if (a.kind !== b.audioKind || a.reason !== b.audioReason) {
+    if (relabel || a.kind !== b.audioKind || a.reason !== b.audioReason) {
       b.audioKind = a.kind;
       b.audioReason = a.reason;
       this.sendLive();
@@ -892,7 +908,14 @@ export class RoomStore {
     const b = this.myBroadcast;
     if (!b) return;
     const q = this.quality ?? b;
-    this.signaling.send({ t: 'live', resolution: q.resolution, fps: q.fps, audio: b.audioKind, source: b.source ?? 'screen' });
+    this.signaling.send({
+      t: 'live',
+      resolution: q.resolution,
+      fps: q.fps,
+      audio: b.audioKind,
+      source: b.source ?? 'screen',
+      ...(b.label ? { label: b.label } : {}),
+    });
   }
 
   private async applyQuality(q: Quality) {

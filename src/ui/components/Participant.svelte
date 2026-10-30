@@ -5,8 +5,13 @@
 
   let { person, watching = false }: { person: ParticipantView; watching?: boolean } = $props();
 
+  // Com a descrição (specs/012), ela toma o lugar do "transmitindo": o selo AO VIVO já diz isso.
   const sub = $derived(
-    watching ? 'você está assistindo' : person.live ? (person.you ? 'transmitindo pra sala' : 'transmitindo') : '',
+    watching
+      ? 'você está assistindo'
+      : person.live
+        ? (person.liveLabel ?? (person.you ? 'transmitindo pra sala' : 'transmitindo'))
+        : '',
   );
 </script>
 
@@ -35,5 +40,5 @@
     font-size: 11px; padding: 1px 8px; border-radius: var(--radius-pill);
     background: rgba(245, 234, 216, 0.1); color: color-mix(in srgb, var(--color-text) 75%, transparent);
   }
-  .sub { font-size: 12px; color: var(--color-text-muted); }
+  .sub { font-size: 12px; color: var(--color-text-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 </style>

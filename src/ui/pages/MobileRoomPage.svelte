@@ -107,7 +107,10 @@
               onclick={() => actions.focus(s.id)}
             >
               <Avatar name={s.name} tone={s.tone} size={32} />
-              {s.name}
+              <span class="chip-text">
+                <span>{s.name}</span>
+                {#if s.label}<span class="chip-what">{s.label}</span>{/if}
+              </span>
             </button>
           {/each}
         </div>
@@ -224,6 +227,9 @@
     background: var(--color-surface); color: var(--color-text); font-weight: 600; font-size: 15px;
   }
   .chip.current { background: var(--color-accent); color: var(--color-accent-900); font-weight: 700; }
+  .chip-text { display: flex; flex-direction: column; align-items: flex-start; line-height: 1.15; min-width: 0; }
+  /* O que está sendo transmitido (specs/012), embaixo do nome. */
+  .chip-what { max-width: 140px; font-size: 12px; font-weight: 500; opacity: 0.72; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 
   .people { gap: 4px; padding: 0 8px; }
   .people .label { padding: 0 8px 4px; }

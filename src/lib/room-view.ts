@@ -45,18 +45,23 @@ export function header(view: RoomView): { title: string; subtitle: string } {
     const s = view.streams[0];
     return {
       title: `${s.name} está ao vivo`,
-      subtitle: view.myBroadcast ? 'Você também está transmitindo' : (s.quality ?? ''),
+      subtitle: view.myBroadcast ? 'Você também está transmitindo' : streamLine(s),
     };
   }
   if (layout === 'grid') return { title: `${n} telas ao vivo`, subtitle: 'Escolha qual assistir' };
   return { title: `Vendo ${focusedStream(view)!.name}`, subtitle: `${n} telas ao vivo` };
 }
 
+/** "Hollow Knight · 1080p · 60 fps · com som" (o que está sendo transmitido vem primeiro, specs/012). */
+function streamLine(s: StreamView): string {
+  return [s.label, s.quality].filter(Boolean).join(' · ');
+}
+
 function fixedSubtitle(view: RoomView, layout: StageLayout, n: number): string {
   if (layout === 'empty') return view.myBroadcast ? 'Você está ao vivo · ninguém mais transmitindo' : 'Ninguém transmitindo agora';
   if (layout === 'single') {
     const s = view.streams[0];
-    return `${s.name} está ao vivo · ${view.myBroadcast ? 'você também está transmitindo' : (s.quality ?? '')}`;
+    return `${s.name} está ao vivo · ${view.myBroadcast ? 'você também está transmitindo' : streamLine(s)}`;
   }
   if (layout === 'grid') return `${n} telas ao vivo · escolha qual assistir`;
   return `Vendo ${focusedStream(view)!.name} · ${n} telas ao vivo`;

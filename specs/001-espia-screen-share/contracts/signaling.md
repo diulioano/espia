@@ -58,3 +58,5 @@ interface Peer { id: string; nickname: string; tone: Tone; live: LiveInfo | null
 
 
 > **specs/011**: tolerância 20 s → 60 s; sala rápida segurada 5 min quando todos caem; quem está na sala fica também no storage (`roster`) para sobreviver a publicações; `welcome.room`, `room-renamed`, `room-deleted` e fechamento `4410`. Ver [signaling-delta.md](../../011-salas-fixas/contracts/signaling-delta.md).
+
+> **specs/012**: `live` e `LiveInfo` ganham `label` opcional (o que está sendo transmitido, ≤ 60). Ver [signaling-delta.md](../../012-mostrar-o-que-transmite/contracts/signaling-delta.md).

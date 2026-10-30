@@ -1,5 +1,5 @@
 // Validação de cada mensagem do cliente (security.md A4/A5). Escrita à mão: são poucos tipos.
-import { AUDIO_KINDS, LIVE_SOURCES, NICKNAME_MAX, SAVED_ROOMS_MAX, type AudioKind, type ClientMessage, type LiveSource, type SignalData } from '../shared/protocol';
+import { AUDIO_KINDS, LIVE_LABEL_MAX, LIVE_SOURCES, NICKNAME_MAX, SAVED_ROOMS_MAX, type AudioKind, type ClientMessage, type LiveSource, type SignalData } from '../shared/protocol';
 import { ROOM_ID_RE } from '../lib/room-id';
 import { normalizeRoomName } from '../shared/room-name';
 
@@ -17,6 +17,14 @@ export function cleanNickname(raw: unknown): string | null {
   const s = raw.normalize('NFC').replace(UNSAFE, '').replace(/\s+/g, ' ').trim();
   const len = [...s].length;
   return len >= 1 && len <= NICKNAME_MAX ? s : null;
+}
+
+/** O que está sendo transmitido (specs/012): mesma limpeza do apelido, até 60. Inválido → sem texto. */
+export function cleanLiveLabel(raw: unknown): string | undefined {
+  if (typeof raw !== 'string' || raw.length > LIVE_LABEL_MAX * 4) return undefined;
+  const s = raw.normalize('NFC').replace(UNSAFE, '').replace(/\s+/g, ' ').trim();
+  const len = [...s].length;
+  return len >= 1 && len <= LIVE_LABEL_MAX ? s : undefined;
 }
 
 const SDP_TYPES = ['offer', 'answer', 'pranswer', 'rollback'];
@@ -69,7 +77,7 @@ export function parseClientMessage(raw: string): ClientMessage | null {
       return data ? { t: 'signal', to: m.to, data } : null;
     }
     case 'live': {
-      if (!hasOnly(m, ['t', 'resolution', 'fps', 'audio', 'source'])) return null;
+      if (!hasOnly(m, ['t', 'resolution', 'fps', 'audio', 'source', 'label'])) return null;
       if (m.resolution !== 720 && m.resolution !== 1080) return null;
       if (m.fps !== 30 && m.fps !== 60) return null;
       // boolean: abas abertas antes da 002 (compatibilidade temporária, contracts/signaling-delta.md).
@@ -78,7 +86,9 @@ export function parseClientMessage(raw: string): ClientMessage | null {
       // Sem source: cliente de antes da 006 → tela (specs/006 contracts/signaling-live.md).
       const source = m.source === undefined ? 'screen' : m.source;
       if (!LIVE_SOURCES.includes(source as LiveSource)) return null;
-      return { t: 'live', resolution: m.resolution, fps: m.fps, audio: m.audio as AudioKind, source: source as LiveSource };
+      // Texto ruim não derruba o "ao vivo": só vai sem ele (specs/012).
+      const label = cleanLiveLabel(m.label);
+      return { t: 'live', resolution: m.resolution, fps: m.fps, audio: m.audio as AudioKind, source: source as LiveSource, ...(label ? { label } : {}) };
     }
     case 'unlive':
     case 'turn-refresh':

@@ -42,7 +42,8 @@
   const thumb = $derived(size === 'thumb');
   const hasControls = $derived(controls && view.status === 'ok' && !thumb);
   const showName = $derived(alwaysName || size !== 'stage' || active);
-  const label = $derived(you ? 'Você' : view.source === 'camera' ? `câmera de ${view.name}` : view.name);
+  // Com a descrição (specs/012), ela já diz se é câmera: "Lu · Câmera · C920".
+  const label = $derived(you ? 'Você' : view.source === 'camera' && !view.label ? `câmera de ${view.name}` : view.name);
   const level = $derived(view.muted ? 0 : view.volume);
 
   $effect(() => {
@@ -144,7 +145,8 @@
 
   <div class="name-chip" class:visible={showName}>
     <LiveBadge />
-    <span>{label}</span>
+    <span class="who">{label}</span>
+    {#if view.label && !you}<span class="what">· {view.label}</span>{/if}
   </div>
 
   {#if view.muted && view.status === 'ok' && !you}
@@ -238,6 +240,14 @@
     opacity: 0; transition: opacity 150ms ease-out; pointer-events: none;
   }
   .name-chip.visible { opacity: 1; }
+  /* Não passa por baixo do selo de mudo, no canto direito. */
+  .name-chip { max-width: calc(100% - 80px); }
+  .size-thumb .name-chip { max-width: calc(100% - 16px); }
+  .who { flex: none; }
+  .what {
+    min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-weight: 500;
+    color: color-mix(in srgb, var(--color-text) 72%, transparent);
+  }
   .size-thumb .name-chip { top: 8px; left: 8px; font-size: 12px; }
 
   .muted-badge {

@@ -20,6 +20,8 @@ export interface ParticipantView {
   tone: Tone;
   you: boolean;
   live: boolean;
+  /** O que essa pessoa está transmitindo (specs/012). */
+  liveLabel?: string;
 }
 
 export interface StreamView {
@@ -35,6 +37,8 @@ export interface StreamView {
   /** 0..1 */
   volume: number;
   stream?: MediaStream;
+  /** O que está sendo transmitido (specs/012): "Hollow Knight", "Aba do navegador"… */
+  label?: string;
   /** Câmera/placa (specs/006): o tile diz "câmera de …". */
   source?: LiveSource;
 }
@@ -121,8 +125,10 @@ export interface MyBroadcastView extends GoLivePrefs {
   audioKind: AudioKind;
   /** Sem som porque é tela inteira. */
   audioReason?: 'monitor';
-  /** Título da janela/tela escolhida no app desktop, ou o nome da câmera. */
+  /** Título da janela/tela escolhida no app desktop, ou o nome da câmera. Só pra você; não vai pra sala. */
   sourceTitle?: string;
+  /** O que a sala vê como descrição da sua transmissão (specs/012). */
+  label?: string;
   source?: LiveSource;
 }
 

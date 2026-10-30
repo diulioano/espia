@@ -786,3 +786,44 @@ describe('Dono (specs/011)', () => {
     expect((await remove(code, auth(ownerKey))).status).toBe(410);
   });
 });
+
+describe('Descrição da transmissão (specs/012)', () => {
+  const live = (label?: unknown) => ({ t: 'live', resolution: 1080, fps: 60, audio: 'window', ...(label !== undefined ? { label } : {}) });
+
+  it('vai pros outros e pra quem entra depois', async () => {
+    const code = await createRoom();
+    const { c: a } = await Client.join(code, 'Lu');
+    const { c: b } = await Client.join(code, 'Rafa');
+    a.send(live('Hollow Knight'));
+    expect((await b.next('peer-live')).live?.label).toBe('Hollow Knight');
+    const { welcome } = await Client.join(code, 'Bia');
+    expect(welcome.peers.find((p) => p.nickname === 'Lu')?.live?.label).toBe('Hollow Knight');
+  });
+
+  it('limpa caracteres invisíveis; texto ruim não derruba o "ao vivo"', async () => {
+    const code = await createRoom();
+    const { c: a } = await Client.join(code, 'Lu');
+    const { c: b } = await Client.join(code, 'Rafa');
+    a.send(live('Hollow‮ Knight'));
+    expect((await b.next('peer-live')).live?.label).toBe('Hollow Knight');
+    a.send(live('x'.repeat(61)));
+    const long = (await b.next('peer-live')).live!;
+    expect(long.resolution).toBe(1080);
+    expect(long).not.toHaveProperty('label');
+    a.send(live(42));
+    expect((await b.next('peer-live')).live).not.toHaveProperty('label');
+    a.send(live());
+    expect((await b.next('peer-live')).live).not.toHaveProperty('label');
+  });
+
+  it('não aparece na prévia nem em Suas salas', async () => {
+    const res = await call('/api/rooms', { method: 'POST', headers: ORIGIN, body: JSON.stringify({ kind: 'fixed', name: 'CS' }) });
+    const { code } = (await res.json()) as { code: string };
+    const { c: a } = await Client.join(code, 'Lu');
+    a.send(live('Hollow Knight'));
+    await sleep(100);
+    expect(await (await call(`/api/rooms/${code}`)).text()).not.toContain('Hollow');
+    const status = await call('/api/rooms/status', { method: 'POST', headers: ORIGIN, body: JSON.stringify({ codes: [code] }) });
+    expect(await status.text()).not.toContain('Hollow');
+  });
+});
