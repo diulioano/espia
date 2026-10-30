@@ -135,6 +135,10 @@
     dismissToast(id) {
       view.toasts = view.toasts.filter((t) => t.id !== id);
     },
+    goHome() {
+      if (view.myBroadcast && !confirm('Você está transmitindo. Parar e sair da sala?')) return;
+      onnavigate('home', 'default');
+    },
     // Dono da sala fixa (specs/011 S2–S4).
     toggleOwnerMenu(open) {
       view.ownerMenu = open;

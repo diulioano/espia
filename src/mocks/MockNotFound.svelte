@@ -10,6 +10,7 @@
   const view = buildNotFoundScene(scene, saved);
 
   const actions: NotFoundActions = {
+    goHome: () => onnavigate('home', 'default'),
     createRoom: () => onnavigate('home', 'default'),
     pasteOtherLink: () => onnavigate('home', 'default'),
     forget: () => onnavigate('home', 'default'),

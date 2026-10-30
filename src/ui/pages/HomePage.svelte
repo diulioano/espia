@@ -1,6 +1,7 @@
 <script lang="ts">
   import { cleanNickname, NICKNAME_MAX } from '../../lib/join-view';
-  import { Pin } from '@lucide/svelte';
+  import { Download, Pin } from '@lucide/svelte';
+  import { DOWNLOAD_URL } from '../../lib/app-invite';
   import type { HomeActions, HomeView } from '../../lib/types';
   import AppInvite from '../components/AppInvite.svelte';
   import Logo from '../components/Logo.svelte';
@@ -65,7 +66,13 @@
     </div>
   </div>
 
-  <header class="top"><Logo size={36} /></header>
+  <header class="top">
+    <Logo size={36} onhome={() => scrollTo({ top: 0, behavior: 'smooth' })} />
+    <!-- Sempre à mão no site, no Windows (specs/013), mesmo depois do "Agora não" no convite. -->
+    {#if view.download}
+      <a class="btn btn-secondary download" href={DOWNLOAD_URL} download><Download size={16} strokeWidth={2.75} />Baixar o app</a>
+    {/if}
+  </header>
 
   <main class="content">
     <h1>Mostre sua tela pros amigos.</h1>
@@ -176,7 +183,8 @@
     border-radius: var(--radius-tile-sm); box-shadow: 0 20px 50px rgba(0, 0, 0, 0.5);
   }
 
-  .top { position: relative; padding: 36px 72px; }
+  .top { position: relative; z-index: 2; display: flex; align-items: center; justify-content: space-between; gap: 16px; padding: 36px 72px; }
+  .download { min-height: 40px; padding: 0 16px; font-size: 14px; gap: 8px; }
   /* Com Suas salas, a ilustração sai e o painel entra no lugar. */
   .has-rooms .art { display: none; }
   .saved { position: absolute; right: 72px; top: 104px; z-index: 1; }

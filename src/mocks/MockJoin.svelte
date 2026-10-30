@@ -10,6 +10,7 @@
   const view = buildJoinScene(scene);
 
   const actions: JoinActions = {
+    goHome: () => onnavigate('home', 'default'),
     join() {
       // Simula o fluxo real: conectando (E1) → sala.
       const screen = view.canShare ? 'room' : 'mobile';

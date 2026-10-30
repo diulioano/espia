@@ -42,7 +42,7 @@
 
 <div class="room">
   <aside class="sidebar">
-    <Logo />
+    <Logo onhome={actions.goHome} />
 
     <div class="people">
       <div class="people-head">

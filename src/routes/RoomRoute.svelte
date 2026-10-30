@@ -95,6 +95,7 @@
   });
 
   const joinActions: JoinActions = {
+    goHome: () => router.go('/'),
     join(nickname) {
       saveNickname(nickname);
       join.nickname = nickname;
@@ -106,6 +107,7 @@
   };
 
   const notFoundActions: NotFoundActions = {
+    goHome: () => router.go('/'),
     createRoom: () => router.go('/'),
     pasteOtherLink: () => router.go('/'),
     forget: () => {

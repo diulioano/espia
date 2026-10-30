@@ -28,8 +28,8 @@
 <div class="not-found">
   <div class="blob" aria-hidden="true"></div>
   <header class="top">
-    <span class="logo-desktop"><Logo size={36} /></span>
-    <span class="logo-mobile"><Logo size={29} /></span>
+    <span class="logo-desktop"><Logo size={36} onhome={actions.goHome} /></span>
+    <span class="logo-mobile"><Logo size={29} onhome={actions.goHome} /></span>
   </header>
 
   <main class="card">

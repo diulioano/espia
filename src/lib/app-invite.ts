@@ -17,7 +17,15 @@ export interface InviteEnv {
 
 /** Mostrar o convite? Na dúvida, não. */
 export function appInviteVisible(env: InviteEnv): boolean {
-  if (env.inApp || env.dismissed || env.mobile) return false;
+  return !env.dismissed && appDownloadVisible(env);
+}
+
+/**
+ * Botão "Baixar o app" no topo da tela inicial (specs/013): a mesma regra do convite, mas continua lá
+ * depois do "Agora não". Só no site, no Windows, fora do celular. Na dúvida, não.
+ */
+export function appDownloadVisible(env: Omit<InviteEnv, 'dismissed'>): boolean {
+  if (env.inApp || env.mobile) return false;
   if (env.platform) return env.platform === 'Windows';
   return /Windows NT/.test(env.ua) && !/Mobile|Android/.test(env.ua);
 }

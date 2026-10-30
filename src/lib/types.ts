@@ -178,6 +178,8 @@ export interface HomeView {
   creating?: boolean;
   /** Convite do app desktop (specs/008): oferta, ou a dica depois de baixar. Ausente = não mostra. */
   appInvite?: 'offer' | 'hint';
+  /** Botão "Baixar o app" no topo (specs/013): só no site, no Windows, mesmo depois de "Agora não". */
+  download?: boolean;
   /** Suas salas (specs/011 US3). null = nenhuma neste aparelho → a ilustração de sempre. */
   rooms?: SavedRoomsView | null;
   /** Modal "Criar sala fixa" aberto (specs/011 F7) ou "Renomear sala" de uma linha de Suas salas. */
@@ -282,12 +284,16 @@ export interface NotFoundView {
 }
 
 export interface NotFoundActions {
+  /** Logo (specs/013). */
+  goHome(): void;
   createRoom(): void;
   pasteOtherLink(): void;
   forget(): void;
 }
 
 export interface JoinActions {
+  /** Logo (specs/013). */
+  goHome(): void;
   join(nickname: string): void;
   createRoom(): void;
   pasteOtherLink(): void;
@@ -319,6 +325,8 @@ export interface RoomActions {
   dismissToast(id: string): void;
   /** "Tentar de novo" na tela "Não deu pra voltar pra sala" (specs/011). */
   retryConnection(): void;
+  /** Logo (specs/013): sai da sala e vai pro início; transmitindo, pergunta antes. */
+  goHome(): void;
   /** Dono da sala fixa (specs/011 US4). */
   toggleOwnerMenu(open: boolean): void;
   openRename(): void;

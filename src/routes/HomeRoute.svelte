@@ -1,7 +1,7 @@
 <script lang="ts">
   // "/" real: cria sala no servidor ou abre um link colado.
   import { createFixedRoom, createRoom, deleteRoom, fetchStatuses, ownerErrorText, renameRoom } from '../lib/api';
-  import { appInviteVisible, readInviteEnv } from '../lib/app-invite';
+  import { appDownloadVisible, appInviteVisible, readInviteEnv } from '../lib/app-invite';
   import {
     forgetOwnerKey,
     loadAppInviteDismissed,
@@ -25,6 +25,7 @@
     createError: null,
     creating: false,
     appInvite: appInviteVisible({ ...readInviteEnv(), dismissed: loadAppInviteDismissed() }) ? 'offer' : undefined,
+    download: appDownloadVisible(readInviteEnv()),
   });
 
   // Suas salas (specs/011 US3): a lista do aparelho + quantas pessoas em cada uma agora.

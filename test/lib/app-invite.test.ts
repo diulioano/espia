@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { appInviteVisible, type InviteEnv } from '../../src/lib/app-invite';
+import { appDownloadVisible, appInviteVisible, type InviteEnv } from '../../src/lib/app-invite';
 
 const UA = {
   winChrome: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/141.0.0.0 Safari/537.36',
@@ -33,5 +33,19 @@ describe('convite do app (specs/008)', () => {
   it('dentro do app ou depois do "Agora não" → não mostra', () => {
     expect(appInviteVisible(env({ platform: 'Windows', inApp: true }))).toBe(false);
     expect(appInviteVisible(env({ platform: 'Windows', dismissed: true }))).toBe(false);
+  });
+});
+
+describe('botão "Baixar o app" (specs/013)', () => {
+  it('Windows no site: sim, mesmo depois de "Agora não"', () => {
+    expect(appDownloadVisible(env({ platform: 'Windows', mobile: false, dismissed: true }))).toBe(true);
+    expect(appInviteVisible(env({ platform: 'Windows', mobile: false, dismissed: true }))).toBe(false);
+  });
+
+  it('no app, no celular, no Mac e no Linux: não', () => {
+    expect(appDownloadVisible(env({ inApp: true }))).toBe(false);
+    expect(appDownloadVisible(env({ platform: 'Android', mobile: true, ua: UA.android }))).toBe(false);
+    expect(appDownloadVisible(env({ ua: UA.mac }))).toBe(false);
+    expect(appDownloadVisible(env({ ua: UA.linux }))).toBe(false);
   });
 });

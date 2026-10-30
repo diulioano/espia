@@ -73,6 +73,8 @@ function roomsFor(scene: HomeScene): SavedRoomsView | null {
 export function buildHomeScene(scene: HomeScene): HomeView {
   return {
     rooms: roomsFor(scene),
+    // No celular o app não existe (specs/013).
+    download: scene !== 'mobile',
     nickname: scene === 'empty' ? '' : 'Rafa',
     link: scene === 'error' ? 'https://youtu.be/dQw4w9WgXcQ' : '',
     linkError: scene === 'error' ? LINK_ERROR : null,

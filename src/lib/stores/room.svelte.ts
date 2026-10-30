@@ -523,6 +523,11 @@ export class RoomStore {
         this.nameDialog = undefined;
         this.deleteDialog = undefined;
       },
+      goHome: () => {
+        if (this.myBroadcast && !confirm('Você está transmitindo. Parar e sair da sala?')) return;
+        this.destroy();
+        this.onLeave();
+      },
       retryConnection: () => {
         this.markDown();
         this.signaling.retryNow();

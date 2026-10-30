@@ -26,8 +26,8 @@
 <div class="join-page" class:watch-only={!view.canShare} class:problem={view.status !== 'ready'}>
   <div class="blob" aria-hidden="true"></div>
   <header class="top">
-    <span class="logo-desktop"><Logo size={36} /></span>
-    <span class="logo-mobile"><Logo size={29} /></span>
+    <span class="logo-desktop"><Logo size={36} onhome={actions.goHome} /></span>
+    <span class="logo-mobile"><Logo size={29} onhome={actions.goHome} /></span>
   </header>
   {#if view.status === 'ready'}
     <!-- Espia por trás do card (vem antes dele no DOM). -->

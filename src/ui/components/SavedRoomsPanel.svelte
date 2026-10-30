@@ -54,7 +54,8 @@
 
 <style>
   .panel { position: relative; width: 600px; max-width: 100%; }
-  .castor { position: absolute; right: 56px; top: -78px; transform: rotate(4deg); }
+  /* À esquerda: a direita do topo é do botão "Baixar o app" (specs/013). */
+  .castor { position: absolute; left: 48px; top: -78px; transform: rotate(-4deg); }
   .card {
     position: relative; display: flex; flex-direction: column; gap: 14px; padding: 26px 18px 18px;
     border-radius: 36px; background: var(--color-surface); box-shadow: 0 30px 70px rgba(0, 0, 0, 0.35);
