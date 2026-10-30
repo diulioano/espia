@@ -16,7 +16,7 @@ interface Peer { id: string; nickname: string; tone: Tone; live: LiveInfo | null
 | `t` | Campos | Efeito |
 |---|---|---|
 | `join` | `nickname` | Primeira mensagem obrigatória. Resposta `welcome`, `room-full` ou `room-not-found` |
-| `resume` | `peerId`, `resumeToken` | Reconexão dentro da tolerância de 20 s: recupera a mesma identidade. Resposta `welcome` ou `resume-failed` (aí o cliente manda `join`) |
+| `resume` | `peerId`, `resumeToken` | Reconexão dentro da tolerância de 60 s: recupera a mesma identidade. Resposta `welcome` ou `resume-failed` (aí o cliente manda `join`) |
 | `signal` | `to`, `data`: `{ description: RTCSessionDescriptionInit }` ou `{ candidate: RTCIceCandidateInit \| null }` | Repassado ao peer `to` com `from` preenchido pelo servidor |
 | `live` | `resolution`, `fps`, `audio` | Marca você como ao vivo (`startedAt` definido pelo servidor) |
 | `unlive` | — | Encerra sua transmissão |
@@ -32,7 +32,7 @@ interface Peer { id: string; nickname: string; tone: Tone; live: LiveInfo | null
 | `room-full` | `capacity` | 10 pessoas; servidor fecha (4409) |
 | `resume-failed` | — | Token inválido ou tolerância expirou |
 | `peer-joined` | `peer: Peer` | Alguém entrou |
-| `peer-left` | `id` | Saiu (ou não voltou em 20 s) |
+| `peer-left` | `id` | Saiu (ou não voltou em 60 s) |
 | `peer-live` | `id`, `live: LiveInfo \| null` | Começou (`live`) ou parou (`null`) |
 | `signal` | `from`, `data` | Mensagem WebRTC de outro peer |
 | `ice-servers` | `iceServers`, `iceExpiresAt` | Resposta a `turn-refresh` |
@@ -42,7 +42,7 @@ interface Peer { id: string; nickname: string; tone: Tone; live: LiveInfo | null
 
 - Quem **acabou de entrar** cria a conexão WebRTC (com canal `ctl`) com cada peer da lista `peers`. Os outros esperam o primeiro `signal`.
 - Papel na *perfect negotiation*: `polite = meuId < idDoOutro`.
-- Fechar o socket inicia a tolerância de 20 s; sem `resume` → `peer-left` para todos e revogação da credencial TURN dessa pessoa.
+- Fechar o socket inicia a tolerância de 60 s; sem `resume` → `peer-left` para todos e revogação da credencial TURN dessa pessoa.
 - Fechar com código **4001** = saída voluntária ("Sair da sala"): `peer-left` na hora, sem tolerância.
 - `resume` com o socket antigo ainda aberto: a nova conexão assume a identidade e a antiga é fechada com **4000**.
 - `ping` precisa ser exatamente a string `{"t":"ping"}` (resposta automática do runtime).
@@ -55,3 +55,6 @@ interface Peer { id: string; nickname: string; tone: Tone; live: LiveInfo | null
 | `t` | Campos | Efeito |
 |---|---|---|
 | `view` | `mode: 'full' \| 'thumb' \| 'hidden'` | Como eu estou vendo a SUA transmissão. Quem transmite ajusta o envio só para mim (thumb ≈ 360p·15fps·0,5 Mbps; hidden = pausa o envio com `encodings[0].active = false`) |
+
+
+> **specs/011**: tolerância 20 s → 60 s; sala rápida segurada 5 min quando todos caem; quem está na sala fica também no storage (`roster`) para sobreviver a publicações; `welcome.room`, `room-renamed`, `room-deleted` e fechamento `4410`. Ver [signaling-delta.md](../../011-salas-fixas/contracts/signaling-delta.md).

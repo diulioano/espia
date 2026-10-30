@@ -327,48 +327,48 @@
 
 **Independent Test**: quickstart §1 (PATCH/DELETE) e §3 passos 5 e 7.
 
-- [ ] T1153 [US4] `src/worker/room.ts`, RPCs `rename(ownerHash, name)` e `remove(ownerHash)` → `'ok' | 'forbidden' | 'notfound' | 'gone'`:
+- [X] T1153 [US4] `src/worker/room.ts`, RPCs `rename(ownerHash, name)` e `remove(ownerHash)` → `'ok' | 'forbidden' | 'notfound' | 'gone'`:
   - compara `ownerHash` com `fixed.ownerHash` usando `tokensEqual`. Sala rápida → `forbidden`;
   - `rename`: grava `fixed.name` e faz `broadcast({ t: 'room-renamed', name })`;
   - `remove`: `broadcast({ t: 'room-deleted' })`, fecha cada socket com `CLOSE.deleted` ("sala apagada"), revoga o TURN de todos (membros + fantasmas) e chama `bury('deleted')`.
-- [ ] T1154 [US4] `src/worker/index.ts`, `PATCH` e `DELETE /api/rooms/:code`:
+- [X] T1154 [US4] `src/worker/index.ts`, `PATCH` e `DELETE /api/rooms/:code`:
   - `sameOrigin`, `allowed(env.RL_CREATE)` e código válido;
   - `Authorization: Bearer <64 hex>` senão 403, e `ownerHash = sha256Hex(key)`;
   - `PATCH` lê `{ name }` com `normalizeRoomName` (null → `400 { error: 'name' }`);
   - mapear `ok` → `200 { name }`/`204`, `forbidden` → 403, `notfound` → 404 e `gone` → `410 { reason }`;
   - o `GET` continua igual, e outros métodos → 405.
-- [ ] T1155 [US4] Testes em `test/worker/room.test.ts`, bloco `describe('Dono (specs/011)')`:
+- [X] T1155 [US4] Testes em `test/worker/room.test.ts`, bloco `describe('Dono (specs/011)')`:
   - `PATCH` sem cabeçalho, com chave errada e em sala rápida → 403;
   - chave certa → 200, quem está dentro recebe `room-renamed`, e a prévia e o `status` mostram o nome novo;
   - `DELETE` com 2 dentro → as duas recebem `room-deleted` e fechamento 4410, o TURN é revogado (API simulada registra), a prévia vira `410 { reason:'deleted' }` e um `ws` novo recebe `room-not-found`;
   - Origin de fora → 403.
-- [ ] T1156 [US4] Cliente, sinalização e API:
+- [X] T1156 [US4] Cliente, sinalização e API:
   - `src/lib/signaling.ts`: `SignalingEnd += 'deleted'`; `room-deleted` ou fechamento `CLOSE.deleted` → `end('deleted')`;
   - `src/lib/api.ts`: `renameRoom(code, key, name)` → `{ ok: true; name } | { ok: false; reason: 'forbidden' | 'gone' | 'name' | 'network' }` e `deleteRoom(code, key)` → `{ ok: true } | { ok: false; reason }`.
-- [ ] T1157 [US4] `src/lib/stores/room.svelte.ts`:
+- [X] T1157 [US4] `src/lib/stores/room.svelte.ts`:
   - `room-renamed` → atualiza `roomInfo.name` e `renameSaved` na lista;
   - estado `ownerMenu`, `nameDialog` e `deleteDialog` (`DeleteDialogView { name; people; busy }`);
   - ações `toggleOwnerMenu()`, `openRename()`, `submitRename(name)` (`api.renameRoom`; o nome muda pelo `room-renamed`), `openDelete()` (`people` = `peers.length + 1` menos eu = `peers.length`) e `confirmDelete()` (`api.deleteRoom` → `forgetRoom` + `forgetOwnerKey` → `onLeave()`), mais `closeDialogs()`;
   - tudo desabilitado se `link !== 'ok'`;
   - adicionar em `RoomActions`/`RoomView` (`src/lib/types.ts`).
-- [ ] T1158 [P] [US4] Criar `src/ui/components/RoomMenu.svelte` (popover de SavedRoom.dc.html e Room.dc.html):
+- [X] T1158 [P] [US4] Criar `src/ui/components/RoomMenu.svelte` (popover de SavedRoom.dc.html e Room.dc.html):
   - largura 220/230px, raio 22px, fundo `#322e28`, sombra do design;
   - itens de 44px: "Renomear sala" (`Pencil`), "Apagar sala" (`Trash2`, `--color-accent-300`) e separador, só se `own`; depois "Tirar da lista" (`ListX`/`AlignLeft` do design) com a nota "Some só deste aparelho. A sala continua pros outros.";
   - variante `room`: só os itens do dono, com a nota "Só aparece pra você — a sala foi criada neste aparelho.";
   - fecha com Esc e com clique fora.
-- [ ] T1159 [P] [US4] Criar `src/ui/components/DeleteRoomDialog.svelte` (Room.dc.html `showDelete`):
+- [X] T1159 [P] [US4] Criar `src/ui/components/DeleteRoomDialog.svelte` (Room.dc.html `showDelete`):
   - círculo 52px `--color-accent-300` com `Trash2`;
   - "Apagar "<nome>"?" e "O link para de funcionar para todo mundo. Não tem como desfazer.";
   - se `people > 0`, a caixa `rgba(198,113,57,0.12)` com `Users` e "Tem N pessoas aqui agora. Elas saem da sala e veem um aviso." ("1 pessoa"/"N pessoas");
   - "Cancelar" e "Apagar sala" (fundo `--color-accent-300`, texto `--color-accent-900`).
-- [ ] T1160 [US4] `src/ui/pages/RoomPage.svelte` (S2–S5):
+- [X] T1160 [US4] `src/ui/pages/RoomPage.svelte` (S2–S5):
   - sala fixa e `own` → botão "⋯" (36px) ao lado do título, `RoomMenu variant="room"` abaixo, `NameDialog mode="rename"` e `DeleteRoomDialog`;
   - sem `own`, nada (S5);
   - `MobileRoomPage`: "⋯" ao lado do nome, com as mesmas ações.
-- [ ] T1161 [US4] Home e rota:
+- [X] T1161 [US4] Home e rota:
   - `src/routes/HomeRoute.svelte` + `HomePage`: o menu do "⋯" de Suas salas tem "Renomear sala" e "Apagar sala" quando há chave de dono (`renameSaved`/`deleteSaved`, usando `NameDialog` e `DeleteRoomDialog`). O número de pessoas no apagar vem do último `status`. Depois de apagar, tira da lista e esquece a chave. Resposta `gone` → item vira `gone`;
   - `src/routes/RoomRoute.svelte`: `ended === 'deleted'` → `NotFoundView { reason: 'kicked', name, saved }` (N2).
-- [ ] T1162 [US4] Mocks:
+- [X] T1162 [US4] Mocks:
   - `src/mocks/room.ts`: `ownermenu` (S2), `rename` (S3: `nameDialog { mode:'rename', value:'CS da galera 2' }`) e `delete` (S4: `deleteDialog { name:'CS da galera', people:3 }`);
   - `src/mocks/home.ts`: `menu` (F3: CS da galera com `menuOpen`, own);
   - `notfound` deleted/kicked já existem (T1138).
@@ -378,12 +378,12 @@
 
 ## Phase 7: Polish & Cross-Cutting
 
-- [ ] T1163 [P] `specs/001-espia-screen-share/screens.md`: as cenas novas, com os códigos do design (F1–F8, S1–S5, Q1–Q3, N1–N4, M4–M5) e o mock de cada uma. Conferir que **todas as 23** do FR-034 abrem pelo `MockIndex`.
-- [ ] T1164 [P] `specs/001-espia-screen-share/contracts/http-api.md` e `signaling.md`: links para os deltas da 011 e a tabela de tempos atualizada (20 s → 60 s).
-- [ ] T1165 `npm run check`, `npm run build` e `npm test` sem erros nem avisos novos.
-- [ ] T1166 Roteiro do quickstart §3 inteiro com `npm run dev:worker` e 2 janelas do Edge (uma InPrivate). Registrar o resultado em `specs/011-salas-fixas/relatorio.md`.
+- [X] T1163 [P] `specs/001-espia-screen-share/screens.md`: as cenas novas, com os códigos do design (F1–F8, S1–S5, Q1–Q3, N1–N4, M4–M5) e o mock de cada uma. Conferir que **todas as 23** do FR-034 abrem pelo `MockIndex`.
+- [X] T1164 [P] `specs/001-espia-screen-share/contracts/http-api.md` e `signaling.md`: links para os deltas da 011 e a tabela de tempos atualizada (20 s → 60 s).
+- [X] T1165 `npm run check`, `npm run build` e `npm test` sem erros nem avisos novos.
+- [X] T1166 Roteiro do quickstart §3 inteiro com `npm run dev:worker` e 2 janelas do Edge (uma InPrivate). Registrar o resultado em `specs/011-salas-fixas/relatorio.md`.
 - [ ] T1167 Publicar (`npm run deploy`; se o auto mode bloquear, a pessoa usuária roda `! npm run deploy`), depois de avisar a galera que essa publicação ainda derruba as salas abertas. Fazer a checagem do quickstart §4 com o app 0.1.7 e anotar no `relatorio.md`.
-- [ ] T1168 Commit "011: salas fixas e chamada que sobrevive a quedas" (sem push, sem GitHub).
+- [X] T1168 Commit "011: salas fixas e chamada que sobrevive a quedas" (sem push, sem GitHub).
 
 ## Dependencies
 

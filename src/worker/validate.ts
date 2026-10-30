@@ -124,3 +124,16 @@ export function parseStatusBody(text: string): string[] | null {
   if (!codes.every((c): c is string => typeof c === 'string' && ROOM_ID_RE.test(c))) return null;
   return new Set(codes).size === codes.length ? codes : null;
 }
+
+/** Corpo do PATCH /api/rooms/:code: `{ name }`, normalizado como na criação. */
+export function parseRenameBody(text: string): string | null {
+  if (text.length > MAX_BODY) return null;
+  let body: unknown;
+  try {
+    body = JSON.parse(text);
+  } catch {
+    return null;
+  }
+  if (!isObj(body) || !hasOnly(body, ['name']) || typeof body.name !== 'string') return null;
+  return normalizeRoomName(body.name);
+}

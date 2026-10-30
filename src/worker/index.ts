@@ -2,8 +2,8 @@
 import { generateRoomId, ROOM_ID_RE } from '../lib/room-id';
 import type { RoomPreview, RoomStatus } from '../shared/protocol';
 import { randomHex, sha256Hex } from './crypto';
-import { Room } from './room';
-import { parseCreateBody, parseStatusBody } from './validate';
+import { Room, type OwnerResult } from './room';
+import { parseCreateBody, parseRenameBody, parseStatusBody } from './validate';
 
 export { Room };
 
@@ -66,8 +66,9 @@ async function route(request: Request, env: Env, url: URL): Promise<Response> {
 
   const api = pathname.match(/^\/api\/rooms\/([^/]+)$/);
   if (api) {
-    if (request.method !== 'GET') return json({ error: 'method' }, 405);
     const code = api[1];
+    if (request.method === 'PATCH' || request.method === 'DELETE') return ownerAction(request, env, url, code);
+    if (request.method !== 'GET') return json({ error: 'method' }, 405);
     if (!ROOM_ID_RE.test(code)) return json({ error: 'code' }, 400);
     if (!(await allowed(env.RL_LOOKUP, request))) return tooMany();
     const preview = await room(env, code).preview(code);
@@ -89,6 +90,32 @@ async function route(request: Request, env: Env, url: URL): Promise<Response> {
 
   if (pathname.startsWith('/api/') || pathname.startsWith('/ws/')) return json({ error: 'not-found' }, 404);
   return env.ASSETS.fetch(request);
+}
+
+/** Renomear (PATCH) ou apagar (DELETE) sala fixa, só com a chave do dono (specs/011 US4). */
+async function ownerAction(request: Request, env: Env, url: URL, code: string): Promise<Response> {
+  if (!sameOrigin(request, url)) return json({ error: 'origin' }, 403);
+  if (!ROOM_ID_RE.test(code)) return json({ error: 'code' }, 400);
+  if (!(await allowed(env.RL_CREATE, request))) return tooMany();
+  const key = request.headers.get('Authorization')?.match(/^Bearer ([0-9a-f]{64})$/)?.[1];
+  if (!key) return json({ error: 'owner' }, 403);
+  const ownerHash = await sha256Hex(key);
+
+  let result: OwnerResult;
+  let name = '';
+  if (request.method === 'PATCH') {
+    const parsed = parseRenameBody(await request.text());
+    if (!parsed) return json({ error: 'name' }, 400);
+    name = parsed;
+    result = await room(env, code).rename(ownerHash, name);
+  } else {
+    result = await room(env, code).remove(ownerHash);
+  }
+
+  if (result === 'ok') return request.method === 'PATCH' ? json({ name }) : new Response(null, { status: 204 });
+  if (result === 'forbidden') return json({ error: 'owner' }, 403);
+  if (result === 'notfound') return json({ error: 'not-found' }, 404);
+  return json({ reason: result }, 410);
 }
 
 function room(env: Env, code: string) {

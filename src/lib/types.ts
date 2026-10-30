@@ -155,6 +155,10 @@ export interface RoomView {
   link: 'ok' | 'reconnecting' | 'failed';
   /** Sala rápida, ou fixa com nome (specs/011). `own` = este aparelho criou (tem a chave do dono). */
   room: { kind: 'quick' } | { kind: 'fixed'; name: string; own: boolean };
+  /** Dono (specs/011 S2–S4): menu "⋯" ao lado do nome, renomear e apagar. */
+  ownerMenu?: boolean;
+  nameDialog?: NameDialogView;
+  deleteDialog?: DeleteDialogView;
 }
 
 export interface HomeView {
@@ -170,8 +174,10 @@ export interface HomeView {
   appInvite?: 'offer' | 'hint';
   /** Suas salas (specs/011 US3). null = nenhuma neste aparelho → a ilustração de sempre. */
   rooms?: SavedRoomsView | null;
-  /** Modal "Criar sala fixa" aberto (specs/011 F7). */
+  /** Modal "Criar sala fixa" aberto (specs/011 F7) ou "Renomear sala" de uma linha de Suas salas. */
   fixedDialog?: NameDialogView;
+  /** "Apagar sala" pelo "⋯" de Suas salas (dono). */
+  deleteDialog?: DeleteDialogView;
 }
 
 /** Uma linha de Suas salas (specs/011, SavedRoom.dc.html). Só números, nunca apelidos. */
@@ -195,6 +201,15 @@ export interface SavedRoomsView {
   groups: { label: string | null; rooms: SavedRoomView[] }[];
   /** "neste aparelho" ou "5 salas neste aparelho". */
   note: string;
+}
+
+/** Confirmar "Apagar sala" (specs/011 S4). */
+export interface DeleteDialogView {
+  name: string;
+  /** Pessoas na sala agora (fora você): o aviso "Elas saem da sala". */
+  people: number;
+  busy: boolean;
+  error: string | null;
 }
 
 /** Modal de nome da sala fixa: criar (F7) ou renomear (S3). */
@@ -221,6 +236,12 @@ export interface HomeActions {
   forgetSaved(code: string): void;
   /** Abre o "⋯" de uma linha (null fecha). */
   toggleSavedMenu(code: string | null): void;
+  /** Dono (US4): renomear/apagar pelo "⋯" de Suas salas. */
+  renameSaved(code: string): void;
+  submitRename(name: string): void;
+  deleteSaved(code: string): void;
+  confirmDelete(): void;
+  closeDeleteDialog(): void;
 }
 
 export interface JoinPreviewPerson {
@@ -290,5 +311,12 @@ export interface RoomActions {
   dismissToast(id: string): void;
   /** "Tentar de novo" na tela "Não deu pra voltar pra sala" (specs/011). */
   retryConnection(): void;
+  /** Dono da sala fixa (specs/011 US4). */
+  toggleOwnerMenu(open: boolean): void;
+  openRename(): void;
+  submitRename(name: string): void;
+  openDelete(): void;
+  confirmDelete(): void;
+  closeDialogs(): void;
   leave(): void;
 }

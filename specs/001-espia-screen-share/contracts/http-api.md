@@ -15,3 +15,5 @@ Regras comuns:
 - Cabeçalhos de segurança em todas as respostas: [security.md §5](../security.md).
 
 Durable Object (chamadas internas, não expostas): `reserve()`, `preview()`, `fetch` (upgrade WS).
+
+> **specs/011**: `POST /api/rooms` com `{ kind: 'fixed', name }`, `GET` com `410` para sala fixa apagada/expirada, `POST /api/rooms/status`, `PATCH`/`DELETE /api/rooms/:code` (dono). Ver [http-api-delta.md](../../011-salas-fixas/contracts/http-api-delta.md).

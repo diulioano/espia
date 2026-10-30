@@ -34,6 +34,9 @@ export const ROOM_SCENES = [
   // Sala fixa (specs/011).
   { id: 'fixed', code: 'S·', label: 'Sala fixa vazia (dono)' },
   { id: 'created', code: 'S1', label: 'Sala fixa recém-criada' },
+  { id: 'ownermenu', code: 'S2', label: 'Menu do dono' },
+  { id: 'rename', code: 'S3', label: 'Renomear' },
+  { id: 'delete', code: 'S4', label: 'Apagar · com gente na sala' },
   { id: 'guest', code: 'S5', label: 'Sala fixa (não é o dono)' },
 ] as const;
 
@@ -205,9 +208,12 @@ export function isRoomScene(value: string | null): value is RoomScene {
 export function buildRoomScene(scene: RoomScene): RoomView {
   // Queda (specs/011 Q1–Q3): a mesma sala de "Você ao vivo", com o aviso por cima.
   // Sala fixa: a mesma sala, com o nome no lugar do título.
-  if (scene === 'fixed' || scene === 'created' || scene === 'guest') {
+  if (scene === 'fixed' || scene === 'created' || scene === 'guest' || scene === 'ownermenu' || scene === 'rename' || scene === 'delete') {
     const view = buildRoomScene(scene === 'guest' ? 'single' : scene === 'created' ? 'copied' : 'empty');
     view.room = { kind: 'fixed', name: 'CS da galera', own: scene !== 'guest' };
+    if (scene === 'ownermenu') view.ownerMenu = true;
+    if (scene === 'rename') view.nameDialog = { mode: 'rename', value: 'CS da galera 2', busy: false, error: null };
+    if (scene === 'delete') view.deleteDialog = { name: 'CS da galera', people: 3, busy: false, error: null };
     if (scene === 'created') view.toasts = [{ id: 'scene-created', kind: 'copied', text: 'Sala criada — fixe o link no grupo' }];
     return view;
   }

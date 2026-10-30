@@ -51,6 +51,53 @@ export async function fetchStatuses(codes: string[]): Promise<RoomStatus[] | nul
   }
 }
 
+export type OwnerFailure = 'forbidden' | 'gone' | 'name' | 'rate-limited' | 'network';
+
+async function ownerRequest(code: string, key: string, init: RequestInit): Promise<Response | OwnerFailure> {
+  try {
+    const res = await fetch(`/api/rooms/${code}`, {
+      ...init,
+      headers: { ...init.headers, Authorization: `Bearer ${key}` },
+    });
+    if (res.ok) return res;
+    if (res.status === 403) return 'forbidden';
+    if (res.status === 404 || res.status === 410) return 'gone';
+    if (res.status === 400) return 'name';
+    if (res.status === 429) return 'rate-limited';
+    return 'network';
+  } catch {
+    return 'network';
+  }
+}
+
+/** Renomear sala fixa (specs/011 US4). O nome novo chega pra todos pelo room-renamed. */
+export async function renameRoom(code: string, key: string, name: string): Promise<{ ok: true; name: string } | { ok: false; reason: OwnerFailure }> {
+  const res = await ownerRequest(code, key, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ name }),
+  });
+  if (typeof res === 'string') return { ok: false, reason: res };
+  return { ok: true, name: ((await res.json()) as { name: string }).name };
+}
+
+/** Apagar sala fixa (specs/011 US4): quem está dentro sai com aviso. */
+export async function deleteRoom(code: string, key: string): Promise<{ ok: true } | { ok: false; reason: OwnerFailure }> {
+  const res = await ownerRequest(code, key, { method: 'DELETE' });
+  return typeof res === 'string' ? { ok: false, reason: res } : { ok: true };
+}
+
+/** Mensagem para o modal de renomear/apagar. */
+export function ownerErrorText(reason: OwnerFailure): string {
+  return {
+    forbidden: 'Só quem criou a sala pode fazer isso.',
+    gone: 'Essa sala não existe mais.',
+    name: 'Esse nome não dá. Use letras, números e espaços.',
+    'rate-limited': 'Muitas mudanças daqui agora. Tenta de novo em um minuto.',
+    network: 'Não deu pra falar com o servidor. Confere a internet e tenta de novo.',
+  }[reason];
+}
+
 export type PreviewResult =
   | { status: 'ready'; preview: RoomPreview }
   | { status: 'full'; preview: RoomPreview }

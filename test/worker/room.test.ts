@@ -725,3 +725,64 @@ describe('Suas salas: status (specs/011)', () => {
     ]);
   });
 });
+
+describe('Dono (specs/011)', () => {
+  async function fixedRoom(name: string) {
+    const res = await call('/api/rooms', { method: 'POST', headers: ORIGIN, body: JSON.stringify({ kind: 'fixed', name }) });
+    return (await res.json()) as { code: string; ownerKey: string };
+  }
+  const auth = (key: string) => ({ ...ORIGIN, Authorization: `Bearer ${key}` });
+  const rename = (code: string, name: string, headers: Record<string, string>) =>
+    call(`/api/rooms/${code}`, { method: 'PATCH', headers, body: JSON.stringify({ name }) });
+  const remove = (code: string, headers: Record<string, string>) => call(`/api/rooms/${code}`, { method: 'DELETE', headers });
+
+  it('sem chave, com chave errada ou em sala rápida → 403; de outro site → 403', async () => {
+    const { code } = await fixedRoom('CS da galera');
+    expect((await rename(code, 'Outro', ORIGIN)).status).toBe(403);
+    expect((await rename(code, 'Outro', auth('0'.repeat(64)))).status).toBe(403);
+    expect((await remove(code, auth('f'.repeat(64)))).status).toBe(403);
+    const quick = await createRoom();
+    expect((await remove(quick, auth('0'.repeat(64)))).status).toBe(403);
+    const { code: c2, ownerKey } = await fixedRoom('Família');
+    expect((await remove(c2, { Origin: 'https://outro.site', Authorization: `Bearer ${ownerKey}` })).status).toBe(403);
+  });
+
+  it('renomear: quem está dentro recebe room-renamed; prévia e status mostram o nome novo; link igual', async () => {
+    const { code, ownerKey } = await fixedRoom('CS da galera');
+    const { c } = await Client.join(code, 'Lu');
+    const res = await rename(code, '  CS da galera 2 ', auth(ownerKey));
+    expect(res.status).toBe(200);
+    expect(await res.json()).toEqual({ name: 'CS da galera 2' });
+    expect((await c.next('room-renamed')).name).toBe('CS da galera 2');
+    const preview = (await (await call(`/api/rooms/${code}`)).json()) as { fixed: { name: string } };
+    expect(preview.fixed.name).toBe('CS da galera 2');
+    expect((await rename(code, '', auth(ownerKey))).status).toBe(400);
+  });
+
+  it('apagar com gente dentro: room-deleted + 4410, TURN revogado, link vira 410 deleted', async () => {
+    const { code, ownerKey } = await fixedRoom('CS da galera');
+    const { c: a } = await Client.join(code, 'Rafa');
+    const { c: b } = await Client.join(code, 'Lu');
+    revoked.length = 0;
+    expect((await remove(code, auth(ownerKey))).status).toBe(204);
+    await a.next('room-deleted');
+    await b.next('room-deleted');
+    expect((await a.waitClose())?.code).toBe(CLOSE.deleted);
+    expect((await b.waitClose())?.code).toBe(CLOSE.deleted);
+    expect(revoked.length).toBeGreaterThanOrEqual(2);
+    // Sobra só a lápide: nenhum fantasma (com apelido) recriado pelo fechamento das conexões.
+    await sleep(150);
+    const keys = await runInDurableObject(env.ROOM.get(env.ROOM.idFromName(code)), async (_i, state) =>
+      [...(await state.storage.list()).keys()],
+    );
+    expect(keys).toEqual(['tombstone']);
+    const res = await call(`/api/rooms/${code}`);
+    expect(res.status).toBe(410);
+    expect(await res.json()).toEqual({ reason: 'deleted' });
+    const late = await Client.open(code);
+    late.send({ t: 'join', nickname: 'Bia' });
+    await late.next('room-not-found');
+    // Apagar de novo: já acabou.
+    expect((await remove(code, auth(ownerKey))).status).toBe(410);
+  });
+});

@@ -46,6 +46,23 @@
         .filter((g) => g.rooms.length > 0);
       view.rooms = groups.length ? { ...view.rooms, groups } : null;
     },
+    renameSaved(code) {
+      const room = view.rooms?.groups.flatMap((g) => g.rooms).find((r) => r.code === code);
+      if (room) view.fixedDialog = { mode: 'rename', value: room.name, busy: false, error: null };
+    },
+    submitRename() {
+      view.fixedDialog = undefined;
+    },
+    deleteSaved(code) {
+      const room = view.rooms?.groups.flatMap((g) => g.rooms).find((r) => r.code === code);
+      if (room) view.deleteDialog = { name: room.name, people: room.people, busy: false, error: null };
+    },
+    confirmDelete() {
+      view.deleteDialog = undefined;
+    },
+    closeDeleteDialog() {
+      view.deleteDialog = undefined;
+    },
     toggleSavedMenu(code) {
       if (!view.rooms) return;
       view.rooms.groups.forEach((g) => g.rooms.forEach((r) => (r.menuOpen = r.code === code)));

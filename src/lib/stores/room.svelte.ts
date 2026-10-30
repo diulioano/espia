@@ -23,6 +23,7 @@ import { countFullViewers, effectiveQuality, isAdjusted, stepDown, type Quality,
 import { stageLayout } from '../room-view';
 import {
   loadGoLivePrefs,
+  forgetOwnerKey,
   loadOwnerKey,
   loadSession,
   loadVolume,
@@ -31,9 +32,22 @@ import {
   saveVolume,
 } from '../prefs';
 import { roomPath } from '../room-id';
-import { loadSavedRooms, rememberRoom, saveSavedRooms } from '../saved-rooms';
+import { forgetRoom, loadSavedRooms, rememberRoom, renameSaved, saveSavedRooms } from '../saved-rooms';
+import { deleteRoom, ownerErrorText, renameRoom } from '../api';
 import { Signaling, type SignalingEnd } from '../signaling';
-import type { CameraView, CaptureSource, GoLivePrefs, MyBroadcastView, RoomActions, RoomView, ShareSurface, StreamView, ToastView } from '../types';
+import type {
+  CameraView,
+  CaptureSource,
+  DeleteDialogView,
+  GoLivePrefs,
+  MyBroadcastView,
+  NameDialogView,
+  RoomActions,
+  RoomView,
+  ShareSurface,
+  StreamView,
+  ToastView,
+} from '../types';
 
 const DEFAULT_VOLUME = 0.68;
 const TOAST_MS = 4_000;
@@ -65,6 +79,12 @@ export class RoomStore {
   link = $state<'ok' | 'reconnecting' | 'failed'>('ok');
   /** Rápida ou fixa (vem no welcome, specs/011). */
   roomInfo = $state<RoomInfo>({ kind: 'quick' });
+  /** Dono da sala fixa (specs/011 US4). */
+  ownerMenu = $state(false);
+  nameDialog = $state<NameDialogView | undefined>(undefined);
+  deleteDialog = $state<DeleteDialogView | undefined>(undefined);
+  /** Confirmou "Apagar sala": o fechamento 4410 que vem em seguida não é surpresa. */
+  private deleting = false;
   me = $state<Peer | null>(null);
   peers = $state<Peer[]>([]);
   focusedId = $state<string | null>(null);
@@ -168,6 +188,8 @@ export class RoomStore {
       onEnd: (reason) => {
         this.closeMedia();
         this.stopBroadcast(false);
+        // Eu mesmo apaguei a sala: volto pro início, sem o aviso de "apagaram a sala".
+        if (reason === 'deleted' && this.deleting) return this.leaveAfterDelete();
         this.ended = reason;
       },
     });
@@ -220,6 +242,18 @@ export class RoomStore {
     setTimeout(() => (this.copied = false), 2000);
   }
 
+  /** Apaguei a sala: vai pro início uma vez só (a resposta e o fechamento 4410 chegam em qualquer ordem). */
+  private leftAfterDelete = false;
+  private leaveAfterDelete() {
+    if (this.leftAfterDelete) return;
+    this.leftAfterDelete = true;
+    // Antes de ir pro início, que lê a lista na hora.
+    saveSavedRooms(forgetRoom(loadSavedRooms(), this.code));
+    forgetOwnerKey(this.code);
+    this.destroy();
+    this.onLeave();
+  }
+
   /** Caiu (ou "Tentar de novo"): 'reconnecting' e, sem volta em 60 s, 'failed'. */
   private markDown() {
     clearTimeout(this.downTimer);
@@ -262,6 +296,12 @@ export class RoomStore {
           this.toast({ kind: 'join', text: `${msg.peer.nickname} entrou na sala` });
         }
         return;
+      }
+      case 'room-renamed': {
+        // O dono renomeou (specs/011 FR-027): título e Suas salas mudam sem recarregar.
+        if (this.roomInfo.kind === 'fixed') this.roomInfo = { kind: 'fixed', name: msg.name };
+        saveSavedRooms(renameSaved(loadSavedRooms(), this.code, msg.name));
+        break;
       }
       case 'peer-left': {
         const peer = this.peers.find((p) => p.id === msg.id);
@@ -344,6 +384,9 @@ export class RoomStore {
       },
       link: this.link,
       room: this.roomInfo.kind === 'fixed' ? { ...this.roomInfo, own: !!loadOwnerKey(this.code) } : { kind: 'quick' },
+      ownerMenu: this.ownerMenu,
+      nameDialog: this.nameDialog,
+      deleteDialog: this.deleteDialog,
       copied: this.copied,
       goLiveOpen: this.goLiveOpen,
       goLivePrefs: this.goLivePrefs,
@@ -441,6 +484,43 @@ export class RoomStore {
         this.dismiss(id);
       },
       dismissToast: (id) => this.dismiss(id),
+      toggleOwnerMenu: (open) => (this.ownerMenu = open && this.link === 'ok'),
+      openRename: () => {
+        this.ownerMenu = false;
+        if (this.roomInfo.kind !== 'fixed' || this.link !== 'ok') return;
+        this.nameDialog = { mode: 'rename', value: this.roomInfo.name, busy: false, error: null };
+      },
+      submitRename: async (name) => {
+        const key = loadOwnerKey(this.code);
+        if (!key || !this.nameDialog) return;
+        this.nameDialog = { ...this.nameDialog, value: name, busy: true, error: null };
+        const res = await renameRoom(this.code, key, name);
+        if (res.ok) this.nameDialog = undefined; // O nome novo chega pelo room-renamed.
+        else if (this.nameDialog) this.nameDialog = { ...this.nameDialog, busy: false, error: ownerErrorText(res.reason) };
+      },
+      openDelete: () => {
+        this.ownerMenu = false;
+        if (this.roomInfo.kind !== 'fixed' || this.link !== 'ok') return;
+        this.deleteDialog = { name: this.roomInfo.name, people: this.peers.length, busy: false, error: null };
+      },
+      confirmDelete: async () => {
+        const key = loadOwnerKey(this.code);
+        if (!key || !this.deleteDialog) return;
+        this.deleteDialog = { ...this.deleteDialog, busy: true, error: null };
+        this.deleting = true;
+        const res = await deleteRoom(this.code, key);
+        if (!res.ok) {
+          this.deleting = false;
+          if (this.deleteDialog) this.deleteDialog = { ...this.deleteDialog, busy: false, error: ownerErrorText(res.reason) };
+          return;
+        }
+        this.leaveAfterDelete();
+      },
+      closeDialogs: () => {
+        this.ownerMenu = false;
+        this.nameDialog = undefined;
+        this.deleteDialog = undefined;
+      },
       retryConnection: () => {
         this.markDown();
         this.signaling.retryNow();

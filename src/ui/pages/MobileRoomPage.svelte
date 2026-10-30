@@ -1,9 +1,12 @@
 <script lang="ts">
   // Sala no celular (M2/M3): só assistir. Mesmo RoomView/RoomActions da RoomPage.
-  import { Check, Link, Smartphone } from '@lucide/svelte';
+  import { Check, Ellipsis, Link, Smartphone } from '@lucide/svelte';
   import type { CameraActions, RoomActions, RoomView } from '../../lib/types';
   import Avatar from '../components/Avatar.svelte';
+  import DeleteRoomDialog from '../components/DeleteRoomDialog.svelte';
   import GoLiveModal from '../components/GoLiveModal.svelte';
+  import NameDialog from '../components/NameDialog.svelte';
+  import RoomMenu from '../components/RoomMenu.svelte';
   import Participant from '../components/Participant.svelte';
   import Mascot from '../components/Mascot.svelte';
   import StreamTile from '../components/StreamTile.svelte';
@@ -27,15 +30,37 @@
   const down = $derived(view.link !== 'ok');
   // No celular sempre há uma transmissão em destaque: a focada ou a primeira.
   const selected = $derived(view.streams.find((s) => s.id === view.focusedId) ?? view.streams[0]);
-  const title = $derived(connecting ? 'Entrando na sala…' : selected ? `Vendo ${selected.name}` : 'Sala da galera');
+  const fixed = $derived(view.room.kind === 'fixed' ? view.room : null);
+  const watchingText = $derived(selected ? `Vendo ${selected.name}` : 'Ninguém transmitindo agora');
+  // Sala fixa (M5): o nome em cima, quem você vê embaixo.
+  const title = $derived(connecting ? 'Entrando na sala…' : fixed ? fixed.name : selected ? `Vendo ${selected.name}` : 'Sala da galera');
+  const subtitle = $derived(fixed && !connecting ? watchingText : `sala ${view.roomId}`);
 </script>
 
 <div class="mobile-room">
   <div class="scroll">
     <header class="header">
       <div class="titles">
-        <h1>{title}</h1>
-        <span class="subtitle">sala {view.roomId}</span>
+        <div class="title-line">
+          <h1>{title}</h1>
+          {#if fixed?.own}
+            <button
+              class="btn btn-icon owner-btn"
+              aria-label="Opções da sala"
+              aria-haspopup="menu"
+              aria-expanded={!!view.ownerMenu}
+              data-room-menu-toggle
+              disabled={down}
+              onclick={() => actions.toggleOwnerMenu(!view.ownerMenu)}
+            >
+              <Ellipsis size={18} strokeWidth={2.75} />
+            </button>
+          {/if}
+        </div>
+        {#if view.ownerMenu}
+          <RoomMenu variant="room" own onrename={actions.openRename} ondelete={actions.openDelete} onclose={() => actions.toggleOwnerMenu(false)} />
+        {/if}
+        <span class="subtitle">{subtitle}</span>
       </div>
       <button class="btn btn-invite invite" class:is-copied={view.copied} onclick={actions.copyInvite}>
         {#if view.copied}<Check size={16} strokeWidth={2.75} /> Copiado!{:else}<Link size={16} strokeWidth={2.75} /> Convidar{/if}
@@ -127,6 +152,13 @@
     <ToastStack toasts={view.toasts} placement="bottom-center" onaction={actions.toastAction} ondismiss={actions.dismissToast} />
   </div>
 
+  {#if view.nameDialog}
+    <NameDialog view={view.nameDialog} onsubmit={actions.submitRename} onclose={actions.closeDialogs} />
+  {/if}
+  {#if view.deleteDialog}
+    <DeleteRoomDialog view={view.deleteDialog} onconfirm={actions.confirmDelete} onclose={actions.closeDialogs} />
+  {/if}
+
   {#if view.link === 'failed'}
     <ReconnectFail onretry={actions.retryConnection} onleave={actions.leave} />
   {/if}
@@ -157,7 +189,11 @@
   }
 
   .header { display: flex; align-items: center; gap: 10px; padding: 0 16px 0 20px; }
-  .titles { display: flex; flex-direction: column; margin-right: auto; min-width: 0; }
+  .titles { position: relative; display: flex; flex-direction: column; margin-right: auto; min-width: 0; }
+  .title-line { display: flex; align-items: center; gap: 6px; min-width: 0; }
+  .title-line h1 { min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .owner-btn { flex: none; width: 36px; height: 36px; color: var(--color-text); background: transparent; }
+  .titles :global(.menu.room) { z-index: 8; }
   h1 { margin: 0; font-family: var(--font-heading); font-weight: 400; font-size: 22px; line-height: 1.1; }
   .subtitle { font-size: 13px; color: var(--color-text-muted); }
   .invite { min-height: 44px; padding: 0 16px; font-size: 14px; }

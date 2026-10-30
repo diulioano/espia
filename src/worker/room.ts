@@ -55,6 +55,9 @@ interface Tombstone {
   until: number;
 }
 
+/** Resposta de renomear/apagar: ok, sem a chave certa (ou sala rápida), não existe, ou já acabou. */
+export type OwnerResult = 'ok' | 'forbidden' | 'notfound' | GoneReason;
+
 /** Alguém cujo socket fechou, esperando `resume` até `until`. */
 interface Ghost {
   member: Member;
@@ -141,6 +144,46 @@ export class Room extends DurableObject<Env> {
       people: people.length,
       streaming: people.filter((p) => p.live !== null).length,
     };
+  }
+
+  /** O dono renomeia (specs/011 US4): quem está dentro vê o nome novo na hora. */
+  async rename(ownerHash: string, name: string): Promise<OwnerResult> {
+    const check = await this.checkOwner(ownerHash);
+    if (check !== 'ok') return check;
+    const fixed = (await this.fixed())!;
+    await this.ctx.storage.put('fixed', { ...fixed, name } satisfies FixedRoom);
+    this.broadcast({ t: 'room-renamed', name });
+    return 'ok';
+  }
+
+  /** O dono apaga: todos saem com aviso (4410), o TURN de todos é revogado e fica só a lápide. */
+  async remove(ownerHash: string): Promise<OwnerResult> {
+    const check = await this.checkOwner(ownerHash);
+    if (check !== 'ok') return check;
+    const everyone = await this.everyone();
+    const sockets = this.members().map((m) => m.ws);
+    // Primeiro a lápide: quem abrir o link enquanto o resto acontece já vê "apagada".
+    await this.bury('deleted');
+    for (const ws of sockets) {
+      // Fora da sala antes de fechar: o webSocketClose não cria fantasma (nem guarda apelido).
+      ws.serializeAttachment({ joined: false } satisfies Attachment);
+      send(ws, { t: 'room-deleted' });
+      try {
+        ws.close(CLOSE.deleted, 'sala apagada');
+      } catch {
+        // Já fechado.
+      }
+    }
+    await revokeTurn(this.env, everyone.flatMap((m) => m.turn));
+    return 'ok';
+  }
+
+  private async checkOwner(ownerHash: string): Promise<OwnerResult> {
+    const tomb = await this.tombstone();
+    if (tomb) return tomb.reason;
+    const fixed = await this.fixed();
+    if (!fixed) return (await this.exists()) ? 'forbidden' : 'notfound';
+    return tokensEqual(fixed.ownerHash, ownerHash) ? 'ok' : 'forbidden';
   }
 
   // ---------- WebSocket ----------

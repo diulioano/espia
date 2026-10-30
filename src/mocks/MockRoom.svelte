@@ -135,6 +135,30 @@
     dismissToast(id) {
       view.toasts = view.toasts.filter((t) => t.id !== id);
     },
+    // Dono da sala fixa (specs/011 S2–S4).
+    toggleOwnerMenu(open) {
+      view.ownerMenu = open;
+    },
+    openRename() {
+      view.ownerMenu = false;
+      if (view.room.kind === 'fixed') view.nameDialog = { mode: 'rename', value: view.room.name, busy: false, error: null };
+    },
+    submitRename(name) {
+      if (view.room.kind === 'fixed') view.room = { ...view.room, name };
+      view.nameDialog = undefined;
+    },
+    openDelete() {
+      view.ownerMenu = false;
+      if (view.room.kind === 'fixed') view.deleteDialog = { name: view.room.name, people: view.participants.length - 1, busy: false, error: null };
+    },
+    confirmDelete() {
+      onnavigate('home', 'default');
+    },
+    closeDialogs() {
+      view.ownerMenu = false;
+      view.nameDialog = undefined;
+      view.deleteDialog = undefined;
+    },
     // Mock da queda (specs/011): "Tentar de novo" volta a reconectar e, logo depois, "De volta!".
     retryConnection() {
       view.link = 'reconnecting';

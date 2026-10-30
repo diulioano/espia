@@ -5,6 +5,7 @@
   import AppInvite from '../components/AppInvite.svelte';
   import Logo from '../components/Logo.svelte';
   import Mascot from '../components/Mascot.svelte';
+  import DeleteRoomDialog from '../components/DeleteRoomDialog.svelte';
   import NameDialog from '../components/NameDialog.svelte';
   import SavedRoomsPanel from '../components/SavedRoomsPanel.svelte';
   import StreamTile from '../components/StreamTile.svelte';
@@ -37,6 +38,8 @@
       onenter={(code) => actions.enterSaved(code, cleanNickname(nickname))}
       onmenu={actions.toggleSavedMenu}
       onforget={actions.forgetSaved}
+      onrename={actions.renameSaved}
+      ondelete={actions.deleteSaved}
     />
   {/if}
 {/snippet}
@@ -142,9 +145,13 @@
   {#if view.fixedDialog}
     <NameDialog
       view={view.fixedDialog}
-      onsubmit={(name) => actions.createFixedRoom(cleanNickname(nickname), name)}
+      onsubmit={(name) =>
+        view.fixedDialog?.mode === 'rename' ? actions.submitRename(name) : actions.createFixedRoom(cleanNickname(nickname), name)}
       onclose={actions.closeFixedDialog}
     />
+  {/if}
+  {#if view.deleteDialog}
+    <DeleteRoomDialog view={view.deleteDialog} onconfirm={actions.confirmDelete} onclose={actions.closeDeleteDialog} />
   {/if}
 </div>
 

@@ -1,6 +1,6 @@
 <script lang="ts">
   // "/" real: cria sala no servidor ou abre um link colado.
-  import { createFixedRoom, createRoom, fetchStatuses } from '../lib/api';
+  import { createFixedRoom, createRoom, deleteRoom, fetchStatuses, ownerErrorText, renameRoom } from '../lib/api';
   import { appInviteVisible, readInviteEnv } from '../lib/app-invite';
   import {
     forgetOwnerKey,
@@ -31,6 +31,8 @@
   let saved = loadSavedRooms();
   let statuses: RoomStatus[] | null = null;
   let menuCode: string | null = null;
+  /** Sala do "⋯" que está sendo renomeada/apagada. */
+  let ownerCode: string | null = null;
 
   function showRooms() {
     view.rooms = buildSavedRooms(saved, statuses, (code) => !!loadOwnerKey(code), Date.now(), menuCode);
@@ -89,6 +91,7 @@
     },
     closeFixedDialog() {
       view.fixedDialog = undefined;
+      ownerCode = null;
     },
     enterSaved(code, nickname) {
       // Com apelido, entra direto; sem, a tela de entrada pede.
@@ -107,6 +110,59 @@
     toggleSavedMenu(code) {
       menuCode = code;
       showRooms();
+    },
+    renameSaved(code) {
+      const room = saved.find((r) => r.code === code);
+      menuCode = null;
+      showRooms();
+      if (!room) return;
+      ownerCode = code;
+      view.fixedDialog = { mode: 'rename', value: room.name, busy: false, error: null };
+    },
+    async submitRename(name) {
+      const key = ownerCode && loadOwnerKey(ownerCode);
+      if (!ownerCode || !key || !view.fixedDialog) return;
+      view.fixedDialog = { ...view.fixedDialog, value: name, busy: true, error: null };
+      const res = await renameRoom(ownerCode, key, name);
+      if (!res.ok) {
+        if (view.fixedDialog) view.fixedDialog = { ...view.fixedDialog, busy: false, error: ownerErrorText(res.reason) };
+        return;
+      }
+      saved = renameSaved(saved, ownerCode, res.name);
+      saveSavedRooms(saved);
+      view.fixedDialog = undefined;
+      ownerCode = null;
+      refreshRooms();
+    },
+    deleteSaved(code) {
+      const room = saved.find((r) => r.code === code);
+      menuCode = null;
+      showRooms();
+      if (!room) return;
+      ownerCode = code;
+      const s = statuses?.find((x) => x.code === code);
+      view.deleteDialog = { name: room.name, people: s?.state === 'ok' ? s.people : 0, busy: false, error: null };
+    },
+    async confirmDelete() {
+      const key = ownerCode && loadOwnerKey(ownerCode);
+      if (!ownerCode || !key || !view.deleteDialog) return;
+      view.deleteDialog = { ...view.deleteDialog, busy: true, error: null };
+      const res = await deleteRoom(ownerCode, key);
+      if (!res.ok && res.reason !== 'gone') {
+        if (view.deleteDialog) view.deleteDialog = { ...view.deleteDialog, busy: false, error: ownerErrorText(res.reason) };
+        return;
+      }
+      // Apagou (ou já não existia): sai da lista e a chave não serve mais.
+      saved = forgetRoom(saved, ownerCode);
+      saveSavedRooms(saved);
+      forgetOwnerKey(ownerCode);
+      view.deleteDialog = undefined;
+      ownerCode = null;
+      showRooms();
+    },
+    closeDeleteDialog() {
+      view.deleteDialog = undefined;
+      ownerCode = null;
     },
     async createFixedRoom(nickname, name) {
       if (!view.fixedDialog) return;

@@ -1,9 +1,12 @@
 <script lang="ts">
-  import { Check, Link, LogOut, MonitorUp, ScreenShareOff } from '@lucide/svelte';
+  import { Check, Ellipsis, Link, LogOut, MonitorUp, ScreenShareOff } from '@lucide/svelte';
   import { audioLabelText } from '../../lib/audio-source';
   import { formatElapsed, header, watchingId } from '../../lib/room-view';
   import type { CameraActions, RoomActions, RoomView } from '../../lib/types';
+  import DeleteRoomDialog from '../components/DeleteRoomDialog.svelte';
   import GoLiveModal from '../components/GoLiveModal.svelte';
+  import NameDialog from '../components/NameDialog.svelte';
+  import RoomMenu from '../components/RoomMenu.svelte';
   import Logo from '../components/Logo.svelte';
   import Participant from '../components/Participant.svelte';
   import Stage from '../components/Stage.svelte';
@@ -93,7 +96,33 @@
   <main class="main">
     <header class="header">
       <div class="titles">
-        <h1>{head.title}</h1>
+        <div class="title-line">
+          <h1>{head.title}</h1>
+          <!-- Dono da sala fixa (specs/011 S2): só aparece no aparelho que criou. -->
+          {#if view.room.kind === 'fixed' && view.room.own}
+            <button
+              class="btn btn-icon owner-btn"
+              class:open={view.ownerMenu}
+              aria-label="Opções da sala"
+              aria-haspopup="menu"
+              aria-expanded={!!view.ownerMenu}
+              data-room-menu-toggle
+              disabled={down}
+              onclick={() => actions.toggleOwnerMenu(!view.ownerMenu)}
+            >
+              <Ellipsis size={18} strokeWidth={2.75} />
+            </button>
+          {/if}
+        </div>
+        {#if view.ownerMenu}
+          <RoomMenu
+            variant="room"
+            own
+            onrename={actions.openRename}
+            ondelete={actions.openDelete}
+            onclose={() => actions.toggleOwnerMenu(false)}
+          />
+        {/if}
         <span class="subtitle">{head.subtitle}</span>
       </div>
       <div class="invite">
@@ -133,6 +162,13 @@
       </button>
     </footer>
   </main>
+
+  {#if view.nameDialog}
+    <NameDialog view={view.nameDialog} onsubmit={actions.submitRename} onclose={actions.closeDialogs} />
+  {/if}
+  {#if view.deleteDialog}
+    <DeleteRoomDialog view={view.deleteDialog} onconfirm={actions.confirmDelete} onclose={actions.closeDialogs} />
+  {/if}
 
   {#if view.goLiveOpen}
     <GoLiveModal
@@ -187,8 +223,14 @@
 
   .main { display: flex; flex-direction: column; gap: 18px; padding: 24px 28px 24px 0; min-width: 0; min-height: 0; }
   .header { display: flex; align-items: center; gap: 16px; min-height: 52px; }
-  .titles { display: flex; flex-direction: column; gap: 2px; margin-right: auto; min-width: 0; }
-  h1 { margin: 0; font-family: var(--font-heading); font-weight: 400; font-size: 28px; line-height: 1.1; }
+  .titles { position: relative; display: flex; flex-direction: column; gap: 2px; margin-right: auto; min-width: 0; }
+  .title-line { display: flex; align-items: center; gap: 8px; min-width: 0; }
+  .owner-btn { flex: none; color: var(--color-text); background: transparent; }
+  .owner-btn:hover, .owner-btn.open { background: rgba(245, 234, 216, 0.12); }
+  h1 {
+    margin: 0; font-family: var(--font-heading); font-weight: 400; font-size: 28px; line-height: 1.1;
+    min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  }
   .subtitle { font-size: 14px; color: var(--color-text-muted); }
   .invite {
     display: flex; align-items: center; gap: 6px; padding: 6px 6px 6px 18px;

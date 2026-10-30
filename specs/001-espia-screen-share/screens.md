@@ -41,6 +41,35 @@ estados. Todo estado listado MUST abrir via `?mock=<tela>&scene=<cena>` (Constit
 | — | Conectando / falha | `mobile` | `connecting`, `streamfail` | E1/E4 adaptados |
 | M3 | Ninguém ao vivo | `mobile` | `empty` | README §M3 |
 
+## Salas fixas e queda (specs/011, Espia.dc.html §7)
+
+| # | Tela | `mock` | `scene` |
+|---|---|---|---|
+| F1 | Sem salas fixas · convite | `home` | `first` |
+| F2 | Suas salas · 3 salas | `home` | `few` |
+| F3 | Menu do item (dono) | `home` | `menu` |
+| F4 | Suas salas agrupadas (até 5) | `home` | `many` |
+| F5 | Carregando quem está em cada sala | `home` | `loading` |
+| F6 | Sala que deixou de existir | `home` | `gone` |
+| F7 | Modal Criar sala fixa | `home` | `create` |
+| F8 | Entrar por link · sala fixa | `join` | `fixed` (`fixedmobile` no celular) |
+| S1 | Recém-criada · link copiado | `room` | `created` (vazia do dono: `fixed`) |
+| S2 | Menu do dono | `room` | `ownermenu` |
+| S3 | Renomear | `room` | `rename` |
+| S4 | Apagar · com gente na sala | `room` | `delete` |
+| S5 | Quem não é dono · sem menu | `room` | `guest` |
+| Q1 | Reconectando… (você ao vivo) | `room` | `reconnecting` |
+| Q2 | De volta! | `room` | `back` |
+| Q3 | Não deu pra voltar | `room` | `reconnectfail` |
+| N1 | Apagada pelo dono | `notfound` | `deleted` (`&saved=1`) |
+| N2 | Apagada com você dentro | `notfound` | `kicked` (`&saved=1`) |
+| N3 | Expirada (30 dias) | `notfound` | `expired` (`&saved=1`) |
+| N4 | Sala rápida que acabou | `notfound` | `quick` |
+| M4 | Início com Suas salas (celular) | `home` | `mobile` |
+| M5 | Assistindo · reconectando (celular) | `mobile` | `reconnecting` |
+
+A antiga cena `join&scene=notfound` (E2) virou `notfound&scene=quick`.
+
 ## Componentes por tela
 
 | Componente | Usado em |
@@ -54,6 +83,10 @@ estados. Todo estado listado MUST abrir via `?mock=<tela>&scene=<cena>` (Constit
 | `Toast` + `ToastStack` | Sala, M3 |
 | `GoLiveModal` | D6 |
 | `PermissionAlert` | E3 |
+| `SavedRoom`, `SavedRoomsPanel`, `RoomMenu` | F2–F6, M4, S2 (specs/011) |
+| `NameDialog`, `DeleteRoomDialog` | F7, S3, S4 (specs/011) |
+| `ReconnectPill`, `ReconnectFail` | Q1, Q3, M5 (specs/011) |
+| `NotFoundPage` | N1–N4 (specs/011) |
 | `Button`, `TextField`, `Segmented`, `Switch` | todas |
 
 ## Ordem de construção

@@ -83,8 +83,10 @@
     const ended = store?.ended;
     if (!ended) return;
     store = null;
+    // O dono apagou com você dentro (N2).
+    if (ended === 'deleted') notFound('kicked');
     // Não existe: a prévia diz se era rápida (404) ou fixa apagada/expirada (410).
-    if (ended === 'full') join = { ...join, status: 'full' };
+    else if (ended === 'full') join = { ...join, status: 'full' };
     else loadPreview();
   });
 
