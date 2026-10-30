@@ -8,6 +8,7 @@ export const JOIN_SCENES = [
   { id: 'full', code: 'E2*', label: 'Sala cheia (10 de 10)' },
   { id: 'mobile', code: 'M1', label: 'Entrar no celular', device: 'mobile' },
   { id: 'fixed', code: 'F8', label: 'Sala fixa (specs/011)' },
+  { id: 'replaced', code: 'D2·aba', label: 'Aberta em outra aba' },
   { id: 'fixedmobile', code: 'F8·M', label: 'Sala fixa no celular', device: 'mobile' },
 ] as const;
 
@@ -29,5 +30,6 @@ export function buildJoinScene(scene: JoinScene): JoinView {
     nickname: 'Rafa',
     canShare: scene !== 'mobile' && scene !== 'fixedmobile',
     ...(scene === 'fixed' || scene === 'fixedmobile' ? { fixedName: 'CS da galera' } : {}),
+    ...(scene === 'replaced' ? { replaced: true } : {}),
   };
 }

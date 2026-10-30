@@ -29,7 +29,6 @@ function write(storage: () => Storage, key: string, value: string | null) {
 }
 
 const local = () => localStorage;
-const session = () => sessionStorage;
 
 export function loadNickname(): string {
   return read(local, KEY.nickname) ?? '';
@@ -101,23 +100,44 @@ export function saveVolume(name: string, volume: number) {
 }
 
 /**
- * Identidade na sala, por aba (sessionStorage sobrevive ao F5, some ao fechar a aba).
- * Com ela, recarregar a página retoma o mesmo lugar sem "saiu/entrou".
+ * Identidade na sala, no navegador inteiro (localStorage): recarregar a página, ou fechar a aba e abrir
+ * a sala em outra, retoma o mesmo lugar sem "saiu/entrou" nem a mesma pessoa duas vezes. Se a outra
+ * aba ainda estiver aberta, ela cede o lugar (o servidor fecha com `replaced`).
  */
 export interface RoomSession {
   peerId: string;
   resumeToken: string;
 }
 
+/** Identidade velha não serve mais (o servidor já esqueceu); some pra não acumular. */
+const SESSION_MAX_AGE_MS = 24 * 60 * 60_000;
+
 export function loadSession(code: string): RoomSession | null {
   try {
-    const s = JSON.parse(read(session, KEY.session(code)) ?? 'null');
-    return s && typeof s.peerId === 'string' && typeof s.resumeToken === 'string' ? s : null;
+    const s = JSON.parse(read(local, KEY.session(code)) ?? 'null');
+    if (!s || typeof s.peerId !== 'string' || typeof s.resumeToken !== 'string') return null;
+    if (typeof s.at !== 'number' || Date.now() - s.at > SESSION_MAX_AGE_MS) return null;
+    return { peerId: s.peerId, resumeToken: s.resumeToken };
   } catch {
     return null;
   }
 }
 
 export function saveSession(code: string, s: RoomSession | null) {
-  write(session, KEY.session(code), s && JSON.stringify(s));
+  write(local, KEY.session(code), s && JSON.stringify({ ...s, at: Date.now() }));
+  if (s) pruneSessions();
+}
+
+function pruneSessions() {
+  try {
+    const store = localStorage;
+    for (let i = store.length - 1; i >= 0; i--) {
+      const key = store.key(i);
+      if (!key?.startsWith('espia:session:')) continue;
+      const at = (JSON.parse(store.getItem(key) ?? 'null') as { at?: number } | null)?.at;
+      if (typeof at !== 'number' || Date.now() - at > SESSION_MAX_AGE_MS) store.removeItem(key);
+    }
+  } catch {
+    // Sem armazenamento: nada a limpar.
+  }
 }

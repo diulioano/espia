@@ -52,6 +52,9 @@
         {/if}
         <p class="sub">{subtitle}</p>
       </div>
+      {#if view.replaced}
+        <p class="replaced" role="status">Você abriu esta sala em outra aba, então ela continua por lá. Entre de novo pra usar esta.</p>
+      {/if}
       <form
         class="form"
         onsubmit={(e) => {
@@ -133,6 +136,10 @@
   .form { display: flex; flex-direction: column; gap: 26px; }
   .nick :global(.input) { min-height: 56px; font-size: 17px; padding-inline: 22px; background: var(--color-bg); }
   .enter { min-height: 58px; font-size: 19px; }
+  .replaced {
+    margin: 0; padding: 12px 16px; border-radius: 18px; font-size: 14px; text-wrap: pretty;
+    background: rgba(174, 191, 146, 0.12); color: var(--color-accent-2-200);
+  }
   .fixed-pill {
     align-self: flex-start; display: inline-flex; align-items: center; gap: 6px; padding: 4px 12px 4px 10px;
     border-radius: var(--radius-pill); background: rgba(174, 191, 146, 0.16); color: var(--color-accent-2-300);

@@ -261,6 +261,8 @@ export interface JoinView {
   canShare: boolean;
   /** Sala fixa (specs/011 F8): selo "Sala fixa" e o nome no título. */
   fixedName?: string;
+  /** Você abriu esta sala em outra aba (a mesma pessoa não aparece duas vezes): esta cedeu o lugar. */
+  replaced?: boolean;
 }
 
 /** "Sala não encontrada" (specs/011 N1–N4). */

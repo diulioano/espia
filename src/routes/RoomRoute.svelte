@@ -87,13 +87,18 @@
     if (ended === 'deleted') notFound('kicked');
     // Não existe: a prévia diz se era rápida (404) ou fixa apagada/expirada (410).
     else if (ended === 'full') join = { ...join, status: 'full' };
-    else loadPreview();
+    else {
+      // A mesma pessoa abriu a sala em outra aba: esta cede o lugar e explica.
+      if (ended === 'replaced') join = { ...join, replaced: true };
+      loadPreview();
+    }
   });
 
   const joinActions: JoinActions = {
     join(nickname) {
       saveNickname(nickname);
       join.nickname = nickname;
+      join.replaced = false;
       enter(nickname);
     },
     createRoom: () => router.go('/'),
