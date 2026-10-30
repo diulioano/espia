@@ -48,8 +48,12 @@
 
 - [X] T1215 `npm run check`, `npm test`, `npm run build`. Prints dos mocks `room` grid/focus/single/live/livecam/crowd e `mobile` watching.
 - [X] T1216 `specs/001-espia-screen-share/contracts/signaling.md`: link para o delta da 012.
-- [ ] T1217 Commit "012: mostrar o que cada pessoa está transmitindo"; publicar (`! npm run deploy`, pela pessoa usuária) e fazer o roteiro manual do quickstart (site, app, câmera).
+- [X] T1217 Commit "012: mostrar o que cada pessoa está transmitindo"; publicar (`! npm run deploy`, pela pessoa usuária) e fazer o roteiro manual do quickstart (site, app, câmera).
 
 ## Dependencies
 
 T1201 → T1202–T1204 (Worker) e T1207 (tipos) → telas e mocks (T1208–T1211) → store (T1212–T1213) → T1214 → Polish. T1205/T1206 são independentes.
+
+## Publicação
+
+- 2026-10-30: commit `54afd3c`, versão `b6a164a7`. Falta o roteiro manual com captura real (site, app, câmera).
