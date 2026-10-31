@@ -93,3 +93,13 @@ Remover o próprio dono: o servidor não sabe qual `peerId` é do dono (a chave 
 ## R8. Celular
 
 **Decision**: o `MobileRoomPage` ganha o mesmo controle "Parar de assistir" / "Assistir" na tela selecionada. As outras já ficam `hidden` (só chips). A prévia parada vale no celular que transmite câmera. A própria tela no palco não existe no celular (não há barra lateral): aceito, e anotado na spec no acabamento.
+
+## R9. Parar de assistir corta o som também (correção do usuário, 2026-10-31)
+
+**Decision**: dois modos sem vídeo.
+- `hidden` (Espia em segundo plano): sem vídeo, o som continua.
+- `off` (parou de assistir, ou tela não escolhida no celular): sem vídeo e sem som.
+
+**No fio**: `off` vai como `{ t: 'view', mode: 'hidden', sound: false }`. A versão antiga do site entende `hidden` e já pausava vídeo e som (010), então ela também corta o som certo. A nova lê o `sound`.
+
+**Na tela**: o tile sem assistir não monta o `<audio>`. O corte vale na hora, mesmo que quem transmite ainda não tenha recebido o aviso.

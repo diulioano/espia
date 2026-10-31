@@ -104,17 +104,20 @@ export interface ViewModesInput {
 
 /**
  * Como estou vendo a tela de cada pessoa (specs/014 research R5). Quem não está no mapa: escondida.
- * Escondida pausa o vídeo daquela pessoa pra mim; o som continua.
+ * `hidden` (segundo plano) pausa só o vídeo; `off` (parou de assistir) pausa vídeo e som.
  */
 export function viewModes(i: ViewModesInput): Record<string, ViewMode> {
   const out: Record<string, ViewMode> = {};
   const streams = i.streams.filter((s) => s.id !== i.selfId);
   const selected = i.focusedId ?? streams[0]?.id;
   for (const { id } of streams) {
-    if (i.unwatched.has(id)) out[id] = 'hidden';
+    // Parou de assistir: nem vídeo nem som.
+    if (i.unwatched.has(id)) out[id] = 'off';
+    // Celular: só a selecionada aparece e toca; as outras ficam nos chips (como na 010, sem som).
+    else if (i.mobile && id !== selected) out[id] = 'off';
+    // Segundo plano: sem vídeo, o som continua.
     else if (!i.pageVisible && id !== i.pipId) out[id] = 'hidden';
-    // Celular: só a selecionada aparece; as outras ficam nos chips, sem vídeo.
-    else if (i.mobile) out[id] = id === selected ? 'full' : 'hidden';
+    else if (i.mobile) out[id] = 'full';
     else if (i.layout === 'focus') out[id] = id === i.focusedId ? 'full' : 'thumb';
     else out[id] = 'full';
   }

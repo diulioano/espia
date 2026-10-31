@@ -2,7 +2,7 @@
 // "Perfect negotiation": os dois lados podem renegociar; quando as ofertas se cruzam, o lado
 // educado (polite) desiste da sua. Candidatos ICE vão aos poucos (trickle) pela sinalização.
 import type { IceServer, SignalData } from '../shared/protocol';
-import { sendParams, type Quality, type ViewMode } from './quality';
+import { sendParams, wantsSound, type Quality, type ViewMode } from './quality';
 
 export interface PeerCallbacks {
   signal(data: SignalData): void;
@@ -27,6 +27,21 @@ export interface SendStats {
   hardware: boolean | null;
 }
 const VIEW_MODES: ViewMode[] = ['full', 'thumb', 'hidden'];
+
+/**
+ * No fio, `off` vai como `hidden` + `sound: false` (specs/014): uma versão antiga do site entende
+ * `hidden` e já pausa vídeo e som; a nova lê o `sound`.
+ */
+export function encodeView(mode: ViewMode): { t: 'view'; mode: Exclude<ViewMode, 'off'>; sound?: false } {
+  return mode === 'off' ? { t: 'view', mode: 'hidden', sound: false } : { t: 'view', mode };
+}
+
+export function decodeView(msg: unknown): ViewMode | null {
+  if (typeof msg !== 'object' || msg === null) return null;
+  const m = msg as { t?: unknown; mode?: unknown; sound?: unknown };
+  if (m.t !== 'view' || !VIEW_MODES.includes(m.mode as ViewMode)) return null;
+  return m.mode === 'hidden' && m.sound === false ? 'off' : (m.mode as ViewMode);
+}
 
 export class PeerLink {
   readonly pc: RTCPeerConnection;
@@ -107,10 +122,10 @@ export class PeerLink {
     channel.onopen = () => this.sendView();
     channel.onmessage = (e) => {
       try {
-        const msg = JSON.parse(String(e.data));
-        if (msg?.t === 'view' && VIEW_MODES.includes(msg.mode) && msg.mode !== this.theirView) {
-          this.theirView = msg.mode;
-          this.cb.view(msg.mode);
+        const mode = decodeView(JSON.parse(String(e.data)));
+        if (mode && mode !== this.theirView) {
+          this.theirView = mode;
+          this.cb.view(mode);
           void this.applyEncodings();
         }
       } catch {
@@ -127,7 +142,7 @@ export class PeerLink {
   }
 
   private sendView() {
-    if (this.myView && this.ctl?.readyState === 'open') this.ctl.send(JSON.stringify({ t: 'view', mode: this.myView }));
+    if (this.myView && this.ctl?.readyState === 'open') this.ctl.send(JSON.stringify(encodeView(this.myView)));
   }
 
   receive(data: SignalData) {
@@ -189,7 +204,7 @@ export class PeerLink {
         init.sendEncodings =
           kind === 'video'
             ? [{ active: p.active, maxBitrate: p.maxBitrate, maxFramerate: p.maxFramerate, scaleResolutionDownBy: p.scaleResolutionDownBy }]
-            : [{ active: true, maxBitrate: AUDIO_BITRATE }];
+            : [{ active: wantsSound(this.theirView), maxBitrate: AUDIO_BITRATE }];
       }
       const created = this.pc.addTransceiver(track, init);
       if (kind === 'video') preferHardwareCodec(created);
@@ -224,8 +239,8 @@ export class PeerLink {
         ...p,
         degradation: q.fps === 60 ? 'maintain-framerate' : 'maintain-resolution',
       });
-      // O som vai sempre (specs/014): parar de assistir ou esconder a janela corta só o vídeo.
-      await setEncoding(this.audio?.sender, { active: true, maxBitrate: AUDIO_BITRATE });
+      // Segundo plano corta só o vídeo; parar de assistir corta vídeo e som (specs/014).
+      await setEncoding(this.audio?.sender, { active: wantsSound(this.theirView), maxBitrate: AUDIO_BITRATE });
     });
     return this.encodingQueue;
   }

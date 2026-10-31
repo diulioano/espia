@@ -14,14 +14,14 @@
 
 - Quem transmite e joga ao mesmo tempo perde FPS. Além de codificar a própria tela, o Espia dele continua **desenhando** duas coisas: a prévia ao vivo "Você está ao vivo", na barra do lado, e as telas dos outros que ele está assistindo, mesmo com o Espia minimizado ou na bandeja.
 - Hoje não dá pra deixar de assistir alguém: se a pessoa está ao vivo, a tela dela chega e é desenhada.
-- Quando uma tela fica **escondida** para alguém, quem transmite já para de mandar o vídeo pra essa pessoa e o som continua (010). Esta feature usa isso para que deixar de assistir e esconder a janela economizem dos **dois** lados.
+- Quando uma tela fica **escondida** para alguém, quem transmite já para de mandar o vídeo pra essa pessoa e o som continua (010). Esta feature usa isso para que deixar de assistir e esconder a janela economizem dos **dois** lados. Parar de assistir corta também o som (correção do usuário, 2026-10-31).
 - Em sala fixa o dono só pode renomear e apagar; não pode tirar ninguém.
 
 ## Clarifications
 
 ### Session 2026-10-31
 
-- Q1: Quando alguém começa a transmitir, você assiste sozinho ou só depois de clicar? → **Assiste sozinho, como hoje.** Cada tela ganha "Parar de assistir" / "Assistir"; sem assistir, o som continua.
+- Q1: Quando alguém começa a transmitir, você assiste sozinho ou só depois de clicar? → **Assiste sozinho, como hoje.** Cada tela ganha "Parar de assistir" / "Assistir". ~~Sem assistir, o som continua.~~ **Corrigido pelo usuário (2026-10-31): parar de assistir corta vídeo E som; o som só continua com o Espia em segundo plano (US2).**
 - Q2: Esconder as telas quando o Espia perde o foco? → **Só quando a janela está minimizada, na bandeja ou numa aba de trás.** Perder o foco com o Espia ainda visível (ex.: segundo monitor) não esconde.
 - Q3: A sua prévia "Você está ao vivo"? → **Vira imagem parada**, e dá pra focar a própria tela pra vê-la grande no palco, ao vivo, quando quiser.
 - Q4: Quem é removido pelo dono? → **Sai da sala com aviso e pode voltar pelo link** (sem bloqueio, porque não há contas).
@@ -30,16 +30,16 @@
 
 ### User Story 1 — Parar de assistir e voltar a assistir (Priority: P1) 🎯
 
-Estou numa sala com duas pessoas transmitindo e só quero ver uma delas. Na tela da outra clico em "Parar de assistir". O vídeo dela some pra mim, mas continuo ouvindo o som. A pessoa para de mandar o vídeo pra mim. Quando eu quiser, clico em "Assistir" e a tela volta.
+Estou numa sala com duas pessoas transmitindo e só quero ver uma delas. Na tela da outra clico em "Parar de assistir". O vídeo e o som dela somem pra mim, e a pessoa para de mandá-los pra mim. Quando eu quiser, clico em "Assistir" e a tela volta.
 
 **Why this priority**: é o pedido direto e o jeito mais simples de cortar custo dos dois lados: eu não desenho e quem transmite não manda o vídeo.
 
-**Independent Test**: duas pessoas, uma transmitindo. Quem assiste clica em "Parar de assistir": o vídeo some, o som segue e o "N assistindo" de quem transmite cai em 1. Clica em "Assistir": o vídeo volta em poucos segundos.
+**Independent Test**: duas pessoas, uma transmitindo. Quem assiste clica em "Parar de assistir": o vídeo e o som somem e o "N assistindo" de quem transmite cai em 1. Clica em "Assistir": o vídeo volta em poucos segundos.
 
 **Acceptance Scenarios**:
 
 1. **Given** alguém começa a transmitir, **When** estou na sala, **Then** passo a assistir sozinho (como hoje).
-2. **Given** estou assistindo uma tela, **When** clico em "Parar de assistir" nela, **Then** o vídeo some e no lugar fica um cartão com o nome, a descrição da transmissão (012) e o botão "Assistir". O som dessa pessoa continua, com o mesmo volume e mudo de antes.
+2. **Given** estou assistindo uma tela, **When** clico em "Parar de assistir" nela, **Then** o vídeo some e no lugar fica um cartão com o nome, a descrição da transmissão (012) e o botão "Assistir". O som dessa pessoa também para. Ao voltar a assistir, volta com o mesmo volume e mudo de antes.
 3. **Given** parei de assistir alguém, **When** olho a transmissão dessa pessoa, **Then** ela me conta como quem **não** está assistindo e para de me mandar o vídeo.
 4. **Given** parei de assistir alguém, **When** clico em "Assistir" no cartão, **Then** o vídeo volta em até 3 segundos.
 5. **Given** parei de assistir alguém, **When** essa pessoa para de transmitir e depois transmite de novo, **Then** volto a assistir sozinho (a escolha vale para aquela transmissão).
@@ -111,7 +111,7 @@ Sou o dono de uma sala fixa e entrou alguém que não devia, ou um amigo deixou 
 - **Parei de assistir a única tela ao vivo** e o palco fica só com o cartão "Assistir": o layout de "uma tela só" mostra o cartão grande, sem vídeo.
 - **Parar de assistir a tela que está em foco**: o foco continua nela (o cartão fica grande) até eu escolher outra.
 - **Picture-in-picture de uma tela que parei de assistir**: o picture-in-picture fecha.
-- **Quem transmite fica com 0 assistindo** porque todos pararam ou esconderam: a transmissão continua (o som ainda vai), mostrando "0 assistindo".
+- **Quem transmite fica com 0 assistindo** porque todos pararam ou esconderam: a transmissão continua (o som ainda vai pra quem só escondeu a janela), mostrando "0 assistindo".
 - **Teto de qualidade** (010): quem parou de assistir ou escondeu a janela não conta como espectador em tela cheia, então pode liberar qualidade para os outros.
 - **Celular com a tela apagada ou o app do navegador em segundo plano**: conta como "fora de vista" (US2).
 - **O dono se remove**: não é possível; ele usa "Sair da sala".
@@ -127,7 +127,7 @@ Sou o dono de uma sala fixa e entrou alguém que não devia, ou um amigo deixou 
 
 - **FR-001**: Toda transmissão nova MUST começar sendo assistida por todos na sala (como hoje).
 - **FR-002**: Cada tela ao vivo, no computador e no celular, MUST ter um controle "Parar de assistir". Sem assistir, ela MUST virar um cartão com nome, descrição (012) e "Assistir".
-- **FR-003**: Parar de assistir MUST fazer quem transmite deixar de enviar o vídeo para essa pessoa e deixar de contá-la em "N assistindo". O som MUST continuar, com o volume e o mudo de antes.
+- **FR-003**: Parar de assistir MUST fazer quem transmite deixar de enviar o vídeo para essa pessoa e deixar de contá-la em "N assistindo". O som também MUST parar, e voltar com o volume e o mudo de antes ao assistir de novo.
 - **FR-004**: "Assistir" MUST trazer o vídeo de volta em até 3 segundos.
 - **FR-005**: A escolha de não assistir MUST valer até aquela transmissão acabar e MUST sobreviver a uma queda com volta automática.
 
@@ -169,14 +169,14 @@ Sou o dono de uma sala fixa e entrou alguém que não devia, ou um amigo deixou 
 - **SC-001**: Quem transmite e joga, com o Espia minimizado ou na bandeja, tem pelo menos a mesma taxa de quadros no jogo que teria transmitindo sem ninguém mais ao vivo na sala (medido no mesmo jogo e cenário, antes e depois).
 - **SC-002**: Com o Espia fora de vista, o Espia de quem assiste não desenha nenhum quadro de vídeo (exceto o picture-in-picture), e quem transmite deixa de enviar vídeo para essa pessoa em até 3 segundos.
 - **SC-003**: Voltar a assistir (pelo botão ou ao reabrir a janela) mostra imagem em até 3 segundos em 9 de cada 10 vezes.
-- **SC-004**: O som de quem transmite nunca é cortado por parar de assistir ou esconder a janela (conferido nos dois casos, no site e no app).
+- **SC-004**: Esconder a janela (segundo plano) nunca corta o som, e parar de assistir sempre corta (conferido no site e no app).
 - **SC-005**: A prévia de quem transmite troca de imagem no máximo uma vez a cada 3 segundos, salvo quando a pessoa pediu a própria tela grande.
 - **SC-006**: O dono remove alguém em 2 cliques (escolher e confirmar), e a pessoa some da lista de todos em até 2 segundos.
 
 ## Assumptions
 
 - "Fora de vista" é o que o navegador e o app já informam como página escondida (minimizada, bandeja, aba de trás). Se uma janela fica totalmente coberta por outra sem minimizar, pode ou não contar como escondida, conforme o sistema; isso é aceito.
-- O som continua em todos os casos porque é barato e o grupo usa o som pra acompanhar o jogo do amigo.
+- Com o Espia em segundo plano o som continua, porque o grupo usa o som pra acompanhar o jogo do amigo. Parar de assistir é uma escolha explícita e corta tudo.
 - A miniatura (faixa de baixo no foco) continua como hoje (360p, 15 fps). Esta feature não muda isso.
 - Remover reaproveita a prova de dono da 011 (chave guardada no aparelho que criou a sala). Sala rápida não tem dono, então não tem remoção.
 - Sem constituição nova: não há API nativa nova no app, e a remoção não guarda nada sobre as pessoas. O app desktop não precisa de versão nova se a visibilidade da página já refletir minimizar e bandeja; se não refletir, o plano decide.

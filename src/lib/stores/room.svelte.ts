@@ -19,7 +19,7 @@ import { untrack } from 'svelte';
 import { Mesh } from '../mesh';
 import { detectNative, matchLastSource, pollSources, sourceKey, startNative, type AudioWarn, type NativeSession } from '../native-capture';
 import { CpuGovernor } from '../cpu-governor';
-import { countFullViewers, effectiveQuality, isAdjusted, stepDown, type Quality, type ViewMode } from '../quality';
+import { countFullViewers, effectiveQuality, isAdjusted, stepDown, wantsVideo, type Quality, type ViewMode } from '../quality';
 import { pruneUnwatched, stageLayout, viewModes } from '../room-view';
 import {
   loadGoLivePrefs,
@@ -301,7 +301,7 @@ export class RoomStore {
   /** Manda os modos e, pra quem volta a ser visto, espera o vídeo de novo (não conta o tempo escondido). */
   private applyViews(views: Record<string, ViewMode>) {
     for (const [id, mode] of Object.entries(views)) {
-      if (mode !== 'hidden' && (this.sentModes[id] ?? 'hidden') === 'hidden' && !this.media[id]?.video) {
+      if (wantsVideo(mode) && !wantsVideo(this.sentModes[id]) && !this.media[id]?.video) {
         this.timedOut[id] = false;
         if (this.peers.some((p) => p.id === id && p.live)) this.waitFirstFrame(id);
       }
@@ -483,7 +483,7 @@ export class RoomStore {
         fps: this.quality?.fps ?? this.myBroadcast.fps,
         adjusted: !!this.quality && isAdjusted(this.myBroadcast, this.quality),
         // Quem está recebendo o vídeo de verdade (specs/014): parar de assistir ou esconder a janela não conta.
-        viewers: Object.values(this.theirViews).filter((m) => m !== 'hidden').length,
+        viewers: Object.values(this.theirViews).filter(wantsVideo).length,
         snapshot: this.snapshot,
         onStage: this.selfOnStage,
       },
@@ -1221,7 +1221,7 @@ export class RoomStore {
       id,
       setTimeout(() => {
         // Escondida pra mim (parei de assistir, página escondida): o vídeo não vem mesmo.
-        if ((this.sentModes[id] ?? 'hidden') === 'hidden') return;
+        if (!wantsVideo(this.sentModes[id])) return;
         if (!this.media[id]?.video) this.timedOut[id] = true;
       }, FIRST_FRAME_TIMEOUT_MS),
     );

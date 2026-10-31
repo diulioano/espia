@@ -1,8 +1,22 @@
 // Qualidade de quem transmite (architecture.md §4.1b e §4.2). Funções puras: sem WebRTC aqui.
 import type { Fps, GoLivePrefs, Resolution } from './types';
 
-/** Como alguém está vendo a SUA tela. Vai pelo canal `ctl` de quem assiste para quem transmite. */
-export type ViewMode = 'full' | 'thumb' | 'hidden';
+/**
+ * Como alguém está vendo a SUA tela. Vai pelo canal `ctl` de quem assiste para quem transmite.
+ * - `hidden`: a janela dele está em segundo plano. Sem vídeo, o som continua.
+ * - `off`: ele parou de assistir (specs/014). Sem vídeo e sem som.
+ */
+export type ViewMode = 'full' | 'thumb' | 'hidden' | 'off';
+
+/** O vídeo vai pra essa pessoa? */
+export function wantsVideo(mode: ViewMode | undefined): boolean {
+  return mode === 'full' || mode === 'thumb';
+}
+
+/** O som vai pra essa pessoa? (Só parar de assistir corta o som.) */
+export function wantsSound(mode: ViewMode | undefined): boolean {
+  return mode !== 'off';
+}
 
 export interface Quality {
   resolution: Resolution;
@@ -67,7 +81,7 @@ export interface SendParams {
 
 /** Miniatura: ~360p · 15 fps · 0,5 Mbps. Escondida: pausa o vídeo (o som continua, specs/014). */
 export function sendParams(q: Quality, mode: ViewMode): SendParams {
-  if (mode === 'hidden') return { active: false, scaleResolutionDownBy: 1, maxFramerate: q.fps, maxBitrate: q.maxBitrate };
+  if (mode === 'hidden' || mode === 'off') return { active: false, scaleResolutionDownBy: 1, maxFramerate: q.fps, maxBitrate: q.maxBitrate };
   if (mode === 'thumb') return { active: true, scaleResolutionDownBy: q.resolution / 360, maxFramerate: 15, maxBitrate: 500_000 };
   return { active: true, scaleResolutionDownBy: 1, maxFramerate: q.fps, maxBitrate: q.maxBitrate };
 }

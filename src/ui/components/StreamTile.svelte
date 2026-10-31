@@ -165,7 +165,8 @@
   onpointerleave={sleep}
   onfocusin={wake}
 >
-  {#if view.audioStream && !you}
+  <!-- Parou de assistir: sem som também (specs/014). Em segundo plano o tile continua e o som segue. -->
+  {#if view.audioStream && !you && watching}
     <audio bind:this={sound} autoplay></audio>
   {/if}
 
@@ -184,7 +185,7 @@
         </button>
       {:else}
         <span class="unwatched-title">Você parou de assistir {label}</span>
-        <span class="unwatched-sub">O som continua{view.muted ? ' (está mudo)' : ''}. A tela não chega até você clicar.</span>
+        <span class="unwatched-sub">Nem a tela nem o som chegam até você clicar.</span>
         <button
           class="btn btn-primary watch"
           onclick={(e) => {
@@ -271,7 +272,7 @@
       {/if}
       <div class="spacer"></div>
       {#if onwatch && !you}
-        <button class="ctl" aria-label="Parar de assistir" title="Parar de assistir (o som continua)" onclick={() => onwatch?.(false)}>
+        <button class="ctl" aria-label="Parar de assistir" title="Parar de assistir (tela e som)" onclick={() => onwatch?.(false)}>
           <EyeOff size={18} strokeWidth={2.75} />
         </button>
       {/if}

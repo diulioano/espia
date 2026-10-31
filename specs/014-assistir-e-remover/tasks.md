@@ -183,6 +183,15 @@ Gate de toda fase: `npm run check`, `npm test`, `npm run build` e os mocks da fa
 >   - entra de novo pelo link.
 > - Desvio: o botão "Remover" aparece por cima do fim da linha ao passar o mouse (ícone `UserMinus`), em vez de um "⋯". O aviso no início é um toast que some em 8 s.
 
+## Correção do usuário (2026-10-31)
+
+- [X] T1439 [US1] Parar de assistir corta vídeo **e som**. O som só continua em segundo plano (research R9).
+  - Modo `off` (`quality.ts`: `wantsVideo`/`wantsSound`);
+  - `peer.ts`: `encodeView`/`decodeView`, `hidden` + `sound: false` no fio;
+  - `viewModes`: não assistida e não escolhida no celular → `off`;
+  - o tile sem assistir não monta o `<audio>`.
+  - E2E `assistir.mjs`: sem assistir → 0 pacotes de som; página escondida → ~100 pacotes/2 s; ao voltar, vídeo e som.
+
 ## Phase 7: Polish & Cross-Cutting
 
 - [X] T1435 Ajustar a `spec.md`: cenário US4-6 (app e navegador são pessoas diferentes; abas do mesmo navegador já são uma só, R7) e celular sem "ver a própria tela grande" (R8).
