@@ -4,6 +4,7 @@
   import { formatElapsed, header, watchingId } from '../../lib/room-view';
   import type { CameraActions, RoomActions, RoomView } from '../../lib/types';
   import DeleteRoomDialog from '../components/DeleteRoomDialog.svelte';
+  import RemoveDialog from '../components/RemoveDialog.svelte';
   import GoLiveModal from '../components/GoLiveModal.svelte';
   import NameDialog from '../components/NameDialog.svelte';
   import RoomMenu from '../components/RoomMenu.svelte';
@@ -60,7 +61,7 @@
       {:else}
         <ul class="list" class:faded={down}>
           {#each view.participants as p (p.id)}
-            <Participant person={p} watching={p.id === watching} />
+            <Participant person={p} watching={p.id === watching} onremove={() => actions.askRemove(p.id)} />
           {/each}
         </ul>
       {/if}
@@ -178,6 +179,9 @@
   {/if}
   {#if view.deleteDialog}
     <DeleteRoomDialog view={view.deleteDialog} onconfirm={actions.confirmDelete} onclose={actions.closeDialogs} />
+  {/if}
+  {#if view.removeDialog}
+    <RemoveDialog view={view.removeDialog} onconfirm={actions.confirmRemove} onclose={actions.closeDialogs} />
   {/if}
 
   {#if view.goLiveOpen}

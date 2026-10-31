@@ -136,6 +136,19 @@ export function parseStatusBody(text: string): string[] | null {
 }
 
 /** Corpo do PATCH /api/rooms/:code: `{ name }`, normalizado como na criação. */
+/** Corpo de POST /api/rooms/:code/remove (specs/014): só o id da pessoa, no formato que o servidor gera. */
+export function parseRemoveBody(text: string): string | null {
+  if (text.length > MAX_BODY) return null;
+  let body: unknown;
+  try {
+    body = JSON.parse(text);
+  } catch {
+    return null;
+  }
+  if (!isObj(body) || !hasOnly(body, ['peerId']) || typeof body.peerId !== 'string') return null;
+  return /^[0-9a-f]{16}$/.test(body.peerId) ? body.peerId : null;
+}
+
 export function parseRenameBody(text: string): string | null {
   if (text.length > MAX_BODY) return null;
   let body: unknown;

@@ -178,6 +178,41 @@ export class Room extends DurableObject<Env> {
     return 'ok';
   }
 
+  /**
+   * O dono tira alguém da sala (specs/014 US4): sai na hora pra todos, como "Sair da sala", sem fantasma
+   * (não volta sozinho). Nada fica guardado sobre quem saiu: o link continua abrindo pra ela.
+   */
+  async removePerson(ownerHash: string, peerId: string): Promise<OwnerResult> {
+    const check = await this.checkOwner(ownerHash);
+    if (check !== 'ok') return check;
+    const turn: string[] = [];
+    for (const { ws, member } of this.members()) {
+      if (member.id !== peerId) continue;
+      turn.push(...member.turn);
+      // Fora da sala antes de fechar: o webSocketClose não cria fantasma.
+      ws.serializeAttachment({ joined: false } satisfies Attachment);
+      send(ws, { t: 'removed' });
+      try {
+        ws.close(CLOSE.removed, 'removido pelo dono');
+      } catch {
+        // Já fechado.
+      }
+    }
+    const ghosts = await this.ghosts();
+    const ghost = ghosts[peerId];
+    if (ghost) {
+      turn.push(...ghost.member.turn);
+      delete ghosts[peerId];
+      await this.ctx.storage.put('ghosts', ghosts);
+    }
+    if (turn.length || ghost || (await this.roster())[peerId]) {
+      await this.dropMembers([peerId]);
+      this.broadcast({ t: 'peer-left', id: peerId });
+      await revokeTurn(this.env, turn);
+    }
+    return 'ok';
+  }
+
   private async checkOwner(ownerHash: string): Promise<OwnerResult> {
     const tomb = await this.tombstone();
     if (tomb) return tomb.reason;

@@ -26,7 +26,13 @@
     creating: false,
     appInvite: appInviteVisible({ ...readInviteEnv(), dismissed: loadAppInviteDismissed() }) ? 'offer' : undefined,
     download: appDownloadVisible(readInviteEnv()),
+    notice: router.state.notice === 'removed' ? 'O dono te tirou da sala' : undefined,
   });
+  // O aviso some sozinho (e não volta ao recarregar: o estado da navegação é trocado).
+  if (view.notice) {
+    history.replaceState({ ...router.state, notice: undefined }, '');
+    setTimeout(() => (view.notice = undefined), 8_000);
+  }
 
   // Suas salas (specs/011 US3): a lista do aparelho + quantas pessoas em cada uma agora.
   let saved = loadSavedRooms();
@@ -82,6 +88,9 @@
     },
     downloadApp() {
       view.appInvite = 'hint';
+    },
+    dismissNotice() {
+      view.notice = undefined;
     },
     dismissAppInvite() {
       saveAppInviteDismissed();

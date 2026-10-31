@@ -9,6 +9,8 @@ export interface NavState {
   nickname?: string;
   /** Acabou de criar a sala fixa (specs/011 S1): a sala copia o convite e avisa. */
   created?: boolean;
+  /** Aviso pra tela inicial (specs/014 US4). */
+  notice?: 'removed';
 }
 
 function parse(pathname: string): Route {

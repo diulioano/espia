@@ -103,6 +103,17 @@
       view.focusedId = id;
     },
     pip() {},
+    askRemove(peerId) {
+      const p = view.participants.find((x) => x.id === peerId);
+      if (p) view.removeDialog = { name: p.name, busy: false, error: null };
+    },
+    confirmRemove() {
+      const name = view.removeDialog?.name;
+      view.removeDialog = undefined;
+      view.participants = view.participants.filter((p) => p.name !== name);
+      view.streams = view.streams.filter((s) => s.name !== name);
+      if (name) toast({ kind: 'leave', text: `${name} saiu da sala` });
+    },
     toggleSelfStage() {
       onnavigate?.('room', view.myBroadcast?.onStage ? 'live' : 'self-stage');
     },
@@ -170,6 +181,7 @@
       view.ownerMenu = false;
       view.nameDialog = undefined;
       view.deleteDialog = undefined;
+      view.removeDialog = undefined;
     },
     // Mock da queda (specs/011): "Tentar de novo" volta a reconectar e, logo depois, "De volta!".
     retryConnection() {

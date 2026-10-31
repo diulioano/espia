@@ -6,7 +6,8 @@ import type { RoomSession } from './prefs';
 export type SignalingStatus = 'connecting' | 'open' | 'reconnecting';
 /** Motivos que encerram a sala de vez (sem reconectar). */
 /** 'deleted' (specs/011): o dono apagou a sala com você dentro. */
-export type SignalingEnd = 'not-found' | 'full' | 'replaced' | 'kicked' | 'deleted';
+/** 'removed' (specs/014): o dono tirou você da sala. Não reconecta. */
+export type SignalingEnd = 'not-found' | 'full' | 'replaced' | 'kicked' | 'deleted' | 'removed';
 
 export interface SignalingOptions {
   code: string;
@@ -97,6 +98,8 @@ export class Signaling {
         return this.end('full');
       case 'room-deleted':
         return this.end('deleted');
+      case 'removed':
+        return this.end('removed');
     }
     this.opts.onMessage(msg);
   }
@@ -109,6 +112,7 @@ export class Signaling {
     if (code === CLOSE.notFound) return this.end('not-found');
     if (code === CLOSE.full) return this.end('full');
     if (code === CLOSE.deleted) return this.end('deleted');
+    if (code === CLOSE.removed) return this.end('removed');
     this.wasDown = true;
     this.opts.onStatus('reconnecting');
     const delay = BACKOFF_MS[Math.min(this.attempt, BACKOFF_MS.length - 1)];

@@ -84,6 +84,7 @@ Estou transmitindo. Na barra do lado, "Você está ao vivo" mostra uma imagem pa
 5. **Given** estou vendo a minha tela grande e escolhi transmitir a tela inteira do monitor em que o Espia está, **When** olho o palco, **Then** vejo o "espelho infinito", que é esperado; ele só aparece porque eu pedi.
 6. **Given** o Espia está fora de vista, **When** estou transmitindo, **Then** a imagem parada também para de se atualizar.
 7. **Given** transmito câmera, **When** olho a prévia, **Then** vale o mesmo: imagem parada, e grande ao vivo só se eu clicar.
+8. **Given** estou no celular, **When** transmito câmera, **Then** não existe "ver grande" (não há barra lateral). Só a prévia parada vale (research R8).
 
 ---
 
@@ -102,7 +103,7 @@ Sou o dono de uma sala fixa e entrou alguém que não devia, ou um amigo deixou 
 3. **Given** escolho "Remover da sala", **When** confirmo ("Tirar Lu da sala? Ela pode voltar pelo link."), **Then** a pessoa sai na hora pra todos, como se tivesse clicado em "Sair da sala", e a transmissão dela, se houver, termina.
 4. **Given** fui removido, **When** isso acontece, **Then** volto pra tela inicial com o aviso "O dono te tirou da sala" e o Espia **não** tenta reconectar sozinho, como faria numa queda.
 5. **Given** fui removido, **When** abro o link da sala de novo, **Then** entro normalmente.
-6. **Given** a pessoa removida tinha a mesma sala aberta em outra aba ou no app, **When** é removida, **Then** sai de todos os lugares em que estava naquela sala.
+6. **Given** a pessoa estava na sala em duas abas do mesmo navegador, **When** é removida, **Then** sai, porque as abas dividem o mesmo lugar e só uma está de fato na sala. App e navegador contam como duas pessoas na lista, e o dono remove cada uma (research R7).
 7. **Given** alguém que não é o dono tenta remover outra pessoa (ex.: mexendo no site), **When** o pedido chega ao servidor, **Then** é recusado e nada acontece.
 
 ### Edge Cases

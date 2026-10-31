@@ -787,6 +787,79 @@ describe('Dono (specs/011)', () => {
   });
 });
 
+describe('Remover pessoa (specs/014 US4)', () => {
+  async function fixedRoom(name: string) {
+    const res = await call('/api/rooms', { method: 'POST', headers: ORIGIN, body: JSON.stringify({ kind: 'fixed', name }) });
+    return (await res.json()) as { code: string; ownerKey: string };
+  }
+  const auth = (key: string) => ({ ...ORIGIN, Authorization: `Bearer ${key}` });
+  const removePerson = (code: string, peerId: unknown, headers: Record<string, string>) =>
+    call(`/api/rooms/${code}/remove`, { method: 'POST', headers, body: JSON.stringify({ peerId }) });
+
+  it('sem a chave certa, em sala rápida ou de outro site: 403, e ninguém sai', async () => {
+    const { code, ownerKey } = await fixedRoom('CS da galera');
+    const { c: lu, welcome } = await Client.join(code, 'Lu');
+    expect((await removePerson(code, welcome.you.id, ORIGIN)).status).toBe(403);
+    expect((await removePerson(code, welcome.you.id, auth('0'.repeat(64)))).status).toBe(403);
+    expect((await removePerson(code, welcome.you.id, { Origin: 'https://outro.site', Authorization: `Bearer ${ownerKey}` })).status).toBe(403);
+    const quick = await createRoom();
+    const { welcome: q } = await Client.join(quick, 'Bia');
+    expect((await removePerson(quick, q.you.id, auth(ownerKey))).status).toBe(403);
+    await sleep(100);
+    expect(lu.closed).toBeNull();
+  });
+
+  it('corpo inválido: 400; método errado: 405', async () => {
+    const { code, ownerKey } = await fixedRoom('CS da galera');
+    expect((await removePerson(code, 'nao-e-id', auth(ownerKey))).status).toBe(400);
+    expect((await removePerson(code, 42, auth(ownerKey))).status).toBe(400);
+    expect((await call(`/api/rooms/${code}/remove`, { method: 'GET', headers: auth(ownerKey) })).status).toBe(405);
+  });
+
+  it('conectado: recebe removed + 4403, os outros veem peer-left, TURN revogado, não volta sozinho; entra de novo pelo link', async () => {
+    const { code, ownerKey } = await fixedRoom('CS da galera');
+    const { c: dono } = await Client.join(code, 'Rafa');
+    const { c: lu, welcome } = await Client.join(code, 'Lu');
+    await dono.next('peer-joined');
+    revoked.length = 0;
+    expect((await removePerson(code, welcome.you.id, auth(ownerKey))).status).toBe(204);
+    await lu.next('removed');
+    expect((await lu.waitClose())?.code).toBe(CLOSE.removed);
+    expect((await dono.next('peer-left')).id).toBe(welcome.you.id);
+    expect(revoked.length).toBeGreaterThanOrEqual(1);
+    // Retomar o lugar (o que a queda faz) não funciona: saiu de verdade.
+    const back = await Client.open(code);
+    back.send({ t: 'resume', peerId: welcome.you.id, resumeToken: welcome.resumeToken });
+    await back.next('resume-failed');
+    // Mas abrir o link de novo entra normalmente, como pessoa nova (nada fica guardado).
+    back.send({ t: 'join', nickname: 'Lu' });
+    const again = await back.next('welcome');
+    expect(again.you.id).not.toBe(welcome.you.id);
+    expect((await (await call(`/api/rooms/${code}`)).json()) as { people: unknown[] }).toMatchObject({ people: [{}, {}] });
+  });
+
+  it('em queda (fantasma): some da sala e não consegue retomar', async () => {
+    const { code, ownerKey } = await fixedRoom('CS da galera');
+    const { c: dono } = await Client.join(code, 'Rafa');
+    const { c: lu, welcome } = await Client.join(code, 'Lu');
+    lu.ws.close(4999, 'caiu');
+    await sleep(100);
+    expect((await removePerson(code, welcome.you.id, auth(ownerKey))).status).toBe(204);
+    expect((await dono.next('peer-left')).id).toBe(welcome.you.id);
+    const back = await Client.open(code);
+    back.send({ t: 'resume', peerId: welcome.you.id, resumeToken: welcome.resumeToken });
+    await back.next('resume-failed');
+  });
+
+  it('quem não está na sala: 204 e nada muda', async () => {
+    const { code, ownerKey } = await fixedRoom('CS da galera');
+    const { c: dono } = await Client.join(code, 'Rafa');
+    expect((await removePerson(code, 'abcdef0123456789', auth(ownerKey))).status).toBe(204);
+    await sleep(100);
+    expect(dono.has('peer-left')).toBe(false);
+  });
+});
+
 describe('Descrição da transmissão (specs/012)', () => {
   const live = (label?: unknown) => ({ t: 'live', resolution: 1080, fps: 60, audio: 'window', ...(label !== undefined ? { label } : {}) });
 

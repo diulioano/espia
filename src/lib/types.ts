@@ -22,6 +22,8 @@ export interface ParticipantView {
   live: boolean;
   /** O que essa pessoa está transmitindo (specs/012). */
   liveLabel?: string;
+  /** O dono de uma sala fixa pode tirar essa pessoa da sala (specs/014 US4). Nunca em `you`. */
+  removable?: boolean;
 }
 
 export interface StreamView {
@@ -178,6 +180,15 @@ export interface RoomView {
   ownerMenu?: boolean;
   nameDialog?: NameDialogView;
   deleteDialog?: DeleteDialogView;
+  /** Confirmar "Tirar da sala" (specs/014 US4). */
+  removeDialog?: RemoveDialogView;
+}
+
+/** Confirmar "Tirar da sala" (specs/014 US4). */
+export interface RemoveDialogView {
+  name: string;
+  busy: boolean;
+  error: string | null;
 }
 
 export interface HomeView {
@@ -191,6 +202,8 @@ export interface HomeView {
   creating?: boolean;
   /** Convite do app desktop (specs/008): oferta, ou a dica depois de baixar. Ausente = não mostra. */
   appInvite?: 'offer' | 'hint';
+  /** Aviso ao chegar no início (specs/014 US4): "O dono te tirou da sala". */
+  notice?: string;
   /** Botão "Baixar o app" no topo (specs/013): só no site, no Windows, mesmo depois de "Agora não". */
   download?: boolean;
   /** Suas salas (specs/011 US3). null = nenhuma neste aparelho → a ilustração de sempre. */
@@ -248,6 +261,8 @@ export interface HomeActions {
   /** Clicou em "Baixar o app" (o link baixa sozinho; aqui só troca para a dica). */
   downloadApp(): void;
   dismissAppInvite(): void;
+  /** Fechou o aviso do início (specs/014). */
+  dismissNotice?(): void;
   /** Sala fixa (specs/011). */
   openFixedDialog(): void;
   closeFixedDialog(): void;
@@ -353,5 +368,8 @@ export interface RoomActions {
   openDelete(): void;
   confirmDelete(): void;
   closeDialogs(): void;
+  /** Dono (specs/014 US4): "Remover da sala" na lista e a confirmação. */
+  askRemove(peerId: string): void;
+  confirmRemove(): void;
   leave(): void;
 }

@@ -4,6 +4,7 @@
   import type { CameraActions, RoomActions, RoomView } from '../../lib/types';
   import Avatar from '../components/Avatar.svelte';
   import DeleteRoomDialog from '../components/DeleteRoomDialog.svelte';
+  import RemoveDialog from '../components/RemoveDialog.svelte';
   import GoLiveModal from '../components/GoLiveModal.svelte';
   import NameDialog from '../components/NameDialog.svelte';
   import RoomMenu from '../components/RoomMenu.svelte';
@@ -123,7 +124,7 @@
       <span class="label">Na sala · {view.participants.length} de {view.capacity}</span>
       <ul class="list">
         {#each view.participants as p (p.id)}
-          <Participant person={p} watching={p.id === selected?.id && selected.watching !== false} />
+          <Participant person={p} watching={p.id === selected?.id && selected.watching !== false} onremove={() => actions.askRemove(p.id)} />
         {/each}
       </ul>
     </section>
@@ -162,6 +163,9 @@
   {/if}
   {#if view.deleteDialog}
     <DeleteRoomDialog view={view.deleteDialog} onconfirm={actions.confirmDelete} onclose={actions.closeDialogs} />
+  {/if}
+  {#if view.removeDialog}
+    <RemoveDialog view={view.removeDialog} onconfirm={actions.confirmRemove} onclose={actions.closeDialogs} />
   {/if}
 
   {#if view.link === 'failed'}

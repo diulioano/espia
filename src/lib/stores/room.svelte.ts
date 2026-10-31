@@ -35,7 +35,7 @@ import { liveLabel } from '../live-label';
 import { grabSnapshot, SNAPSHOT_MS } from '../snapshot';
 import { roomPath } from '../room-id';
 import { forgetRoom, loadSavedRooms, rememberRoom, renameSaved, saveSavedRooms } from '../saved-rooms';
-import { deleteRoom, ownerErrorText, renameRoom } from '../api';
+import { deleteRoom, ownerErrorText, removePerson, renameRoom } from '../api';
 import { Signaling, type SignalingEnd } from '../signaling';
 import type {
   CameraView,
@@ -44,6 +44,7 @@ import type {
   GoLivePrefs,
   MyBroadcastView,
   NameDialogView,
+  RemoveDialogView,
   RoomActions,
   RoomView,
   ShareSurface,
@@ -87,6 +88,8 @@ export class RoomStore {
   ownerMenu = $state(false);
   nameDialog = $state<NameDialogView | undefined>(undefined);
   deleteDialog = $state<DeleteDialogView | undefined>(undefined);
+  /** "Tirar da sala" (specs/014 US4): quem e o estado do pedido. */
+  removeDialog = $state<(RemoveDialogView & { peerId: string }) | undefined>(undefined);
   /** Confirmou "Apagar sala": o fechamento 4410 que vem em seguida não é surpresa. */
   private deleting = false;
   me = $state<Peer | null>(null);
@@ -380,6 +383,8 @@ export class RoomStore {
         const peer = this.peers.find((p) => p.id === msg.id);
         this.peers = this.peers.filter((p) => p.id !== msg.id);
         if (this.focusedId === msg.id) this.focusedId = null;
+        // Saiu sozinha enquanto o dono confirmava: não tem mais quem tirar.
+        if (this.removeDialog?.peerId === msg.id) this.removeDialog = undefined;
         this.mesh?.remove(msg.id);
         this.forgetMedia(msg.id);
         this.pruneWatch();
@@ -418,9 +423,11 @@ export class RoomStore {
 
   private buildView(): RoomView {
     const me = this.me;
+    // Só o dono de uma sala fixa tira alguém (specs/014 US4), e só com a ligação de pé.
+    const canRemove = this.roomInfo.kind === 'fixed' && !!loadOwnerKey(this.code) && this.link === 'ok';
     const participants = [
       ...(me ? [{ id: me.id, name: me.nickname, tone: me.tone, you: true, live: !!this.myBroadcast, liveLabel: this.myBroadcast?.label }] : []),
-      ...this.peers.map((p) => ({ id: p.id, name: p.nickname, tone: p.tone, you: false, live: !!p.live, liveLabel: p.live?.label })),
+      ...this.peers.map((p) => ({ id: p.id, name: p.nickname, tone: p.tone, you: false, live: !!p.live, liveLabel: p.live?.label, removable: canRemove })),
     ];
     const streams: StreamView[] = this.peers
       .filter((p) => p.live)
@@ -485,6 +492,7 @@ export class RoomStore {
       ownerMenu: this.ownerMenu,
       nameDialog: this.nameDialog,
       deleteDialog: this.deleteDialog,
+      removeDialog: this.removeDialog && { name: this.removeDialog.name, busy: this.removeDialog.busy, error: this.removeDialog.error },
       copied: this.copied,
       goLiveOpen: this.goLiveOpen,
       goLivePrefs: this.goLivePrefs,
@@ -633,10 +641,30 @@ export class RoomStore {
         }
         this.leaveAfterDelete();
       },
+      askRemove: (peerId) => {
+        const peer = this.peers.find((p) => p.id === peerId);
+        if (!peer || this.roomInfo.kind !== 'fixed' || !loadOwnerKey(this.code) || this.link !== 'ok') return;
+        this.removeDialog = { peerId, name: peer.nickname, busy: false, error: null };
+      },
+      confirmRemove: async () => {
+        const key = loadOwnerKey(this.code);
+        const d = this.removeDialog;
+        if (!key || !d || d.busy) return;
+        this.removeDialog = { ...d, busy: true, error: null };
+        const res = await removePerson(this.code, key, d.peerId);
+        if (this.removeDialog?.peerId !== d.peerId) return;
+        if (res.ok) {
+          // A pessoa some da lista pelo peer-left.
+          this.removeDialog = undefined;
+          return;
+        }
+        this.removeDialog = { ...d, busy: false, error: ownerErrorText(res.reason) };
+      },
       closeDialogs: () => {
         this.ownerMenu = false;
         this.nameDialog = undefined;
         this.deleteDialog = undefined;
+        this.removeDialog = undefined;
       },
       goHome: () => {
         if (this.myBroadcast && !confirm('Você está transmitindo. Parar e sair da sala?')) return;

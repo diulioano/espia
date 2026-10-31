@@ -53,9 +53,9 @@ export async function fetchStatuses(codes: string[]): Promise<RoomStatus[] | nul
 
 export type OwnerFailure = 'forbidden' | 'gone' | 'name' | 'rate-limited' | 'network';
 
-async function ownerRequest(code: string, key: string, init: RequestInit): Promise<Response | OwnerFailure> {
+async function ownerRequest(code: string, key: string, init: RequestInit, sub = ''): Promise<Response | OwnerFailure> {
   try {
-    const res = await fetch(`/api/rooms/${code}`, {
+    const res = await fetch(`/api/rooms/${code}${sub}`, {
       ...init,
       headers: { ...init.headers, Authorization: `Bearer ${key}` },
     });
@@ -84,6 +84,16 @@ export async function renameRoom(code: string, key: string, name: string): Promi
 /** Apagar sala fixa (specs/011 US4): quem está dentro sai com aviso. */
 export async function deleteRoom(code: string, key: string): Promise<{ ok: true } | { ok: false; reason: OwnerFailure }> {
   const res = await ownerRequest(code, key, { method: 'DELETE' });
+  return typeof res === 'string' ? { ok: false, reason: res } : { ok: true };
+}
+
+/** O dono tira alguém da sala (specs/014 US4). A pessoa some da lista pelo peer-left. */
+export async function removePerson(code: string, key: string, peerId: string): Promise<{ ok: true } | { ok: false; reason: OwnerFailure }> {
+  const res = await ownerRequest(code, key, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ peerId }),
+  }, '/remove');
   return typeof res === 'string' ? { ok: false, reason: res } : { ok: true };
 }
 

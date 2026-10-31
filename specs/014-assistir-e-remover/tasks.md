@@ -143,39 +143,49 @@ Gate de toda fase: `npm run check`, `npm test`, `npm run build` e os mocks da fa
 
 **Independent Test**: quickstart E2E 4 + testes do Worker + mocks `owner-remove`, `remove-confirm` e `home/removed`.
 
-- [ ] T1423 [P] [US4] `src/shared/protocol.ts`: `ServerMessage` + `{ t: 'removed' }` e `CLOSE.removed = 4403` (comentário: "o dono tirou você da sala: não reconecta").
-- [ ] T1424 [P] [US4] `src/worker/validate.ts`: `parseRemoveBody(raw: string): string | null`, que aceita só `{ "peerId": "<exatamente 16 hex minúsculos>" }`. Testes em `test/worker/validate.test.ts`.
-- [ ] T1425 [US4] `src/worker/room.ts`: RPC `removePerson(ownerHash, peerId): Promise<OwnerResult>`:
+- [X] T1423 [P] [US4] `src/shared/protocol.ts`: `ServerMessage` + `{ t: 'removed' }` e `CLOSE.removed = 4403` (comentário: "o dono tirou você da sala: não reconecta").
+- [X] T1424 [P] [US4] `src/worker/validate.ts`: `parseRemoveBody(raw: string): string | null`, que aceita só `{ "peerId": "<exatamente 16 hex minúsculos>" }`. Testes em `test/worker/validate.test.ts`.
+- [X] T1425 [US4] `src/worker/room.ts`: RPC `removePerson(ownerHash, peerId): Promise<OwnerResult>`:
   - faz o `checkOwner`;
   - se a pessoa está conectada: `serializeAttachment({ joined: false })`, `send({ t: 'removed' })` e `close(CLOSE.removed, 'removido pelo dono')`;
   - apaga o fantasma, se houver;
   - `dropMembers([peerId])`, `broadcast({ t: 'peer-left', id })` e `revokeTurn` das credenciais dela;
   - devolve `'ok'` também se a pessoa não existe.
-- [ ] T1426 [US4] `src/worker/index.ts`: rota `POST /api/rooms/:code/remove` → o `ownerAction` aceita o caminho `/remove`, faz `parseRemoveBody` (inválido → `400 { error: 'peer' }`) e responde `204` no ok. Mesmas regras de origem, `RL_CREATE` e Bearer do contrato.
-- [ ] T1427 [US4] `test/worker/room.test.ts` (ou `remove.test.ts`), conforme o contrato:
+- [X] T1426 [US4] `src/worker/index.ts`: rota `POST /api/rooms/:code/remove` → o `ownerAction` aceita o caminho `/remove`, faz `parseRemoveBody` (inválido → `400 { error: 'peer' }`) e responde `204` no ok. Mesmas regras de origem, `RL_CREATE` e Bearer do contrato.
+- [X] T1427 [US4] `test/worker/room.test.ts` (ou `remove.test.ts`), conforme o contrato:
   - chave errada → `403`;
   - sala rápida → `403`;
   - conectado → recebe `removed` + 4403, os outros recebem `peer-left`, o `resume` dele dá `resume-failed` e o `join` novo entra;
   - fantasma (socket fechado sem leave) → some da sala;
   - `peerId` inexistente → `204`;
   - corpo inválido → `400`.
-- [ ] T1428 [US4] `src/lib/signaling.ts`: `SignalingEnd` + `'removed'`. A mensagem `removed` ou o fechamento 4403 → `end('removed')`, sem reconectar. `room.svelte.ts`/`RoomRoute.svelte`: em `'removed'`, apagar a sessão guardada da sala (o `resumeToken` no `localStorage`, mesma função que o leave usa) e ir pro início com o aviso.
-- [ ] T1429 [US4] `src/lib/api.ts`: `removePerson(code, key, peerId): Promise<{ ok: true } | { ok: false; reason: OwnerFailure }>`, no mesmo molde de `renameRoom`.
-- [ ] T1430 [US4] `room.svelte.ts`:
+- [X] T1428 [US4] `src/lib/signaling.ts`: `SignalingEnd` + `'removed'`. A mensagem `removed` ou o fechamento 4403 → `end('removed')`, sem reconectar. `room.svelte.ts`/`RoomRoute.svelte`: em `'removed'`, apagar a sessão guardada da sala (o `resumeToken` no `localStorage`, mesma função que o leave usa) e ir pro início com o aviso.
+- [X] T1429 [US4] `src/lib/api.ts`: `removePerson(code, key, peerId): Promise<{ ok: true } | { ok: false; reason: OwnerFailure }>`, no mesmo molde de `renameRoom`.
+- [X] T1430 [US4] `room.svelte.ts`:
   - `ParticipantView.removable = room.kind === 'fixed' && room.own && !p.you`;
   - as ações `askRemove(peerId)` (abre `removeDialog` com o nome), `cancelRemove()` e `confirmRemove()`: `busy` → `api.removePerson`; ok fecha (a pessoa some pelo `peer-left`); erro mostra "Não deu pra tirar. Tenta de novo." no diálogo; `403` (deixou de ser dono) fecha com toast.
-- [ ] T1431 [P] [US4] ★ `src/ui/components/RemoveDialog.svelte`: no molde do `DeleteRoomDialog.svelte`, com o título "Tirar {name} da sala?", o corpo "Ela pode voltar pelo link." e os botões "Tirar da sala" (perigo) / "Cancelar". Estados `busy` e `error`. Esc cancela.
-- [ ] T1432 [US4] `src/ui/components/Participant.svelte`: com `person.removable`, um botão "⋯"/`UserMinus` discreto no hover/foco da linha, com o `aria-label` "Remover {name} da sala", que chama a prop `onremove`. `RoomPage.svelte` liga em `actions.askRemove(p.id)` e mostra o `RemoveDialog` quando `view.removeDialog`. No celular, o mesmo na lista de pessoas do `MobileRoomPage`, se a lista existir lá.
-- [ ] T1433 [US4] Aviso na tela inicial: `HomeRoute.svelte` lê um aviso de navegação (o mesmo mecanismo que a 011 usa para "sala apagada", se existir; senão, um parâmetro de estado no `router.go('/', { notice: 'removed' })`) e mostra o toast "O dono te tirou da sala".
-- [ ] T1434 [US4] Mocks:
+- [X] T1431 [P] [US4] ★ `src/ui/components/RemoveDialog.svelte`: no molde do `DeleteRoomDialog.svelte`, com o título "Tirar {name} da sala?", o corpo "Ela pode voltar pelo link." e os botões "Tirar da sala" (perigo) / "Cancelar". Estados `busy` e `error`. Esc cancela.
+- [X] T1432 [US4] `src/ui/components/Participant.svelte`: com `person.removable`, um botão "⋯"/`UserMinus` discreto no hover/foco da linha, com o `aria-label` "Remover {name} da sala", que chama a prop `onremove`. `RoomPage.svelte` liga em `actions.askRemove(p.id)` e mostra o `RemoveDialog` quando `view.removeDialog`. No celular, o mesmo na lista de pessoas do `MobileRoomPage`, se a lista existir lá.
+- [X] T1433 [US4] Aviso na tela inicial: `HomeRoute.svelte` lê um aviso de navegação (o mesmo mecanismo que a 011 usa para "sala apagada", se existir; senão, um parâmetro de estado no `router.go('/', { notice: 'removed' })`) e mostra o toast "O dono te tirou da sala".
+- [X] T1434 [US4] Mocks:
   - `src/mocks/room.ts`: `owner-remove` (sala fixa, `own: true`, pessoas com `removable: true`) e `remove-confirm` (`removeDialog` aberto);
   - `src/mocks/home.ts`: `removed` (toast).
 
 **Checkpoint**: US4 completa. Rodar o quickstart E2E 4.
 
+> **Resultado (2026-10-31)**:
+> - 5 testes novos do Worker: chave errada, sala rápida e outro site → 403; corpo inválido → 400; conectado → `removed` + 4403, `peer-left`, TURN revogado, `resume` falha e o `join` novo entra; fantasma some; quem não está → 204.
+> - E2E (scratchpad `remover.mjs`, 3 pessoas, Beto transmitindo câmera):
+>   - só o dono tem o botão, e não na própria linha;
+>   - Beto some da lista em ~230 ms e a transmissão dele termina pra Cris;
+>   - Beto cai no início com "O dono te tirou da sala" e não volta sozinho;
+>   - recarregar não repete o aviso;
+>   - entra de novo pelo link.
+> - Desvio: o botão "Remover" aparece por cima do fim da linha ao passar o mouse (ícone `UserMinus`), em vez de um "⋯". O aviso no início é um toast que some em 8 s.
+
 ## Phase 7: Polish & Cross-Cutting
 
-- [ ] T1435 Ajustar a `spec.md`: cenário US4-6 (app e navegador são pessoas diferentes; abas do mesmo navegador já são uma só, R7) e celular sem "ver a própria tela grande" (R8).
+- [X] T1435 Ajustar a `spec.md`: cenário US4-6 (app e navegador são pessoas diferentes; abas do mesmo navegador já são uma só, R7) e celular sem "ver a própria tela grande" (R8).
 - [ ] T1436 Rodar o e2e local completo (quickstart E2E 1–4, scratchpad, `npm run dev:worker`, nunca `--use-fake-ui-for-media-stream`) e registrar o resultado em `specs/014-assistir-e-remover/relatorio.md`.
 - [ ] T1437 Gate final: `npm run check`, `npm test`, `npm run build`; prints dos mocks novos. Commit.
 - [ ] T1438 Publicar o site (`! npm run deploy` pelo usuário, se o auto mode bloquear). Se a T1416 rodou: `npm run desktop:release` **depois** do site e publicar de novo. Roteiro manual M2–M5 com o grupo (o FPS no jogo é o SC-001).

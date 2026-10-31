@@ -43,6 +43,9 @@ export const ROOM_SCENES = [
   { id: 'unwatched-all', code: 'W2', label: 'Parou de assistir todas' },
   { id: 'unwatched-focus', code: 'W3', label: 'Foco com miniatura sem assistir' },
   { id: 'self-stage', code: 'W4', label: 'Sua tela grande no palco' },
+  // Remover pessoa (specs/014 US4).
+  { id: 'owner-remove', code: 'R1', label: 'Dono: remover da sala (passe o mouse na lista)' },
+  { id: 'remove-confirm', code: 'R2', label: 'Dono: confirmar "Tirar da sala"' },
 ] as const;
 
 export type RoomScene = (typeof ROOM_SCENES)[number]['id'];
@@ -231,6 +234,14 @@ export function buildRoomScene(scene: RoomScene): RoomView {
       if (scene === 'unwatched-all' || s.id === (scene === 'unwatched' ? 'bia' : 'tomas')) s.watching = false;
     }
     if (scene === 'unwatched-focus') view.streams.find((s) => s.id === 'tomas')!.status = 'ok';
+    return view;
+  }
+  if (scene === 'owner-remove' || scene === 'remove-confirm') {
+    const view = buildRoomScene('single');
+    view.toasts = [];
+    view.room = { kind: 'fixed', name: 'CS da galera', own: true };
+    view.participants.forEach((p) => (p.removable = !p.you));
+    if (scene === 'remove-confirm') view.removeDialog = { name: 'Tomás', busy: false, error: null };
     return view;
   }
   if (scene === 'self-stage') {

@@ -85,6 +85,8 @@
     store = null;
     // O dono apagou com você dentro (N2).
     if (ended === 'deleted') notFound('kicked');
+    // O dono tirou você (specs/014 US4): início com o aviso; o link continua valendo.
+    else if (ended === 'removed') router.go('/', { notice: 'removed' });
     // Não existe: a prévia diz se era rápida (404) ou fixa apagada/expirada (410).
     else if (ended === 'full') join = { ...join, status: 'full' };
     else {

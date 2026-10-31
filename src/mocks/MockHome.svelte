@@ -24,6 +24,9 @@
     downloadApp() {
       view.appInvite = 'hint';
     },
+    dismissNotice() {
+      view.notice = undefined;
+    },
     dismissAppInvite() {
       view.appInvite = undefined;
     },

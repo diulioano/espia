@@ -10,6 +10,7 @@
   import NameDialog from '../components/NameDialog.svelte';
   import SavedRoomsPanel from '../components/SavedRoomsPanel.svelte';
   import StreamTile from '../components/StreamTile.svelte';
+  import ToastStack from '../components/ToastStack.svelte';
 
   let { view, actions }: { view: HomeView; actions: HomeActions } = $props();
 
@@ -66,6 +67,10 @@
     </div>
   </div>
 
+  {#if view.notice}
+    <!-- Aviso de chegada (specs/014 US4): "O dono te tirou da sala". -->
+    <ToastStack toasts={[{ id: 'notice', kind: 'leave', text: view.notice }]} ondismiss={() => actions.dismissNotice?.()} />
+  {/if}
   <header class="top">
     <Logo size={36} onhome={() => scrollTo({ top: 0, behavior: 'smooth' })} />
     <!-- Sempre à mão no site, no Windows (specs/013), mesmo depois do "Agora não" no convite. -->

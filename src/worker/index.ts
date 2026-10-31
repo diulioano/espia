@@ -3,7 +3,7 @@ import { generateRoomId, ROOM_ID_RE } from '../lib/room-id';
 import type { RoomPreview, RoomStatus } from '../shared/protocol';
 import { randomHex, sha256Hex } from './crypto';
 import { Room, type OwnerResult } from './room';
-import { parseCreateBody, parseRenameBody, parseStatusBody } from './validate';
+import { parseCreateBody, parseRemoveBody, parseRenameBody, parseStatusBody } from './validate';
 
 export { Room };
 
@@ -64,6 +64,13 @@ async function route(request: Request, env: Env, url: URL): Promise<Response> {
     return json({ rooms });
   }
 
+  // Dono tira alguém da sala (specs/014 US4).
+  const removal = pathname.match(/^\/api\/rooms\/([^/]+)\/remove$/);
+  if (removal) {
+    if (request.method !== 'POST') return json({ error: 'method' }, 405);
+    return ownerAction(request, env, url, removal[1]);
+  }
+
   const api = pathname.match(/^\/api\/rooms\/([^/]+)$/);
   if (api) {
     const code = api[1];
@@ -92,7 +99,7 @@ async function route(request: Request, env: Env, url: URL): Promise<Response> {
   return env.ASSETS.fetch(request);
 }
 
-/** Renomear (PATCH) ou apagar (DELETE) sala fixa, só com a chave do dono (specs/011 US4). */
+/** Renomear (PATCH), apagar (DELETE) ou tirar alguém (POST /remove, specs/014) — só com a chave do dono (specs/011 US4). */
 async function ownerAction(request: Request, env: Env, url: URL, code: string): Promise<Response> {
   if (!sameOrigin(request, url)) return json({ error: 'origin' }, 403);
   if (!ROOM_ID_RE.test(code)) return json({ error: 'code' }, 400);
@@ -103,7 +110,11 @@ async function ownerAction(request: Request, env: Env, url: URL, code: string): 
 
   let result: OwnerResult;
   let name = '';
-  if (request.method === 'PATCH') {
+  if (request.method === 'POST') {
+    const peerId = parseRemoveBody(await request.text());
+    if (!peerId) return json({ error: 'peer' }, 400);
+    result = await room(env, code).removePerson(ownerHash, peerId);
+  } else if (request.method === 'PATCH') {
     const parsed = parseRenameBody(await request.text());
     if (!parsed) return json({ error: 'name' }, 400);
     name = parsed;

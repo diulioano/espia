@@ -100,6 +100,8 @@ export type ServerMessage =
   | { t: 'room-renamed'; name: string }
   /** O dono apagou a sala: vem antes do fechamento 4410 (specs/011). */
   | { t: 'room-deleted' }
+  /** O dono tirou você da sala: vem antes do fechamento 4403 (specs/014 US4). */
+  | { t: 'removed' }
   | { t: 'pong' };
 
 /** Códigos de fechamento do WebSocket. */
@@ -113,6 +115,8 @@ export const CLOSE = {
   leave: 4001,
   /** O dono apagou a sala fixa (specs/011): não reconecta. */
   deleted: 4410,
+  /** O dono tirou você da sala (specs/014 US4): não reconecta. Pode entrar de novo pelo link. */
+  removed: 4403,
 } as const;
 
 /** Resposta de GET /api/rooms/:code. */

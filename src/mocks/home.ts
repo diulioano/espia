@@ -16,6 +16,7 @@ export const HOME_SCENES = [
   { id: 'loading', code: 'F5', label: 'Carregando quem está em cada sala' },
   { id: 'gone', code: 'F6', label: 'Sala que deixou de existir' },
   { id: 'mobile', code: 'M4', label: 'Celular com Suas salas', device: 'mobile' },
+  { id: 'removed', code: 'R3', label: 'Tirado da sala pelo dono (specs/014)' },
 ] as const;
 
 export type HomeScene = (typeof HOME_SCENES)[number]['id'];
@@ -37,6 +38,7 @@ function roomsFor(scene: HomeScene): SavedRoomsView | null {
   switch (scene) {
     case 'few':
     case 'mobile':
+    case 'removed':
       return one(FEW.map((r) => ({ ...r })));
     case 'menu':
       return one(FEW.map((r, i) => ({ ...r, menuOpen: i === 0 })));
@@ -79,6 +81,7 @@ export function buildHomeScene(scene: HomeScene): HomeView {
     link: scene === 'error' ? 'https://youtu.be/dQw4w9WgXcQ' : '',
     linkError: scene === 'error' ? LINK_ERROR : null,
     appInvite: scene === 'invite' ? 'offer' : scene === 'invitehint' ? 'hint' : undefined,
+    notice: scene === 'removed' ? 'O dono te tirou da sala' : undefined,
     fixedDialog: scene === 'create' ? { mode: 'create', value: 'CS da galera', busy: false, error: null } : undefined,
   };
 }
