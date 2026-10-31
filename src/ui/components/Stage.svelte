@@ -62,6 +62,7 @@
         ontogglemute={() => actions.toggleMute(s.id)}
         onvolume={(v) => actions.setVolume(s.id, v)}
         onretry={() => actions.retry(s.id)}
+        onwatch={(on) => actions.watch(s.id, on)}
       />
     </div>
   {:else if layout === 'grid'}
@@ -74,6 +75,7 @@
           ontogglemute={() => actions.toggleMute(s.id)}
           onvolume={(v) => actions.setVolume(s.id, v)}
           onretry={() => actions.retry(s.id)}
+          onwatch={(on) => actions.watch(s.id, on)}
         />
       {/each}
       {#if view.streams.length < gridShape.cols * gridShape.rows}
@@ -93,12 +95,19 @@
           ontogglemute={() => actions.toggleMute(focused.id)}
           onvolume={(v) => actions.setVolume(focused.id, v)}
           onretry={() => actions.retry(focused.id)}
+          onwatch={(on) => actions.watch(focused.id, on)}
         />
       </div>
       <div class="strip">
         {#each others as s (s.id)}
           <div class="thumb">
-            <StreamTile view={s} size="thumb" onselect={() => actions.focus(s.id)} onretry={() => actions.retry(s.id)} />
+            <StreamTile
+              view={s}
+              size="thumb"
+              onselect={() => actions.focus(s.id)}
+              onretry={() => actions.retry(s.id)}
+              onwatch={(on) => actions.watch(s.id, on)}
+            />
           </div>
         {/each}
         <span class="strip-hint">Clique pra trocar · Esc volta pra grade</span>

@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { Maximize, PictureInPicture2, RefreshCw, Volume2, VolumeX, WifiOff } from '@lucide/svelte';
+  import { Eye, EyeOff, Maximize, PictureInPicture2, RefreshCw, Volume2, VolumeX, WifiOff } from '@lucide/svelte';
   import type { StreamView, TileSize } from '../../lib/types';
   import LiveBadge from './LiveBadge.svelte';
   import Spinner from './Spinner.svelte';
@@ -16,6 +16,7 @@
     ontogglemute,
     onvolume,
     onretry,
+    onwatch,
   }: {
     view: StreamView;
     size?: TileSize;
@@ -32,15 +33,20 @@
     ontogglemute?: () => void;
     onvolume?: (volume: number) => void;
     onretry?: () => void;
+    /** Parar de assistir (false) / assistir (true) (specs/014 US1). */
+    onwatch?: (on: boolean) => void;
   } = $props();
 
   let container: HTMLDivElement;
   let video: HTMLVideoElement | undefined = $state();
+  let sound: HTMLAudioElement | undefined = $state();
   let active = $state(false);
   let hideTimer: ReturnType<typeof setTimeout> | undefined;
 
   const thumb = $derived(size === 'thumb');
-  const hasControls = $derived(controls && view.status === 'ok' && !thumb);
+  /** Parou de assistir (specs/014): cartão "Assistir" no lugar do vídeo; o som continua. */
+  const watching = $derived(view.watching !== false);
+  const hasControls = $derived(controls && watching && view.status === 'ok' && !thumb);
   const showName = $derived(alwaysName || size !== 'stage' || active);
   // Com a descrição (specs/012), ela já diz se é câmera: "Lu · Câmera · C920".
   const label = $derived(you ? 'Você' : view.source === 'camera' && !view.label ? `câmera de ${view.name}` : view.name);
@@ -49,11 +55,22 @@
   $effect(() => {
     if (video && video.srcObject !== (view.stream ?? null)) video.srcObject = view.stream ?? null;
   });
+  // O som toca à parte (specs/014): o vídeo é sempre mudo, assim sumir com ele não corta o som.
   $effect(() => {
-    if (video) {
-      video.muted = you || view.muted;
-      video.volume = view.volume;
+    if (video) video.muted = true;
+  });
+  $effect(() => {
+    if (sound && sound.srcObject !== (view.audioStream ?? null)) sound.srcObject = view.audioStream ?? null;
+  });
+  $effect(() => {
+    if (sound) {
+      sound.muted = view.muted;
+      sound.volume = view.volume;
     }
+  });
+  // Parou de assistir a tela que estava no picture-in-picture: fecha o PiP.
+  $effect(() => {
+    if (!watching && video && document.pictureInPictureElement === video) void document.exitPictureInPicture().catch(() => {});
   });
 
   function wake() {
@@ -67,6 +84,7 @@
   }
 
   function handleClick() {
+    if (!watching) return;
     if (view.status === 'failed' && thumb) onretry?.();
     else onselect?.();
   }
@@ -108,7 +126,39 @@
   onpointerleave={sleep}
   onfocusin={wake}
 >
-  {#if view.status === 'ok'}
+  {#if view.audioStream && !you}
+    <audio bind:this={sound} autoplay></audio>
+  {/if}
+
+  {#if !watching}
+    <div class="unwatched">
+      {#if thumb}
+        <button
+          class="watch-thumb"
+          aria-label={`Assistir ${label}`}
+          onclick={(e) => {
+            e.stopPropagation();
+            onwatch?.(true);
+          }}
+        >
+          <Eye size={18} strokeWidth={2.75} />
+        </button>
+      {:else}
+        <span class="unwatched-title">Você parou de assistir {label}</span>
+        <span class="unwatched-sub">O som continua{view.muted ? ' (está mudo)' : ''}. A tela não chega até você clicar.</span>
+        <button
+          class="btn btn-primary watch"
+          onclick={(e) => {
+            e.stopPropagation();
+            onwatch?.(true);
+          }}
+        >
+          <Eye size={16} strokeWidth={2.75} />
+          Assistir
+        </button>
+      {/if}
+    </div>
+  {:else if view.status === 'ok'}
     {#if view.stream}
       <video bind:this={video} autoplay playsinline></video>
     {:else}
@@ -175,6 +225,11 @@
         />
       {/if}
       <div class="spacer"></div>
+      {#if onwatch && !you}
+        <button class="ctl" aria-label="Parar de assistir" title="Parar de assistir (o som continua)" onclick={() => onwatch?.(false)}>
+          <EyeOff size={18} strokeWidth={2.75} />
+        </button>
+      {/if}
       <button class="ctl" aria-label="Picture-in-picture" onclick={pip} disabled={!view.stream}>
         <PictureInPicture2 size={18} strokeWidth={2.75} />
       </button>
@@ -213,6 +268,22 @@
     font-family: var(--font-mono); font-size: 14px; letter-spacing: 0.04em; color: rgba(245, 234, 216, 0.5);
   }
   .size-thumb .placeholder span { font-size: 11px; }
+
+  .unwatched {
+    position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center;
+    gap: 10px; padding: 60px 20px 20px; text-align: center;
+    background: repeating-linear-gradient(135deg, var(--a) 0 26px, var(--b) 26px 52px);
+  }
+  .unwatched-title { font-family: var(--font-heading); font-size: 22px; line-height: 1.2; text-wrap: balance; }
+  .size-grid .unwatched-title { font-size: 18px; }
+  .unwatched-sub { font-size: 14px; color: rgba(245, 234, 216, 0.65); max-width: 320px; text-wrap: pretty; }
+  .watch { margin-top: 6px; padding: 10px 18px; color: var(--color-bg); }
+  .size-thumb .unwatched { padding: 28px 8px 8px; }
+  .watch-thumb {
+    width: 40px; height: 40px; border: 0; border-radius: 50%; display: grid; place-items: center; cursor: pointer;
+    color: var(--color-text); background: var(--color-ctl);
+  }
+  .watch-thumb:hover { background: rgba(245, 234, 216, 0.24); }
 
   .state {
     position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center;

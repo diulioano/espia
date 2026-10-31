@@ -1,4 +1,5 @@
 // Derivações puras do RoomView, usadas igualmente pelos mocks e pela sala real.
+import type { ViewMode } from './quality';
 import type { RoomView, StreamView } from './types';
 
 export type StageLayout = 'connecting' | 'empty' | 'single' | 'grid' | 'focus';
@@ -25,9 +26,9 @@ export function focusedStream(view: RoomView): StreamView | undefined {
 /** Quem você está vendo em destaque (palco cheio ou foco). */
 export function watchingId(view: RoomView): string | null {
   const layout = stageLayout(view);
-  if (layout === 'single') return view.streams[0].id;
-  if (layout === 'focus') return view.focusedId;
-  return null;
+  const s = layout === 'single' ? view.streams[0] : layout === 'focus' ? focusedStream(view) : undefined;
+  // Parou de assistir (specs/014): não está vendo, mesmo em destaque.
+  return s && s.watching !== false ? s.id : null;
 }
 
 export function header(view: RoomView): { title: string; subtitle: string } {
@@ -75,4 +76,54 @@ export function formatElapsed(ms: number): string {
   const s = total % 60;
   const pad = (x: number) => String(x).padStart(2, '0');
   return h > 0 ? `${h}:${pad(m)}:${pad(s)}` : `${pad(m)}:${pad(s)}`;
+}
+
+export interface ViewModesInput {
+  streams: { id: string }[];
+  layout: StageLayout;
+  focusedId: string | null;
+  mobile: boolean;
+  /** Quem eu parei de assistir (specs/014 US1). */
+  unwatched: ReadonlySet<string>;
+  /** A página está à vista (specs/014 US2): minimizada, na bandeja ou aba de trás = false. */
+  pageVisible: boolean;
+  /** Tela em picture-in-picture: continua chegando com a página escondida. */
+  pipId: string | null;
+  /** A minha própria tela no palco (specs/014 US3): nunca vai pra ninguém. */
+  selfId: string | null;
+}
+
+/**
+ * Como estou vendo a tela de cada pessoa (specs/014 research R5). Quem não está no mapa: escondida.
+ * Escondida pausa o vídeo daquela pessoa pra mim; o som continua.
+ */
+export function viewModes(i: ViewModesInput): Record<string, ViewMode> {
+  const out: Record<string, ViewMode> = {};
+  const streams = i.streams.filter((s) => s.id !== i.selfId);
+  const selected = i.focusedId ?? streams[0]?.id;
+  for (const { id } of streams) {
+    if (i.unwatched.has(id)) out[id] = 'hidden';
+    else if (!i.pageVisible && id !== i.pipId) out[id] = 'hidden';
+    // Celular: só a selecionada aparece; as outras ficam nos chips, sem vídeo.
+    else if (i.mobile) out[id] = id === selected ? 'full' : 'hidden';
+    else if (i.layout === 'focus') out[id] = id === i.focusedId ? 'full' : 'thumb';
+    else out[id] = 'full';
+  }
+  return out;
+}
+
+/**
+ * Escolhas de "parar de assistir" que ainda valem (specs/014 research R4): a escolha é por transmissão,
+ * identificada pelo início dela. Parou, recomeçou ou saiu da sala → volta a assistir sozinho.
+ */
+export function pruneUnwatched(
+  unwatched: ReadonlyMap<string, number>,
+  peers: { id: string; live: { startedAt: number } | null }[],
+): Map<string, number> {
+  const out = new Map<string, number>();
+  for (const [id, startedAt] of unwatched) {
+    const p = peers.find((x) => x.id === id);
+    if (p?.live && p.live.startedAt === startedAt) out.set(id, startedAt);
+  }
+  return out;
 }

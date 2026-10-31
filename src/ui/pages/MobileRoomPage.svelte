@@ -81,6 +81,7 @@
             ontogglemute={() => actions.toggleMute(selected.id)}
             onvolume={(v) => actions.setVolume(selected.id, v)}
             onretry={() => actions.retry(selected.id)}
+            onwatch={(on) => actions.watch(selected.id, on)}
           />
         {/key}
       {:else}
@@ -121,7 +122,7 @@
       <span class="label">Na sala · {view.participants.length} de {view.capacity}</span>
       <ul class="list">
         {#each view.participants as p (p.id)}
-          <Participant person={p} watching={p.id === selected?.id} />
+          <Participant person={p} watching={p.id === selected?.id && selected.watching !== false} />
         {/each}
       </ul>
     </section>

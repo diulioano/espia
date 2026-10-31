@@ -38,6 +38,10 @@ export const ROOM_SCENES = [
   { id: 'rename', code: 'S3', label: 'Renomear' },
   { id: 'delete', code: 'S4', label: 'Apagar · com gente na sala' },
   { id: 'guest', code: 'S5', label: 'Sala fixa (não é o dono)' },
+  // Assistir quando quiser (specs/014).
+  { id: 'unwatched', code: 'W1', label: 'Parou de assistir uma tela' },
+  { id: 'unwatched-all', code: 'W2', label: 'Parou de assistir todas' },
+  { id: 'unwatched-focus', code: 'W3', label: 'Foco com miniatura sem assistir' },
 ] as const;
 
 export type RoomScene = (typeof ROOM_SCENES)[number]['id'];
@@ -217,6 +221,15 @@ export function buildRoomScene(scene: RoomScene): RoomView {
     if (scene === 'rename') view.nameDialog = { mode: 'rename', value: 'CS da galera 2', busy: false, error: null };
     if (scene === 'delete') view.deleteDialog = { name: 'CS da galera', people: 3, busy: false, error: null };
     if (scene === 'created') view.toasts = [{ id: 'scene-created', kind: 'copied', text: 'Sala criada — fixe o link no grupo' }];
+    return view;
+  }
+  if (scene === 'unwatched' || scene === 'unwatched-all' || scene === 'unwatched-focus') {
+    const view = buildRoomScene(scene === 'unwatched-focus' ? 'focus' : 'grid');
+    view.toasts = [];
+    for (const s of view.streams) {
+      if (scene === 'unwatched-all' || s.id === (scene === 'unwatched' ? 'bia' : 'tomas')) s.watching = false;
+    }
+    if (scene === 'unwatched-focus') view.streams.find((s) => s.id === 'tomas')!.status = 'ok';
     return view;
   }
   if (scene === 'reconnecting' || scene === 'back' || scene === 'reconnectfail') {

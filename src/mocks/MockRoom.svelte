@@ -102,6 +102,10 @@
     focus(id) {
       view.focusedId = id;
     },
+    watch(id, on) {
+      const s = stream(id);
+      if (s) s.watching = on;
+    },
     toggleMute(id) {
       const s = stream(id);
       if (!s) return;

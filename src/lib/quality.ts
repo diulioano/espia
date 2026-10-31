@@ -65,7 +65,7 @@ export interface SendParams {
   maxBitrate: number;
 }
 
-/** Miniatura: ~360p · 15 fps · 0,5 Mbps. Escondida: pausa o envio. */
+/** Miniatura: ~360p · 15 fps · 0,5 Mbps. Escondida: pausa o vídeo (o som continua, specs/014). */
 export function sendParams(q: Quality, mode: ViewMode): SendParams {
   if (mode === 'hidden') return { active: false, scaleResolutionDownBy: 1, maxFramerate: q.fps, maxBitrate: q.maxBitrate };
   if (mode === 'thumb') return { active: true, scaleResolutionDownBy: q.resolution / 360, maxFramerate: 15, maxBitrate: 500_000 };

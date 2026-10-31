@@ -20,7 +20,7 @@ import { Mesh } from '../mesh';
 import { detectNative, matchLastSource, pollSources, sourceKey, startNative, type AudioWarn, type NativeSession } from '../native-capture';
 import { CpuGovernor } from '../cpu-governor';
 import { countFullViewers, effectiveQuality, isAdjusted, stepDown, type Quality, type ViewMode } from '../quality';
-import { stageLayout } from '../room-view';
+import { pruneUnwatched, stageLayout, viewModes } from '../room-view';
 import {
   loadGoLivePrefs,
   forgetOwnerKey,
@@ -68,6 +68,8 @@ const TURN_REFRESH_EARLY_MS = 10 * 60_000;
 
 interface RemoteMedia {
   stream: MediaStream | null;
+  /** Só as faixas de som de `stream` (specs/014): toca à parte do vídeo. */
+  audio: MediaStream | null;
   /** Chegando quadros de vídeo agora (faixa remota sem "mute"). */
   video: boolean;
   conn: RTCPeerConnectionState;
@@ -106,6 +108,14 @@ export class RoomStore {
   theirViews = $state<Record<string, ViewMode>>({});
   /** Layout de celular (a rota avisa). Muda como eu vejo as telas dos outros. */
   mobile = $state(false);
+  /** Quem eu parei de assistir → início daquela transmissão (specs/014 US1, research R4). Trocado por inteiro. */
+  unwatched = $state.raw<Map<string, number>>(new Map());
+  /** Página à vista (specs/014 US2): minimizada, na bandeja ou aba de trás = false. Nunca pelo foco. */
+  pageVisible = $state(typeof document === 'undefined' || document.visibilityState === 'visible');
+  /** Tela em picture-in-picture: continua chegando com a página escondida (specs/014 R3). */
+  pipId = $state<string | null>(null);
+  /** Último modo mandado a cada pessoa: hidden → visível de novo reinicia a espera do vídeo. */
+  private sentModes: Record<string, ViewMode> = {};
   /** Seletor do app desktop (specs/005): null = ainda descobrindo se a ponte existe. */
   pickerMode = $state<'native' | 'browser' | null>(null);
   sources = $state<CaptureSource[]>([]);
@@ -195,6 +205,7 @@ export class RoomStore {
       },
     });
     this.actions = this.buildActions();
+    document.addEventListener('visibilitychange', this.onVisibility);
     // App desktop com a ponte de captura? Fora dele, o seletor da 004.
     detectNative().then((ok) => {
       if (this.pickerMode === null) this.pickerMode = ok ? 'native' : 'browser';
@@ -204,7 +215,7 @@ export class RoomStore {
       // Avisa cada pessoa de como estou vendo a tela dela (cheia, miniatura ou escondida).
       $effect(() => {
         const views = this.myViews();
-        untrack(() => this.mesh?.setViews(views));
+        untrack(() => this.applyViews(views));
       });
       // Teto de qualidade mudou durante a transmissão: aplica na captura, no envio e avisa a sala.
       $effect(() => {
@@ -227,6 +238,7 @@ export class RoomStore {
 
   /** Saiu da tela da sala (botão, voltar do navegador). */
   destroy() {
+    document.removeEventListener('visibilitychange', this.onVisibility);
     this.stopPicker();
     this.leaveCameraTab();
     this.stopEffects();
@@ -234,6 +246,32 @@ export class RoomStore {
     this.stopBroadcast(false);
     clearTimeout(this.downTimer);
     if (!this.ended) this.signaling.leave();
+  }
+
+  private onVisibility = () => {
+    const visible = document.visibilityState === 'visible';
+    if (visible === this.pageVisible) return;
+    this.pageVisible = visible;
+    console.info(`[espia] página ${visible ? 'visível' : 'escondida'}`);
+  };
+
+  /** Escolhas de "parar de assistir" que ainda valem depois de uma mudança na lista. */
+  private pruneWatch() {
+    const next = pruneUnwatched(this.unwatched, this.peers);
+    if (next.size !== this.unwatched.size) this.unwatched = next;
+    if (this.pipId && !this.peers.some((p) => p.id === this.pipId && p.live)) this.pipId = null;
+  }
+
+  /** Manda os modos e, pra quem volta a ser visto, espera o vídeo de novo (não conta o tempo escondido). */
+  private applyViews(views: Record<string, ViewMode>) {
+    for (const [id, mode] of Object.entries(views)) {
+      if (mode !== 'hidden' && (this.sentModes[id] ?? 'hidden') === 'hidden' && !this.media[id]?.video) {
+        this.timedOut[id] = false;
+        if (this.peers.some((p) => p.id === id && p.live)) this.waitFirstFrame(id);
+      }
+    }
+    this.sentModes = views;
+    this.mesh?.setViews(views);
   }
 
   private copyInvite(text: string) {
@@ -281,6 +319,7 @@ export class RoomStore {
           this.copyInvite('Sala criada — fixe o link no grupo');
         }
         if (this.focusedId && !this.peers.some((p) => p.id === this.focusedId)) this.focusedId = null;
+        this.pruneWatch();
         // Voltou como pessoa nova (passou da tolerância) com a captura ainda rodando: avisa de novo.
         if (this.myBroadcast && !msg.you.live) this.sendLive();
         this.syncMesh(msg.you.id, msg.iceServers);
@@ -310,6 +349,7 @@ export class RoomStore {
         if (this.focusedId === msg.id) this.focusedId = null;
         this.mesh?.remove(msg.id);
         this.forgetMedia(msg.id);
+        this.pruneWatch();
         if (peer) this.toast({ kind: 'leave', text: `${peer.nickname} saiu da sala` });
         return;
       }
@@ -323,6 +363,7 @@ export class RoomStore {
           this.toastPeer.set(id, peer.id);
         }
         if (!msg.live && this.focusedId === msg.id) this.focusedId = null;
+        this.pruneWatch();
         if (started) this.waitFirstFrame(peer.id);
         if (!msg.live) this.clearFrameTimer(peer.id);
         return;
@@ -364,8 +405,10 @@ export class RoomStore {
           muted: a.muted,
           volume: a.volume,
           stream: flowing ? m.stream! : undefined,
+          audioStream: m?.audio ?? undefined,
           source: p.live!.source,
           label: p.live!.label,
+          watching: !this.unwatched.has(p.id),
         };
       });
     return {
@@ -382,7 +425,8 @@ export class RoomStore {
         resolution: this.quality?.resolution ?? this.myBroadcast.resolution,
         fps: this.quality?.fps ?? this.myBroadcast.fps,
         adjusted: !!this.quality && isAdjusted(this.myBroadcast, this.quality),
-        viewers: Object.values(this.media).filter((m) => m.conn === 'connected').length,
+        // Quem está recebendo o vídeo de verdade (specs/014): parar de assistir ou esconder a janela não conta.
+        viewers: Object.values(this.theirViews).filter((m) => m !== 'hidden').length,
       },
       link: this.link,
       room: this.roomInfo.kind === 'fixed' ? { ...this.roomInfo, own: !!loadOwnerKey(this.code) } : { kind: 'quick' },
@@ -462,6 +506,14 @@ export class RoomStore {
       },
       focus: (id) => {
         this.focusedId = id;
+      },
+      watch: (id, on) => {
+        const peer = this.peers.find((p) => p.id === id);
+        if (!peer?.live) return;
+        const next = new Map(this.unwatched);
+        if (on) next.delete(id);
+        else next.set(id, peer.live.startedAt);
+        this.unwatched = next;
       },
       toggleMute: (id) => {
         const a = this.audioOf(id);
@@ -956,17 +1008,16 @@ export class RoomStore {
   /** Como estou vendo a tela de cada pessoa ao vivo. Quem não está no mapa: escondida. */
   private myViews(): Record<string, ViewMode> {
     const v = this.view;
-    const out: Record<string, ViewMode> = {};
-    if (this.mobile) {
-      // Celular: só a selecionada aparece; as outras ficam nos chips, sem vídeo.
-      const selected = v.focusedId ?? v.streams[0]?.id;
-      for (const s of v.streams) out[s.id] = s.id === selected ? 'full' : 'hidden';
-    } else if (stageLayout(v) === 'focus') {
-      for (const s of v.streams) out[s.id] = s.id === v.focusedId ? 'full' : 'thumb';
-    } else {
-      for (const s of v.streams) out[s.id] = 'full';
-    }
-    return out;
+    return viewModes({
+      streams: v.streams,
+      layout: stageLayout(v),
+      focusedId: v.focusedId,
+      mobile: this.mobile,
+      unwatched: new Set(this.unwatched.keys()),
+      pageVisible: this.pageVisible,
+      pipId: this.pipId,
+      selfId: null,
+    });
   }
 
   private resetCpu() {
@@ -1043,17 +1094,21 @@ export class RoomStore {
     }
     this.mesh.setIceServers(iceServers);
     this.mesh.sync(this.peers.map((p) => p.id));
-    this.mesh.setViews(untrack(() => this.myViews()));
+    untrack(() => this.applyViews(this.myViews()));
     if (this.stream && this.quality) this.mesh.setLocal(this.stream, this.quality);
   }
 
   private entry(id: string): RemoteMedia {
-    return (this.media[id] ??= { stream: null, video: false, conn: 'new' });
+    return (this.media[id] ??= { stream: null, audio: null, video: false, conn: 'new' });
   }
 
   /** Acompanha quando os quadros de vídeo dessa pessoa começam e param de chegar. */
   private attachRemote(id: string, stream: MediaStream) {
-    this.entry(id).stream = stream;
+    const e = this.entry(id);
+    e.stream = stream;
+    const sound = stream.getAudioTracks();
+    const had = e.audio?.getAudioTracks() ?? [];
+    if (sound.length !== had.length || sound.some((t, i) => t !== had[i])) e.audio = sound.length ? new MediaStream(sound) : null;
     for (const track of stream.getVideoTracks()) {
       const update = () => {
         this.entry(id).video = !track.muted && track.readyState === 'live';
@@ -1074,6 +1129,8 @@ export class RoomStore {
     this.frameTimers.set(
       id,
       setTimeout(() => {
+        // Escondida pra mim (parei de assistir, página escondida): o vídeo não vem mesmo.
+        if ((this.sentModes[id] ?? 'hidden') === 'hidden') return;
         if (!this.media[id]?.video) this.timedOut[id] = true;
       }, FIRST_FRAME_TIMEOUT_MS),
     );

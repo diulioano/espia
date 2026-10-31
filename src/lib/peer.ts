@@ -189,7 +189,7 @@ export class PeerLink {
         init.sendEncodings =
           kind === 'video'
             ? [{ active: p.active, maxBitrate: p.maxBitrate, maxFramerate: p.maxFramerate, scaleResolutionDownBy: p.scaleResolutionDownBy }]
-            : [{ active: p.active, maxBitrate: AUDIO_BITRATE }];
+            : [{ active: true, maxBitrate: AUDIO_BITRATE }];
       }
       const created = this.pc.addTransceiver(track, init);
       if (kind === 'video') preferHardwareCodec(created);
@@ -224,8 +224,8 @@ export class PeerLink {
         ...p,
         degradation: q.fps === 60 ? 'maintain-framerate' : 'maintain-resolution',
       });
-      // Escondida: o som também não está sendo ouvido.
-      await setEncoding(this.audio?.sender, { active: p.active, maxBitrate: AUDIO_BITRATE });
+      // O som vai sempre (specs/014): parar de assistir ou esconder a janela corta só o vídeo.
+      await setEncoding(this.audio?.sender, { active: true, maxBitrate: AUDIO_BITRATE });
     });
     return this.encodingQueue;
   }

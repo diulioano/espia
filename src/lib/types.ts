@@ -37,10 +37,19 @@ export interface StreamView {
   /** 0..1 */
   volume: number;
   stream?: MediaStream;
+  /**
+   * Só o som da pessoa (specs/014): toca num elemento próprio, então continua quando o vídeo some
+   * (parou de assistir, página escondida, vídeo pausado).
+   */
+  audioStream?: MediaStream;
   /** O que está sendo transmitido (specs/012): "Hollow Knight", "Aba do navegador"… */
   label?: string;
   /** Câmera/placa (specs/006): o tile diz "câmera de …". */
   source?: LiveSource;
+  /** false = parou de assistir (specs/014 US1): cartão "Assistir", sem vídeo. Ausente = assistindo. */
+  watching?: boolean;
+  /** A sua própria transmissão no palco (specs/014 US3): sempre muda, sem controles de som. */
+  you?: boolean;
 }
 
 export interface ToastView {
@@ -318,6 +327,8 @@ export interface RoomActions {
   stopGoLive(): void;
   dismissPermission(): void;
   focus(id: string | null): void;
+  /** Parar de assistir (false) ou voltar a assistir (true) a tela de alguém (specs/014 US1). */
+  watch(id: string, on: boolean): void;
   toggleMute(id: string): void;
   setVolume(id: string, volume: number): void;
   retry(id: string): void;
