@@ -329,6 +329,8 @@ export interface RoomActions {
   focus(id: string | null): void;
   /** Parar de assistir (false) ou voltar a assistir (true) a tela de alguém (specs/014 US1). */
   watch(id: string, on: boolean): void;
+  /** Uma tela entrou (id) ou saiu (null) do picture-in-picture: continua chegando fora de vista (specs/014 US2). */
+  pip(id: string | null): void;
   toggleMute(id: string): void;
   setVolume(id: string, volume: number): void;
   retry(id: string): void;

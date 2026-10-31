@@ -82,6 +82,7 @@
             onvolume={(v) => actions.setVolume(selected.id, v)}
             onretry={() => actions.retry(selected.id)}
             onwatch={(on) => actions.watch(selected.id, on)}
+            onpip={(on) => actions.pip(on ? selected.id : null)}
           />
         {/key}
       {:else}

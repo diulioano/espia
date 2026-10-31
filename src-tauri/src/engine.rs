@@ -23,6 +23,12 @@ pub enum EngineAction {
   ReleaseAfter(Duration),
 }
 
+/// A página deve se saber à vista? (specs/014 US2, research R2). Minimizada ou na bandeja, não: assim
+/// ela esconde as telas dos outros (o som continua). Vale também ao vivo: o envio não depende disso.
+pub fn page_visible(window: WindowMode) -> bool {
+  window == WindowMode::Visible
+}
+
 /// O que fazer com o motor (data-model.md).
 pub fn engine_action(window: WindowMode, in_room: bool, live: bool) -> EngineAction {
   match window {
@@ -46,6 +52,7 @@ mod imp {
 
   use tauri::{AppHandle, Manager, Runtime, Webview, WebviewWindow};
   use webview2_com::Microsoft::Web::WebView2::Win32::{
+    ICoreWebView2Controller,
     COREWEBVIEW2_MEMORY_USAGE_TARGET_LEVEL_LOW, COREWEBVIEW2_MEMORY_USAGE_TARGET_LEVEL_NORMAL, ICoreWebView2_19,
   };
   use windows::core::Interface;
@@ -107,6 +114,7 @@ mod imp {
     let action = state.action(app);
     let Some(window) = app.get_webview_window("main") else { return };
     set_memory_level(&window, action != EngineAction::Normal);
+    set_page_visible(&window, page_visible(state.window()));
     if let EngineAction::ReleaseAfter(wait) = action {
       let app = app.clone();
       std::thread::spawn(move || {
@@ -131,6 +139,17 @@ mod imp {
       return;
     }
     eprintln!("[espia] motor solto (escondido fora de sala)");
+  }
+
+  /// Sem isso o WebView2 diz "visible" à página mesmo minimizado ou escondido na bandeja (spike T1401
+  /// da specs/014). Com `IsVisible = false` a página recebe `visibilitychange` → "hidden".
+  fn set_page_visible<R: Runtime>(window: &WebviewWindow<R>, visible: bool) {
+    let _ = window.with_webview(move |wv| unsafe {
+      let controller: ICoreWebView2Controller = wv.controller();
+      if let Err(e) = controller.SetIsVisible(visible) {
+        eprintln!("[espia] visibilidade da página: {e}");
+      }
+    });
   }
 
   /// Nível de memória pedido ao motor (research R3). Runtime antigo sem a interface: só log.
@@ -173,6 +192,13 @@ mod tests {
     for in_room in [false, true] {
       assert!(!matches!(engine_action(Minimized, in_room, false), ReleaseAfter(_)));
     }
+  }
+
+  #[test]
+  fn pagina_a_vista_so_com_a_janela_visivel() {
+    assert!(page_visible(Visible));
+    assert!(!page_visible(Minimized));
+    assert!(!page_visible(Hidden));
   }
 
   #[test]

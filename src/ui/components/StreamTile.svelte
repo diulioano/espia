@@ -17,6 +17,7 @@
     onvolume,
     onretry,
     onwatch,
+    onpip,
   }: {
     view: StreamView;
     size?: TileSize;
@@ -35,6 +36,8 @@
     onretry?: () => void;
     /** Parar de assistir (false) / assistir (true) (specs/014 US1). */
     onwatch?: (on: boolean) => void;
+    /** Entrou/saiu do picture-in-picture (specs/014 US2): a tela continua chegando com a janela escondida. */
+    onpip?: (on: boolean) => void;
   } = $props();
 
   let container: HTMLDivElement;
@@ -67,6 +70,21 @@
       sound.muted = view.muted;
       sound.volume = view.volume;
     }
+  });
+  // Picture-in-picture (specs/014 US2): avisa a sala, pra tela continuar chegando com a janela escondida.
+  $effect(() => {
+    const v = video;
+    if (!v) return;
+    const enter = () => onpip?.(true);
+    const leave = () => onpip?.(false);
+    v.addEventListener('enterpictureinpicture', enter);
+    v.addEventListener('leavepictureinpicture', leave);
+    return () => {
+      v.removeEventListener('enterpictureinpicture', enter);
+      v.removeEventListener('leavepictureinpicture', leave);
+      // O <video> sumiu (vídeo parou, tile saiu) com o PiP aberto: o navegador fecha o PiP.
+      if (document.pictureInPictureElement === v) onpip?.(false);
+    };
   });
   // Parou de assistir a tela que estava no picture-in-picture: fecha o PiP.
   $effect(() => {

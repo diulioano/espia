@@ -8,7 +8,7 @@ Gate de toda fase: `npm run check`, `npm test`, `npm run build` e os mocks da fa
 
 ## Phase 1: Setup
 
-- [ ] T1401 Spike R2 (quickstart M1): rodar o app de debug com `ESPIA_BROWSER_ARGS=--remote-debugging-port=9222`, entrar numa sala e ler `document.visibilityState` pelo CDP (scratchpad `app-window.mjs`) em três estados: janela visível, minimizada e escondida na bandeja (fechar no X). Anotar o resultado em `specs/014-assistir-e-remover/relatorio.md`. **Decide a T1416**: se der `visible` minimizado ou na bandeja, a T1416 é feita; senão, ela é marcada como desnecessária.
+- [X] T1401 Spike R2 (quickstart M1): rodar o app de debug com `ESPIA_BROWSER_ARGS=--remote-debugging-port=9222`, entrar numa sala e ler `document.visibilityState` pelo CDP (scratchpad `app-window.mjs`) em três estados: janela visível, minimizada e escondida na bandeja (fechar no X). Anotar o resultado em `specs/014-assistir-e-remover/relatorio.md`. **Decide a T1416**: se der `visible` minimizado ou na bandeja, a T1416 é feita; senão, ela é marcada como desnecessária.
 
 ## Phase 2: Foundational (regra comum de US1, US2 e US3)
 
@@ -83,12 +83,14 @@ Gate de toda fase: `npm run check`, `npm test`, `npm run build` e os mocks da fa
 
 **Independent Test**: quickstart E2E 2 (site) e M3/M4/M5 (app, PiP, 2º monitor).
 
-- [ ] T1413 [US2] `StreamTile.svelte`: ouvir `enterpictureinpicture` / `leavepictureinpicture` no `<video>` e chamar a prop nova `onpip(true|false)`. `Stage.svelte` e `MobileRoomPage.svelte` ligam em `actions.pip(on ? s.id : null)`.
-- [ ] T1414 [US2] `room.svelte.ts`: a ação `pip(id)` atualiza `pipId`. Quando a pessoa do `pipId` sai ou para de transmitir, `pipId = null`.
-- [ ] T1415 [US2] Conferir que, ao voltar `visible`, o `setViews` reenvia `full`/`thumb` pelo canal `ctl` (o `PeerLink.setMyView` já ignora o modo repetido: verificar que a troca hidden→full passa). Log `[espia] visível` / `escondida` no console (uma linha, como os outros logs da store).
-- [ ] T1416 [US2] (**só se a T1401 mostrar `visible`**) `src-tauri/src/engine.rs`: junto do `SetMemoryUsageTargetLevel`, chamar `controller.SetIsVisible(false)` em `WindowMode::Minimized | Hidden` e `SetIsVisible(true)` em `Visible`. Teste unitário da decisão (como os de `engine_action`). Subir a versão do app para 0.1.8 em `src-tauri/tauri.conf.json` e `src-tauri/Cargo.toml`. Rodar a T1401 de novo e conferir `hidden`.
+- [X] T1413 [US2] `StreamTile.svelte`: ouvir `enterpictureinpicture` / `leavepictureinpicture` no `<video>` e chamar a prop nova `onpip(true|false)`. `Stage.svelte` e `MobileRoomPage.svelte` ligam em `actions.pip(on ? s.id : null)`.
+- [X] T1414 [US2] `room.svelte.ts`: a ação `pip(id)` atualiza `pipId`. Quando a pessoa do `pipId` sai ou para de transmitir, `pipId = null`.
+- [X] T1415 [US2] Conferir que, ao voltar `visible`, o `setViews` reenvia `full`/`thumb` pelo canal `ctl` (o `PeerLink.setMyView` já ignora o modo repetido: verificar que a troca hidden→full passa). Log `[espia] visível` / `escondida` no console (uma linha, como os outros logs da store).
+- [X] T1416 [US2] (**só se a T1401 mostrar `visible`**) `src-tauri/src/engine.rs`: junto do `SetMemoryUsageTargetLevel`, chamar `controller.SetIsVisible(false)` em `WindowMode::Minimized | Hidden` e `SetIsVisible(true)` em `Visible`. Teste unitário da decisão (como os de `engine_action`). Subir a versão do app para 0.1.8 em `src-tauri/tauri.conf.json` e `src-tauri/Cargo.toml`. Rodar a T1401 de novo e conferir `hidden`.
 
 **Checkpoint**: US2 completa no site (e no app, se a T1416 rodou).
+
+> **Resultado (2026-10-31)**: o spike mostrou que o app **nunca** ficava `hidden`, então a T1416 foi feita (app 0.1.8). O `focus()` também passou a marcar a janela visível. Medições em [relatorio.md](./relatorio.md): o app minimizado ou na bandeja para de receber vídeo e o som segue; o app **transmitindo** escondido continua enviando normal (câmera e captura nativa).
 
 ## Phase 5: User Story 3 — Minha prévia não pesa (P1)
 

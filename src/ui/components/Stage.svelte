@@ -63,6 +63,7 @@
         onvolume={(v) => actions.setVolume(s.id, v)}
         onretry={() => actions.retry(s.id)}
         onwatch={(on) => actions.watch(s.id, on)}
+          onpip={(on) => actions.pip(on ? s.id : null)}
       />
     </div>
   {:else if layout === 'grid'}
@@ -76,6 +77,7 @@
           onvolume={(v) => actions.setVolume(s.id, v)}
           onretry={() => actions.retry(s.id)}
           onwatch={(on) => actions.watch(s.id, on)}
+          onpip={(on) => actions.pip(on ? s.id : null)}
         />
       {/each}
       {#if view.streams.length < gridShape.cols * gridShape.rows}
@@ -96,6 +98,7 @@
           onvolume={(v) => actions.setVolume(focused.id, v)}
           onretry={() => actions.retry(focused.id)}
           onwatch={(on) => actions.watch(focused.id, on)}
+          onpip={(on) => actions.pip(on ? focused.id : null)}
         />
       </div>
       <div class="strip">
@@ -107,6 +110,7 @@
               onselect={() => actions.focus(s.id)}
               onretry={() => actions.retry(s.id)}
               onwatch={(on) => actions.watch(s.id, on)}
+          onpip={(on) => actions.pip(on ? s.id : null)}
             />
           </div>
         {/each}

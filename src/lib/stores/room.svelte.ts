@@ -507,6 +507,9 @@ export class RoomStore {
       focus: (id) => {
         this.focusedId = id;
       },
+      pip: (id) => {
+        if (id === null || this.peers.some((p) => p.id === id && p.live)) this.pipId = id;
+      },
       watch: (id, on) => {
         const peer = this.peers.find((p) => p.id === id);
         if (!peer?.live) return;

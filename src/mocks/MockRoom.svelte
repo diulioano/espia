@@ -102,6 +102,7 @@
     focus(id) {
       view.focusedId = id;
     },
+    pip() {},
     watch(id, on) {
       const s = stream(id);
       if (s) s.watching = on;

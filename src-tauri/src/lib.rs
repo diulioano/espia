@@ -25,6 +25,9 @@ pub(crate) fn focus<R: tauri::Runtime>(window: &WebviewWindow<R>) {
   let _ = window.unminimize();
   let _ = window.show();
   let _ = window.set_focus();
+  // Toda volta da janela passa aqui: a página volta a se saber à vista (specs/014 US2).
+  #[cfg(windows)]
+  engine::set_window(window.app_handle(), engine::WindowMode::Visible);
 }
 
 /// Primeira tela: a página local de carregamento (src-tauri/www), que confere a conexão e
