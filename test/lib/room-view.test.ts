@@ -34,3 +34,16 @@ describe('header (cabeçalho da sala)', () => {
     expect(header(view({ room: fixed, status: 'connecting' })).subtitle).toBe('Conectando…');
   });
 });
+
+describe('header com a sua tela no palco (specs/014 US3)', () => {
+  const me: StreamView = { ...lu, id: 'eu', name: 'Você', you: true };
+  it('só a sua: "Sua tela, ao vivo"', () => {
+    expect(header(view({ streams: [me] }))).toEqual({ title: 'Sua tela, ao vivo', subtitle: 'Do jeito que a sala vê · Esc volta' });
+  });
+  it('com outras, em foco', () => {
+    expect(header(view({ streams: [lu, me], focusedId: 'eu' }))).toEqual({ title: 'Sua tela, ao vivo', subtitle: '1 tela da galera · Esc volta' });
+  });
+  it('sala fixa: o nome continua no título', () => {
+    expect(header(view({ streams: [me], room: fixed })).title).toBe('CS da galera');
+  });
+});

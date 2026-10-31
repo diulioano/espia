@@ -32,6 +32,7 @@ import {
   saveVolume,
 } from '../prefs';
 import { liveLabel } from '../live-label';
+import { grabSnapshot, SNAPSHOT_MS } from '../snapshot';
 import { roomPath } from '../room-id';
 import { forgetRoom, loadSavedRooms, rememberRoom, renameSaved, saveSavedRooms } from '../saved-rooms';
 import { deleteRoom, ownerErrorText, renameRoom } from '../api';
@@ -114,6 +115,10 @@ export class RoomStore {
   pageVisible = $state(typeof document === 'undefined' || document.visibilityState === 'visible');
   /** Tela em picture-in-picture: continua chegando com a página escondida (specs/014 R3). */
   pipId = $state<string | null>(null);
+  /** A sua tela grande no palco, ao vivo (specs/014 US3). Volta a false com Esc, outro foco ou o fim. */
+  selfOnStage = $state(false);
+  /** Quadro parado da sua transmissão (specs/014 US3). ImageBitmap não vira proxy: $state.raw. */
+  snapshot = $state.raw<ImageBitmap | null>(null);
   /** Último modo mandado a cada pessoa: hidden → visível de novo reinicia a espera do vídeo. */
   private sentModes: Record<string, ViewMode> = {};
   /** Seletor do app desktop (specs/005): null = ainda descobrindo se a ponte existe. */
@@ -221,6 +226,34 @@ export class RoomStore {
       $effect(() => {
         const q = this.quality;
         if (q) untrack(() => this.applyQuality(q));
+      });
+      // Prévia parada (specs/014 US3): um quadro logo ao começar e a cada SNAPSHOT_MS, só com a página à vista.
+      $effect(() => {
+        const track = this.myBroadcast?.stream?.getVideoTracks()[0];
+        if (!track || !this.pageVisible) return;
+        let alive = true;
+        const take = async () => {
+          const shot = await grabSnapshot(track);
+          if (!alive) return shot?.close();
+          if (!shot) return;
+          untrack(() => this.snapshot)?.close();
+          this.snapshot = shot;
+        };
+        void take();
+        const timer = setInterval(() => void take(), SNAPSHOT_MS);
+        return () => {
+          alive = false;
+          clearInterval(timer);
+        };
+      });
+      // Parou de transmitir: some a prévia e a sua tela sai do palco.
+      $effect(() => {
+        if (this.broadcasting) return;
+        untrack(() => {
+          this.snapshot?.close();
+          this.snapshot = null;
+          this.selfOnStage = false;
+        });
       });
       // Transmitindo: uma vez por segundo, olha se o motor está limitando por CPU (specs/010, research R5).
       $effect(() => {
@@ -411,6 +444,23 @@ export class RoomStore {
           watching: !this.unwatched.has(p.id),
         };
       });
+    // A sua tela no palco (specs/014 US3): uma tela a mais, sempre muda, fora do que vai pra sala.
+    const self = this.selfOnStage && me && this.myBroadcast?.stream ? this.myBroadcast : null;
+    if (self && me) {
+      streams.push({
+        id: me.id,
+        name: 'Você',
+        tone: me.tone,
+        status: 'ok',
+        muted: true,
+        volume: 0,
+        stream: self.stream,
+        source: self.source,
+        label: self.label,
+        you: true,
+      });
+    }
+    const focusedId = self && me ? me.id : streams.some((s) => s.id === this.focusedId) ? this.focusedId : null;
     return {
       roomId: this.code,
       inviteUrl: location.origin + roomPath(this.code),
@@ -418,7 +468,7 @@ export class RoomStore {
       participants,
       capacity: this.capacity,
       streams,
-      focusedId: streams.some((s) => s.id === this.focusedId) ? this.focusedId : null,
+      focusedId,
       myBroadcast: this.myBroadcast && {
         ...this.myBroadcast,
         // Mostra a qualidade efetiva, não só a escolhida.
@@ -427,6 +477,8 @@ export class RoomStore {
         adjusted: !!this.quality && isAdjusted(this.myBroadcast, this.quality),
         // Quem está recebendo o vídeo de verdade (specs/014): parar de assistir ou esconder a janela não conta.
         viewers: Object.values(this.theirViews).filter((m) => m !== 'hidden').length,
+        snapshot: this.snapshot,
+        onStage: this.selfOnStage,
       },
       link: this.link,
       room: this.roomInfo.kind === 'fixed' ? { ...this.roomInfo, own: !!loadOwnerKey(this.code) } : { kind: 'quick' },
@@ -505,7 +557,15 @@ export class RoomStore {
         this.permissionDenied = false;
       },
       focus: (id) => {
+        // Esc ou outra tela: a sua sai do palco (specs/014 US3).
+        if (this.selfOnStage && id !== this.me?.id) {
+          this.selfOnStage = false;
+          if (id === null) return;
+        }
         this.focusedId = id;
+      },
+      toggleSelfStage: () => {
+        this.selfOnStage = !this.selfOnStage && !!this.myBroadcast?.stream;
       },
       pip: (id) => {
         if (id === null || this.peers.some((p) => p.id === id && p.live)) this.pipId = id;
@@ -1019,7 +1079,7 @@ export class RoomStore {
       unwatched: new Set(this.unwatched.keys()),
       pageVisible: this.pageVisible,
       pipId: this.pipId,
-      selfId: null,
+      selfId: this.selfOnStage ? (this.me?.id ?? null) : null,
     });
   }
 

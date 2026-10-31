@@ -75,13 +75,23 @@
           <span class="pulse"></span>
           <span class="me-live-title">Você está ao vivo</span>
         </div>
-        <div class="me-live-preview">
+        <!-- Prévia parada (specs/014 US3): clicar põe a sua tela grande no palco, ao vivo. -->
+        <button
+          class="me-live-preview"
+          class:on-stage={b.onStage}
+          aria-pressed={!!b.onStage}
+          aria-label={b.onStage ? 'Tirar a sua tela do palco' : 'Ver a sua tela grande, ao vivo'}
+          onclick={actions.toggleSelfStage}
+        >
           <StreamTile
             you
             size="thumb"
-            view={{ id: me.id, name: me.name, tone: me.tone, caption: b.source === 'camera' ? 'sua câmera' : 'sua tela', status: 'ok', muted: true, volume: 0, stream: b.stream, source: b.source }}
+            controls={false}
+            still={b.snapshot ?? null}
+            view={{ id: me.id, name: me.name, tone: me.tone, caption: b.source === 'camera' ? 'sua câmera' : 'sua tela', status: 'ok', muted: true, volume: 0, source: b.source }}
           />
-        </div>
+          <span class="me-live-hint">{b.onStage ? 'Tirar do palco' : 'Ver grande'}</span>
+        </button>
         <span class="me-live-stats">
           {#if down}
             Sua transmissão continua · volta sozinha
@@ -218,7 +228,18 @@
     box-shadow: 0 0 0 4px rgba(198, 113, 57, 0.3);
   }
   .me-live-title { font-family: var(--font-heading); font-size: 17px; }
-  .me-live-preview { height: 142px; }
+  .me-live-preview {
+    position: relative; display: block; height: 142px; padding: 0; border: 0; border-radius: var(--radius-tile-sm);
+    background: none; color: inherit; font: inherit; cursor: pointer;
+  }
+  .me-live-preview.on-stage { box-shadow: 0 0 0 3px var(--color-accent); }
+  .me-live-preview:focus-visible { outline: 3px solid var(--color-accent-400); outline-offset: 2px; }
+  .me-live-hint {
+    position: absolute; right: 8px; bottom: 8px; padding: 4px 10px; border-radius: var(--radius-pill);
+    background: var(--color-overlay); font-size: 12px; font-weight: 600;
+    opacity: 0; transition: opacity 150ms ease-out; pointer-events: none;
+  }
+  .me-live-preview:hover .me-live-hint, .me-live-preview:focus-visible .me-live-hint, .me-live-preview.on-stage .me-live-hint { opacity: 1; }
   .me-live-stats { font-size: 12px; padding: 0 4px; color: color-mix(in srgb, var(--color-text) 65%, transparent); }
 
   .main { display: flex; flex-direction: column; gap: 18px; padding: 24px 28px 24px 0; min-width: 0; min-height: 0; }

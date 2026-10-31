@@ -28,7 +28,8 @@ export function watchingId(view: RoomView): string | null {
   const layout = stageLayout(view);
   const s = layout === 'single' ? view.streams[0] : layout === 'focus' ? focusedStream(view) : undefined;
   // Parou de assistir (specs/014): não está vendo, mesmo em destaque.
-  return s && s.watching !== false ? s.id : null;
+  // A sua própria tela no palco (specs/014 US3) também não conta.
+  return s && s.watching !== false && !s.you ? s.id : null;
 }
 
 export function header(view: RoomView): { title: string; subtitle: string } {
@@ -36,6 +37,14 @@ export function header(view: RoomView): { title: string; subtitle: string } {
   const layout = stageLayout(view);
   if (layout === 'connecting') return { title: `Sala ${view.roomId}`, subtitle: 'Conectando…' };
   // Sala fixa (specs/011): o nome é o título; o subtítulo resume o que está acontecendo.
+  // A sua tela no palco (specs/014 US3).
+  const shown = layout === 'single' ? view.streams[0] : layout === 'focus' ? focusedStream(view) : undefined;
+  if (shown?.you) {
+    const others = view.streams.length - 1;
+    const sub = others ? `${others} ${others === 1 ? 'tela' : 'telas'} da galera · Esc volta` : 'do jeito que a sala vê · Esc volta';
+    if (view.room?.kind === 'fixed') return { title: view.room.name, subtitle: `Sua tela, ao vivo · ${sub}` };
+    return { title: 'Sua tela, ao vivo', subtitle: sub[0].toUpperCase() + sub.slice(1) };
+  }
   if (view.room?.kind === 'fixed') return { title: view.room.name, subtitle: fixedSubtitle(view, layout, n) };
   if (layout === 'empty') {
     return view.myBroadcast

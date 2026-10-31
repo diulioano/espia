@@ -8,7 +8,7 @@
     view,
     size = 'stage',
     focused = false,
-    you = false,
+    you: youProp = false,
     alwaysName = false,
     controls = true,
     radius,
@@ -18,6 +18,7 @@
     onretry,
     onwatch,
     onpip,
+    still,
   }: {
     view: StreamView;
     size?: TileSize;
@@ -38,14 +39,34 @@
     onwatch?: (on: boolean) => void;
     /** Entrou/saiu do picture-in-picture (specs/014 US2): a tela continua chegando com a janela escondida. */
     onpip?: (on: boolean) => void;
+    /**
+     * Imagem parada no lugar do vídeo (specs/014 US3, a sua prévia). `null` = ainda sem quadro (placeholder).
+     * Ausente = vídeo normal.
+     */
+    still?: ImageBitmap | null;
   } = $props();
 
   let container: HTMLDivElement;
   let video: HTMLVideoElement | undefined = $state();
   let sound: HTMLAudioElement | undefined = $state();
+  let canvas: HTMLCanvasElement | undefined = $state();
+
+  // Prévia parada: desenha o quadro quando ele muda (nada de vídeo ao vivo).
+  $effect(() => {
+    if (!canvas || !still) return;
+    canvas.width = still.width;
+    canvas.height = still.height;
+    try {
+      canvas.getContext('2d')?.drawImage(still, 0, 0);
+    } catch {
+      // Bitmap já fechado (trocado no meio): o próximo chega em seguida.
+    }
+  });
   let active = $state(false);
   let hideTimer: ReturnType<typeof setTimeout> | undefined;
 
+  /** A sua própria tela (prévia da barra ou no palco, specs/014 US3): sem som e sem controles de som. */
+  const you = $derived(youProp || !!view.you);
   const thumb = $derived(size === 'thumb');
   /** Parou de assistir (specs/014): cartão "Assistir" no lugar do vídeo; o som continua. */
   const watching = $derived(view.watching !== false);
@@ -176,6 +197,12 @@
         </button>
       {/if}
     </div>
+  {:else if still !== undefined}
+    {#if still}
+      <canvas bind:this={canvas} class="still"></canvas>
+    {:else}
+      <div class="placeholder"><span>{view.caption ?? 'sua tela'}</span></div>
+    {/if}
   {:else if view.status === 'ok'}
     {#if view.stream}
       <video bind:this={video} autoplay playsinline></video>
@@ -277,6 +304,7 @@
   .size-stage.active, .size-grid.active { cursor: default; }
   .size-grid.clickable.active { cursor: pointer; }
 
+  .still { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: contain; background: var(--color-stage); }
   video { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: contain; background: var(--color-stage); }
   .placeholder {
     position: absolute; inset: 0; display: grid; place-items: center;

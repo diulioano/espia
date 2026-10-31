@@ -103,6 +103,9 @@
       view.focusedId = id;
     },
     pip() {},
+    toggleSelfStage() {
+      onnavigate?.('room', view.myBroadcast?.onStage ? 'live' : 'self-stage');
+    },
     watch(id, on) {
       const s = stream(id);
       if (s) s.watching = on;

@@ -17,7 +17,9 @@
   const gridShape = $derived(gridSize(view.streams.length));
 
   function onkeydown(e: KeyboardEvent) {
-    if (e.key === 'Escape' && layout === 'focus' && !view.goLiveOpen) actions.focus(null);
+    // Esc também tira a sua tela do palco, mesmo quando ela é a única (specs/014 US3).
+    const self = view.streams.some((s) => s.you);
+    if (e.key === 'Escape' && (layout === 'focus' || self) && !view.goLiveOpen) actions.focus(null);
   }
 </script>
 
@@ -39,7 +41,7 @@
       </div>
       {#if view.myBroadcast}
         <h2>Sua tela está no ar.</h2>
-        <p>Ela não aparece aqui pra não virar um espelho infinito — a prévia fica na barra do lado.</p>
+        <p>Ela não aparece aqui pra não virar um espelho infinito — a prévia fica na barra do lado. Clique nela pra ver grande.</p>
       {:else}
         <h2>Ninguém ao vivo ainda.</h2>
         <p>Clique em Transmitir pra mostrar sua tela — ou mande o convite e espere alguém começar.</p>

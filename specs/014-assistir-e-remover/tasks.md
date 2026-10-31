@@ -98,31 +98,44 @@ Gate de toda fase: `npm run check`, `npm test`, `npm run build` e os mocks da fa
 
 **Independent Test**: quickstart E2E 3 + mocks `live` e `self-stage`.
 
-- [ ] T1417 [P] [US3] ★ `src/lib/snapshot.ts`:
+- [X] T1417 [P] [US3] ★ `src/lib/snapshot.ts`:
   - `grabSnapshot(track: MediaStreamTrack, width = 320): Promise<ImageBitmap | null>`;
   - usa `ImageCapture.grabFrame()` quando existe; senão, `MediaStreamTrackProcessor` sobre `track.clone()` (lê 1 quadro, `frame.close()`, `clone.stop()`);
   - reduz para `width` px de largura mantendo a proporção num `OffscreenCanvas` → `transferToImageBitmap()`;
   - qualquer erro → `null`, sem jogar exceção.
-- [ ] T1418 [US3] `room.svelte.ts`:
+- [X] T1418 [US3] `room.svelte.ts`:
   - ao começar a transmitir, `snapshot = await grabSnapshot(videoTrack)` em ≤ 1 s;
   - depois, `setInterval` de 5000 ms que só pega um quadro se `pageVisible`, fecha o bitmap anterior (`close()`) e troca;
   - no fim da transmissão: limpa o intervalo, fecha o bitmap e põe `null`;
   - `myBroadcast.snapshot` e `myBroadcast.onStage` no view.
-- [ ] T1419 [US3] `room.svelte.ts`:
+- [X] T1419 [US3] `room.svelte.ts`:
   - `selfOnStage = $state(false)` e a ação `toggleSelfStage()`;
   - com `true`, o `view.streams` ganha (no fim) `{ id: myId, name: 'Você', you: true, tone, status: 'ok', muted: true, volume: 0, stream: myBroadcast.stream, watching: true, source, label }` e `focusedId = myId`;
   - voltar a `false` em `focus(outroId)`, `focus(null)` (Esc), `toggleSelfStage()` de novo e no fim da transmissão;
   - passar `selfId: myId` para `viewModes` (fica fora de `setViews`).
-- [ ] T1420 [US3] `StreamTile.svelte`: prop nova `still?: ImageBitmap | null`. Quando definida, desenha o bitmap num `<canvas>` (`$effect` que faz `drawImage` ao mudar) em vez de montar o `<video>`; `null` mostra o placeholder `caption`. Com `view.you`, nunca mostra controles de som.
-- [ ] T1421 [US3] `src/ui/pages/RoomPage.svelte`:
+- [X] T1420 [US3] `StreamTile.svelte`: prop nova `still?: ImageBitmap | null`. Quando definida, desenha o bitmap num `<canvas>` (`$effect` que faz `drawImage` ao mudar) em vez de montar o `<video>`; `null` mostra o placeholder `caption`. Com `view.you`, nunca mostra controles de som.
+- [X] T1421 [US3] `src/ui/pages/RoomPage.svelte`:
   - o tile de "Você está ao vivo" passa `still={b.snapshot}` (sem `stream`), vira clicável (`onselect={actions.toggleSelfStage}`), mostra o estado `b.onStage` (borda/realce) e o rótulo "Ver grande" / "Tirar do palco" no hover;
   - `Stage.svelte`: a mensagem "Sua tela está no ar… não aparece aqui pra não virar um espelho infinito" ganha "Clique na prévia pra ver grande.";
   - `MobileRoomPage`: se mostra a própria prévia, usa `still` também.
-- [ ] T1422 [US3] Mocks em `src/mocks/room.ts`:
+- [X] T1422 [US3] Mocks em `src/mocks/room.ts`:
   - a cena `live` existente usa `snapshot` (um `ImageBitmap` gerado de um canvas com a cor/placeholder do mock, criado em `MockRoom.svelte`);
   - nova cena `self-stage` (`onStage: true` e a própria tela focada no palco).
 
 **Checkpoint**: US3 completa. Rodar o quickstart E2E 3.
+
+> **Resultado (2026-10-31)**, scratchpad `previa.mjs`, site local, câmera falsa:
+> - a prévia vira `<canvas>` em ≤ 3 s, sem `<video>`, e mudou 2 vezes em 12 s;
+> - clicar põe a sua tela no palco (título "Sua tela, ao vivo", muda, sem `<audio>`), sem mudar o "1 assistindo";
+> - Esc ou outro clique na prévia tiram;
+> - com a página escondida, 0 trocas em 11 s;
+> - parar de transmitir some a prévia.
+>
+> No app (captura nativa da janela de teste): a prévia é um quadro de 320×200 com a cor da janela.
+>
+> Ajustes no caminho:
+> - Esc também vale quando a sua tela é a única no palco;
+> - a lista não diz "você está assistindo" na sua linha.
 
 ## Phase 6: User Story 4 — O dono tira alguém da sala (P2)
 

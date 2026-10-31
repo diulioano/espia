@@ -139,6 +139,10 @@ export interface MyBroadcastView extends GoLivePrefs {
   /** O que a sala vê como descrição da sua transmissão (specs/012). */
   label?: string;
   source?: LiveSource;
+  /** Prévia parada (specs/014 US3): um quadro a cada ~5 s, em vez do vídeo ao vivo. */
+  snapshot?: ImageBitmap | null;
+  /** A sua tela está grande no palco, ao vivo (clicou na prévia). */
+  onStage?: boolean;
 }
 
 export interface RoomView {
@@ -331,6 +335,8 @@ export interface RoomActions {
   watch(id: string, on: boolean): void;
   /** Uma tela entrou (id) ou saiu (null) do picture-in-picture: continua chegando fora de vista (specs/014 US2). */
   pip(id: string | null): void;
+  /** Clicou na prévia "Você está ao vivo": põe/tira a sua tela grande no palco (specs/014 US3). */
+  toggleSelfStage(): void;
   toggleMute(id: string): void;
   setVolume(id: string, volume: number): void;
   retry(id: string): void;

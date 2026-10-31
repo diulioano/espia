@@ -42,6 +42,7 @@ export const ROOM_SCENES = [
   { id: 'unwatched', code: 'W1', label: 'Parou de assistir uma tela' },
   { id: 'unwatched-all', code: 'W2', label: 'Parou de assistir todas' },
   { id: 'unwatched-focus', code: 'W3', label: 'Foco com miniatura sem assistir' },
+  { id: 'self-stage', code: 'W4', label: 'Sua tela grande no palco' },
 ] as const;
 
 export type RoomScene = (typeof ROOM_SCENES)[number]['id'];
@@ -232,6 +233,15 @@ export function buildRoomScene(scene: RoomScene): RoomView {
     if (scene === 'unwatched-focus') view.streams.find((s) => s.id === 'tomas')!.status = 'ok';
     return view;
   }
+  if (scene === 'self-stage') {
+    // Clicou na prévia: a sua tela grande, em foco; a de Lu vai pra faixa.
+    const view = buildRoomScene('live');
+    view.toasts = [];
+    view.myBroadcast!.onStage = true;
+    view.streams.push({ id: 'rafa', name: 'Você', tone: 'deep', caption: 'sua tela · Celeste', label: view.myBroadcast!.label, status: 'ok', muted: true, volume: 0, you: true });
+    view.focusedId = 'rafa';
+    return view;
+  }
   if (scene === 'reconnecting' || scene === 'back' || scene === 'reconnectfail') {
     const view = buildRoomScene('live');
     view.link = scene === 'back' ? 'ok' : scene === 'reconnecting' ? 'reconnecting' : 'failed';
@@ -281,6 +291,7 @@ export function buildRoomScene(scene: RoomScene): RoomView {
           viewers: 3,
           startedAt: Date.now() - (12 * 60 + 4) * 1000,
           label: myLabel,
+          snapshot: fakeSnapshot(),
           ...(scene === 'live'
             ? { audioKind: 'window' as const }
             : scene === 'livecam'
@@ -307,4 +318,26 @@ export function buildRoomScene(scene: RoomScene): RoomView {
     link: 'ok',
     room: { kind: 'quick' },
   };
+}
+
+/** Prévia parada falsa (specs/014 US3): listras com "sua tela · quadro parado". Fora do navegador: null. */
+function fakeSnapshot(): ImageBitmap | null {
+  if (typeof OffscreenCanvas === 'undefined') return null;
+  const c = new OffscreenCanvas(320, 180);
+  const g = c.getContext('2d');
+  if (!g) return null;
+  for (let x = -180; x < 320; x += 36) {
+    g.fillStyle = (x / 36) % 2 ? '#40261a' : '#381f14';
+    g.beginPath();
+    g.moveTo(x, 180);
+    g.lineTo(x + 18, 180);
+    g.lineTo(x + 198, 0);
+    g.lineTo(x + 180, 0);
+    g.fill();
+  }
+  g.fillStyle = 'rgba(245, 234, 216, 0.6)';
+  g.font = '13px monospace';
+  g.textAlign = 'center';
+  g.fillText('sua tela · quadro parado', 160, 95);
+  return c.transferToImageBitmap();
 }
