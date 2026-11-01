@@ -271,7 +271,12 @@ export async function startNative(
   // Faixa de som só existe enquanto chega som (o vigia do Discord pode ligar/desligar no meio).
   let audio: MediaStreamTrackGenerator | null = null;
   let audioWriter: WritableStreamDefaultWriter<VideoFrame | AudioData> | null = null;
-  let audioTs = 0;
+  // Imagem e som no MESMO relógio (o da página, em µs, como as câmeras do navegador). O receptor sincroniza
+  // pelos horários: com zeros diferentes, ele atrasava a imagem de propósito (até centenas de ms).
+  // Imagem: o app conta a partir do início da captura ≈ agora. Som: começa na hora em que chega o 1º pedaço
+  // e depois anda pela contagem de amostras.
+  const clockZeroUs = Math.round(performance.now() * 1000);
+  let audioTs = -1;
   /** Som já entregue ao gerador e ainda não consumido (µs). */
   let audioQueuedUs = 0;
   let soundDropped = 0;
@@ -331,7 +336,7 @@ export async function startNative(
         format: 'NV12',
         codedWidth: width,
         codedHeight: height,
-        timestamp: msg.ts,
+        timestamp: clockZeroUs + msg.ts,
         colorSpace: NV12_COLOR,
       });
     } catch (err) {
@@ -354,6 +359,7 @@ export async function startNative(
     const data = new Float32Array(buf);
     const frames = data.length / CHANNELS;
     const us = Math.round((frames / RATE) * 1_000_000);
+    if (audioTs < 0) audioTs = Math.round(performance.now() * 1000);
     const ts = audioTs;
     // O tempo anda mesmo quando o pedaço é descartado: o som continua alinhado com a imagem.
     audioTs += us;

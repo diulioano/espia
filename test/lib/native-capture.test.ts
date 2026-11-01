@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   detectNative,
   matchLastSource,
@@ -282,7 +282,7 @@ describe('startNative', () => {
     const video = (s.stream as unknown as FakeStream).getVideoTracks()[0];
     expect(video.written).toHaveLength(1);
     const f = video.written[0] as FakeVideoFrame;
-    expect(f.init).toMatchObject({ codedWidth: 4, codedHeight: 2, timestamp: 1000 });
+    expect(f.init).toMatchObject({ codedWidth: 4, codedHeight: 2 });
     expect(f.data.byteLength).toBe(12);
     expect(video.contentHint).toBe('motion');
   });
@@ -298,8 +298,30 @@ describe('startNative', () => {
     sound(new Float32Array(960).buffer);
     await Promise.resolve();
     const chunks = stream.getAudioTracks()[0].written as FakeAudioData[];
-    expect(chunks.map((c) => c.init.timestamp)).toEqual([0, 10_000]);
+    expect(chunks[1].init.timestamp - chunks[0].init.timestamp).toBe(10_000);
     expect(chunks[0].init.numberOfFrames).toBe(480);
+  });
+
+  it('imagem e som no mesmo relógio: o receptor não atrasa a imagem (bug: imagem centenas de ms atrás do som)', async () => {
+    // O receptor do WebRTC sincroniza pelos horários. Antes, a imagem contava do início da captura no app e o som
+    // do 1º pedaço na página: zeros diferentes, e o receptor segurava a imagem até ~0,5 s de propósito.
+    const now = vi.spyOn(performance, 'now').mockReturnValue(5_000);
+    try {
+      const b = new FakeBridge();
+      started(b, 'window');
+      const s = await startNative(PREFS, 'w:1', quiet, b);
+      const stream = s.stream as unknown as FakeStream;
+      now.mockReturnValue(6_000); // 1 s depois: chegam um quadro capturado 1 s após o início e o 1º som
+      (b.channels[0] as (m: FrameMsg) => void)({ t: 'frame', gen: 1, slot: 0, seq: 0, ts: 1_000_000 });
+      b.channels[1](new Float32Array(960).buffer);
+      await Promise.resolve();
+      const v = (stream.getVideoTracks()[0].written[0] as FakeVideoFrame).init.timestamp;
+      const a = (stream.getAudioTracks()[0].written[0] as FakeAudioData).init.timestamp;
+      expect(Math.abs(v - a)).toBeLessThanOrEqual(20_000);
+      expect(v).toBe(6_000_000); // relógio da página em µs, como as câmeras do navegador
+    } finally {
+      now.mockRestore();
+    }
   });
 
   it('som como lista de bytes (Tauri no modo postMessage) também vira AudioData, sem perder o valor', async () => {
@@ -345,7 +367,7 @@ describe('startNative', () => {
     // 0, 10, …, 200 ms na fila: 21 pedaços entram; o resto é descartado.
     expect(chunks).toHaveLength(21);
     // O tempo dos que entram é contínuo; os descartados também contam (o som não atrasa em relação à imagem).
-    expect(chunks[20].init.timestamp).toBe(200_000);
+    expect(chunks[20].init.timestamp - chunks[0].init.timestamp).toBe(200_000);
   });
 
   it('avisos de quadro pelo canal de mensagens (app 0.1.7) também viram VideoFrame', async () => {
