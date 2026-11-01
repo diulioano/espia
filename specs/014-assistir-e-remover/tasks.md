@@ -195,8 +195,8 @@ Gate de toda fase: `npm run check`, `npm test`, `npm run build` e os mocks da fa
 ## Phase 7: Polish & Cross-Cutting
 
 - [X] T1435 Ajustar a `spec.md`: cenário US4-6 (app e navegador são pessoas diferentes; abas do mesmo navegador já são uma só, R7) e celular sem "ver a própria tela grande" (R8).
-- [ ] T1436 Rodar o e2e local completo (quickstart E2E 1–4, scratchpad, `npm run dev:worker`, nunca `--use-fake-ui-for-media-stream`) e registrar o resultado em `specs/014-assistir-e-remover/relatorio.md`.
-- [ ] T1437 Gate final: `npm run check`, `npm test`, `npm run build`; prints dos mocks novos. Commit.
+- [X] T1436 Rodar o e2e local completo (quickstart E2E 1–4, scratchpad, `npm run dev:worker`, nunca `--use-fake-ui-for-media-stream`) e registrar o resultado em `specs/014-assistir-e-remover/relatorio.md`.
+- [X] T1437 Gate final: `npm run check`, `npm test`, `npm run build`; prints dos mocks novos. Commit.
 - [ ] T1438 Publicar o site (`! npm run deploy` pelo usuário, se o auto mode bloquear). Se a T1416 rodou: `npm run desktop:release` **depois** do site e publicar de novo. Roteiro manual M2–M5 com o grupo (o FPS no jogo é o SC-001).
 
 ## Dependencies & Execution Order

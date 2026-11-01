@@ -42,6 +42,21 @@ App de debug (`cargo build`), site local (`npm run dev:worker`). A janela é mex
 
 O envio não cai com a página escondida.
 
+## T1436 · E2E local completo (2026-11-01)
+
+Site local (`npm run dev:worker`) + Edge headless com câmera falsa (`--use-fake-device-for-media-stream`, nunca `--use-fake-ui-for-media-stream`). Scripts no scratchpad: `assistir.mjs`, `previa.mjs`, `remover.mjs`. Já inclui a correção do som (T1439).
+
+| E2E | Resultado |
+|---|---|
+| 1 · US1 parar de assistir | ✅ sem assistir: 0 quadros e 0 pacotes de som pra B, A vê "0 assistindo"; volta a assistir em 21 ms, com vídeo (40 quadros/2 s) e som (101 pacotes) |
+| 2 · US2 página escondida (site) | ✅ A para de codificar pra B (0), o som continua (101); visível de novo, B decodifica (40). Com outra aba na frente, o headless ainda diz `visible`, então o `hidden` foi forçado pelo evento |
+| 3 · US3 prévia | ✅ `<canvas>` em ≤ 3 s, sem `<video>`; mudou 2× em 12 s; clique = "Sua tela, ao vivo" (mudo, sem `<audio>`), Esc ou novo clique tira; escondida: 0 mudanças em 11 s |
+| 4 · US4 remover | ✅ some da lista do dono em 196 ms, a transmissão dele termina pros outros, cai no início com "O dono te tirou da sala", não volta sozinho, o aviso não repete ao recarregar, entra de novo pelo link |
+
+## T1437 · Gate final (2026-11-01)
+
+`npm run check` 0 erros · `npm test` 210 testes ok (17 arquivos) · `npm run build` ok. Prints dos 8 mocks do quickstart conferidas (o cartão "Assistir" já diz "Nem a tela nem o som chegam até você clicar").
+
 ## Falta (manual, com o grupo)
 
 - **M2**: FPS no jogo com o app 0.1.8 minimizado, outra pessoa transmitindo (antes × depois).
