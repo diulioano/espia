@@ -57,6 +57,10 @@ Site local (`npm run dev:worker`) + Edge headless com câmera falsa (`--use-fake
 
 `npm run check` 0 erros · `npm test` 210 testes ok (17 arquivos) · `npm run build` ok. Prints dos 8 mocks do quickstart conferidas (o cartão "Assistir" já diz "Nem a tela nem o som chegam até você clicar").
 
+## T1438 · Publicado (2026-11-01)
+
+Site versão `97643c9a` (US4 + parar de assistir sem som). O site no ar já serve o bundle novo (`index-CpltGDa4.js`). Sem app novo: o 0.1.8 continua valendo.
+
 ## Falta (manual, com o grupo)
 
 - **M2**: FPS no jogo com o app 0.1.8 minimizado, outra pessoa transmitindo (antes × depois).
