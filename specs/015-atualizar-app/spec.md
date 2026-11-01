@@ -39,7 +39,7 @@ Saiu uma versão nova do app. Abro o Espia (ou ele já estava aberto) e aparece 
 
 **Acceptance Scenarios**:
 
-1. **Given** o app instalado é mais antigo que o publicado, **When** abro o app, **Then** aparece o aviso "Tem versão nova do app" com "Atualizar agora" e "Depois", em até 10 s.
+1. **Given** o app instalado é mais antigo que o publicado e já estou numa sala (ou a checagem da abertura demorou), **Then** aparece o aviso "Tem versão nova do app" com "Atualizar agora" e "Depois". Abrindo o app do zero com versão nova, ele já se atualiza na abertura (US2, research R6).
 2. **Given** o app já estava aberto quando a versão nova foi publicada, **Then** o aviso aparece sozinho em até 1 h, sem eu reabrir nada.
 3. **Given** clico em "Atualizar agora", **Then** o app fecha, instala e abre de novo na versão nova, sem eu clicar em mais nada (nada de assistente do instalador, nada de "Avançar").
 4. **Given** eu estava numa sala ao clicar em "Atualizar agora", **Then** o app reabre e volta pra mesma sala com o mesmo apelido.
@@ -59,9 +59,10 @@ Estou no meio de uma partida e clico em "Depois". O aviso some. Da próxima vez 
 **Acceptance Scenarios**:
 
 1. **Given** cliquei em "Depois", **Then** o aviso some e não volta nessa execução do app.
-2. **Given** cliquei em "Depois" e depois saí do app (bandeja → Sair, ou desliguei o PC), **When** abro o app de novo, **Then** ele já abre na versão nova, sem aviso e sem clique.
-3. **Given** a instalação na abertura falhou (sem internet, arquivo corrompido), **Then** o app abre normalmente na versão que já tinha, e o aviso volta a aparecer depois.
-4. **Given** escolhi "Depois", **Then** a atualização na abertura não deixa o app mais de 15 s sem abrir, contando do clique no ícone.
+2. **Given** qualquer abertura nova do app (com ou sem "Depois" antes), ainda fora de sala, **Then** ele se atualiza na hora e abre na versão nova.
+3. **Given** cliquei em "Depois" e depois saí do app (bandeja → Sair, ou desliguei o PC), **When** abro o app de novo, **Then** ele já abre na versão nova, sem aviso e sem clique.
+4. **Given** a instalação na abertura falhou (sem internet, arquivo corrompido), **Then** o app abre normalmente na versão que já tinha, e o aviso volta a aparecer depois.
+5. **Given** escolhi "Depois", **Then** a atualização na abertura não deixa o app mais de 15 s sem abrir, contando do clique no ícone.
 
 ---
 
