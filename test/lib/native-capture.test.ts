@@ -225,6 +225,7 @@ class FakeStream {
 }
 
 class FakeVideoFrame {
+  close() {}
   constructor(
     readonly data: Uint8Array,
     readonly init: { codedWidth: number; codedHeight: number; timestamp: number },
@@ -232,6 +233,7 @@ class FakeVideoFrame {
 }
 
 class FakeAudioData {
+  close() {}
   constructor(readonly init: { timestamp: number; numberOfFrames: number; data: Float32Array }) {}
 }
 
@@ -262,6 +264,96 @@ function started(b: FakeBridge, audio: 'window' | 'pc' | 'none' = 'window') {
 }
 
 describe('startNative', () => {
+  it('stop idempotente não manda um segundo capture_stop nem altera hint após parada', async () => {
+    const b = new FakeBridge(); started(b);
+    let qualityReady!: () => void;
+    b.handlers.capture_set_quality = () => new Promise<void>((resolve) => { qualityReady = resolve; });
+    const s = await startNative(PREFS, 'w:1', quiet, b);
+    const track = (s.stream as unknown as FakeStream).getVideoTracks()[0];
+    const changing = s.setQuality(1080, 30);
+    await Promise.resolve(); await Promise.resolve();
+    await s.stop();
+    qualityReady(); await changing;
+    await s.stop();
+    expect(track.contentHint).toBe('motion');
+    expect(b.calls.filter((c) => c.cmd === 'capture_stop')).toHaveLength(1);
+    expect(b.hostCb).toBeNull();
+  });
+
+  it('trocas de qualidade no mesmo tick aplicam só a escolha mais recente', async () => {
+    const b = new FakeBridge(); started(b);
+    const s = await startNative(PREFS, 'w:1', quiet, b);
+    await Promise.all([s.setQuality(1080, 30), s.setQuality(720, 60)]);
+    expect(b.calls.filter((c) => c.cmd === 'capture_set_quality')).toEqual([
+      { cmd: 'capture_set_quality', args: { resolution: 720, fps: 60 } },
+    ]);
+    await s.stop();
+  });
+  it('abortar durante abertura descarta o resultado tardio e para o host', async () => {
+    const b = new FakeBridge();
+    started(b);
+    let finishStart!: (value: unknown) => void;
+    b.handlers.capture_start = () => new Promise((resolve) => { finishStart = resolve; });
+    const controller = new AbortController();
+    const opening = startNative(PREFS, 'w:1', quiet, b, controller.signal);
+    controller.abort();
+    finishStart({ width: 4, height: 2, audio: 'window' });
+    await expect(opening).rejects.toMatchObject({ name: 'AbortError' });
+    expect(b.hostCb).toBeNull();
+    expect(b.bufferCb).toBeNull();
+    expect(b.calls.some((c) => c.cmd === 'capture_stop')).toBe(true);
+  });
+
+  it('áudio recriado ignora conclusão do writer antigo e pacotes inválidos', async () => {
+    const now = vi.spyOn(performance, 'now').mockReturnValue(1000);
+    const b = new FakeBridge(); started(b);
+    const s = await startNative(PREFS, 'w:1', quiet, b);
+    try {
+      b.channels[1](new ArrayBuffer(3));
+      b.channels[1](new Float32Array(960).buffer);
+      b.hostCb!({ espia: 'f', m: { t: 'audio', kind: 'none' } });
+      now.mockReturnValue(11000);
+      b.channels[1](new Float32Array(960).buffer);
+      const tracks = (s.stream as unknown as FakeStream).getAudioTracks();
+      expect(tracks).toHaveLength(1);
+      expect((tracks[0].written[0] as FakeAudioData).init.timestamp).toBe(11_000_000);
+    } finally { await s.stop(); now.mockRestore(); }
+  });
+  it.each([2000, 10000])('startup de %i ms não vira descompasso entre imagem e som', async (startupMs) => {
+    const now = vi.spyOn(performance, 'now').mockReturnValue(1000);
+    const b = new FakeBridge();
+    started(b);
+    b.handlers.capture_start = () => {
+      now.mockReturnValue(1000 + startupMs);
+      b.postSlots(1);
+      return { width: 4, height: 2, audio: 'window' };
+    };
+    const s = await startNative(PREFS, 'w:1', quiet, b);
+    try {
+      b.hostCb!({ espia: 'f', m: { t: 'frame', gen: 1, slot: 0, seq: 0, ts: 0 } });
+      b.channels[1](new Float32Array(960).buffer);
+      const stream = s.stream as unknown as FakeStream;
+      const video = (stream.getVideoTracks()[0].written[0] as FakeVideoFrame).init.timestamp;
+      const audio = (stream.getAudioTracks()[0].written[0] as FakeAudioData).init.timestamp;
+      expect(Math.abs(video - audio)).toBeLessThanOrEqual(20_000);
+    } finally { await s.stop(); now.mockRestore(); }
+  });
+
+  it('áudio volta ao relógio atual depois de lacuna de 10 s', async () => {
+    const now = vi.spyOn(performance, 'now').mockReturnValue(1000);
+    const b = new FakeBridge();
+    started(b);
+    const s = await startNative(PREFS, 'w:1', quiet, b);
+    try {
+      b.channels[1](new Float32Array(960).buffer);
+      await Promise.resolve();
+      now.mockReturnValue(11000);
+      b.channels[1](new Float32Array(960).buffer);
+      const chunks = (s.stream as unknown as FakeStream).getAudioTracks()[0].written as FakeAudioData[];
+      expect(Math.abs(chunks.at(-1)!.init.timestamp - 11_000_000)).toBeLessThanOrEqual(20_000);
+    } finally { await s.stop(); now.mockRestore(); }
+  });
+
   it('manda id, qualidade, som e os dois canais para o app', async () => {
     const b = new FakeBridge();
     started(b);
@@ -364,10 +456,10 @@ describe('startNative', () => {
       FakeTrack.hold = false;
     }
     const chunks = (s.stream as unknown as FakeStream).getAudioTracks()[0].written as FakeAudioData[];
-    // 0, 10, …, 200 ms na fila: 21 pedaços entram; o resto é descartado.
-    expect(chunks).toHaveLength(21);
+    // Limite inclui o novo pedaço: 20 × 10 ms, sem ultrapassar 200 ms.
+    expect(chunks).toHaveLength(20);
     // O tempo dos que entram é contínuo; os descartados também contam (o som não atrasa em relação à imagem).
-    expect(chunks[20].init.timestamp - chunks[0].init.timestamp).toBe(200_000);
+    expect(chunks[19].init.timestamp - chunks[0].init.timestamp).toBe(190_000);
   });
 
   it('avisos de quadro pelo canal de mensagens (app 0.1.7) também viram VideoFrame', async () => {
@@ -444,7 +536,9 @@ describe('startNative', () => {
     b.handlers.capture_start = () => {
       throw 'source_gone';
     };
-    await expect(startNative(PREFS, 'w:1', quiet, b)).rejects.toBe('source_gone');
+    const ended = vi.fn();
+    await expect(startNative(PREFS, 'w:1', { ...quiet, ended }, b)).rejects.toBe('source_gone');
+    expect(ended).not.toHaveBeenCalled();
     expect(b.bufferCb).toBeNull();
   });
 

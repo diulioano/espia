@@ -51,6 +51,14 @@ pub enum Target {
   Monitor,
 }
 
+/// PCM estéreo f32: não reproduzir mais de 200 ms acumulados no produtor.
+fn retain_recent_pcm(pending: &mut Vec<f32>) -> usize {
+  const MAX_SAMPLES: usize = 48_000 * 2 / 5;
+  let excess = pending.len().saturating_sub(MAX_SAMPLES);
+  if excess > 0 { pending.drain(..excess); }
+  excess
+}
+
 /// Tabela "AudioPlan" de data-model.md. A falha de ativação vira `None(Unsupported)` depois.
 pub fn audio_plan(target: Target, wants: bool, discord_roots: &[u32], own_pid: u32) -> Plan {
   if !wants {
@@ -84,7 +92,7 @@ mod imp {
       mpsc,
     },
     thread::{self, JoinHandle},
-    time::Duration,
+    time::{Duration, Instant},
   };
 
   use windows::{
@@ -255,12 +263,15 @@ mod imp {
           };
           let mut pending: Vec<f32> = Vec::with_capacity(CHUNK_FRAMES * CHANNELS as usize * 2);
           let chunk = CHUNK_FRAMES * CHANNELS as usize;
+          let mut dropped_samples = 0usize;
+          let mut last_report = Instant::now();
           while !stop2.load(Ordering::Relaxed) {
             unsafe {
               if WaitForSingleObject(event, 100) != WAIT_OBJECT_0 {
                 continue;
               }
               loop {
+                if stop2.load(Ordering::Relaxed) { break; }
                 let Ok(size) = capture.GetNextPacketSize() else { break };
                 if size == 0 {
                   break;
@@ -279,11 +290,18 @@ mod imp {
                   pending.extend(pcm.iter().map(|&s| s as f32 / 32768.0));
                 }
                 let _ = capture.ReleaseBuffer(frames);
+                dropped_samples += super::retain_recent_pcm(&mut pending);
               }
             }
             while pending.len() >= chunk {
+              if stop2.load(Ordering::Relaxed) { break; }
               let bytes: Vec<u8> = pending.drain(..chunk).flat_map(f32::to_le_bytes).collect();
               on_chunk(bytes);
+            }
+            if last_report.elapsed() >= Duration::from_secs(10) {
+              if dropped_samples > 0 { eprintln!("[espia] áudio: {} ms antigos descartados", dropped_samples / 96); }
+              dropped_samples = 0;
+              last_report = Instant::now();
             }
           }
           unsafe {
@@ -316,6 +334,17 @@ mod imp {
 #[cfg(test)]
 mod tests {
   use super::*;
+
+  #[test]
+  fn backlog_retem_so_os_200ms_mais_recentes() {
+    let mut samples: Vec<f32> = (0..96_000).map(|n| n as f32).collect();
+    assert_eq!(retain_recent_pcm(&mut samples), 76_800);
+    assert_eq!(samples.len(), 19_200);
+    assert_eq!(samples[0], 76_800.0);
+    let mut partial = vec![1.0; 2];
+    assert_eq!(retain_recent_pcm(&mut partial), 0);
+    assert_eq!(partial.len(), 2);
+  }
 
   const ME: u32 = 4242;
 

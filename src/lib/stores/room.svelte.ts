@@ -149,6 +149,9 @@ export class RoomStore {
   cpuSteps = $state(0);
   private governor = new CpuGovernor();
   private sendBusy = false;
+  private statsEpoch = 0;
+  private statsTimer: ReturnType<typeof setInterval> | undefined;
+  private readonly readDiagnostics = () => this.mediaDiagnostics();
   private sendTicks = 0;
   private sendLast = new Map<string, number>();
 
@@ -172,6 +175,12 @@ export class RoomStore {
   private frameTimers = new Map<string, ReturnType<typeof setTimeout>>();
   private turnTimer: ReturnType<typeof setTimeout> | undefined;
   private native: NativeSession | null = null;
+  private broadcastEpoch = 0;
+  private nativeOpening: AbortController | null = null;
+  private nativeOpeningTask: Promise<NativeSession> | null = null;
+  private qualityRevision = 0;
+  private qualityQueue: Promise<void> = Promise.resolve();
+  private captureQualityQueue: Promise<void> = Promise.resolve();
   private stopPoll: (() => void) | null = null;
   /** A pessoa trocou o som/perfil nesta abertura: não sugerir por cima. */
   private camAudioManual = false;
@@ -213,6 +222,7 @@ export class RoomStore {
       },
     });
     this.actions = this.buildActions();
+    (window as Window & { espiaMediaDiagnostics?: () => unknown }).espiaMediaDiagnostics = this.readDiagnostics;
     document.addEventListener('visibilitychange', this.onVisibility);
     // App desktop com a ponte de captura? Fora dele, o seletor da 004.
     detectNative().then((ok) => {
@@ -262,8 +272,6 @@ export class RoomStore {
       $effect(() => {
         if (!this.broadcasting) return;
         untrack(() => this.resetCpu());
-        const timer = setInterval(() => void this.watchSend(), 1000);
-        return () => clearInterval(timer);
       });
     });
   }
@@ -274,6 +282,8 @@ export class RoomStore {
 
   /** Saiu da tela da sala (botão, voltar do navegador). */
   destroy() {
+    const diagnosticsWindow = window as Window & { espiaMediaDiagnostics?: () => unknown };
+    if (diagnosticsWindow.espiaMediaDiagnostics === this.readDiagnostics) delete diagnosticsWindow.espiaMediaDiagnostics;
     document.removeEventListener('visibilitychange', this.onVisibility);
     this.stopPicker();
     this.leaveCameraTab();
@@ -403,7 +413,10 @@ export class RoomStore {
         if (!msg.live && this.focusedId === msg.id) this.focusedId = null;
         this.pruneWatch();
         if (started) this.waitFirstFrame(peer.id);
-        if (!msg.live) this.clearFrameTimer(peer.id);
+        if (!msg.live) {
+          this.clearFrameTimer(peer.id);
+          this.mesh?.clearDiagnostics(peer.id);
+        }
         return;
       }
       case 'signal':
@@ -722,11 +735,13 @@ export class RoomStore {
   }
 
   private async startBroadcast(prefs: GoLivePrefs) {
+    this.stopBroadcast(true);
     this.stopPicker();
     if (prefs.surface === 'camera') return this.startCameraBroadcast(prefs);
     this.leaveCameraTab();
     const source = this.pickerMode === 'native' ? this.sources.find((s) => s.id === this.selectedId) : undefined;
     if (source) return this.startNativeBroadcast({ ...prefs, surface: source.kind, lastSourceKey: sourceKey(source) }, source);
+    const epoch = ++this.broadcastEpoch;
     this.goLivePrefs = prefs;
     saveGoLivePrefs(prefs);
     this.goLiveOpen = false;
@@ -734,18 +749,20 @@ export class RoomStore {
     try {
       stream = await startCapture(prefs);
     } catch (err) {
+      if (epoch !== this.broadcastEpoch) return;
       if (isPermissionDenied(err)) this.permissionDenied = true;
       else this.toast({ kind: 'error', text: 'Não deu pra capturar a tela' });
       return;
     }
     // Antes de qualquer envio: tira o som que não pode sair (specs/002).
+    if (epoch !== this.broadcastEpoch) { stopCapture(stream); return; }
     const wanted = prefs.audio && prefs.surface !== 'monitor';
     const a = applyAudioRule(stream, wanted);
     this.stream = stream;
     this.warnedScreenAudio = false;
     const video = stream.getVideoTracks()[0];
     // Botão nativo "Parar de compartilhar".
-    video?.addEventListener('ended', () => this.stopBroadcast(true));
+    video?.addEventListener('ended', () => { if (this.stream === stream) this.stopBroadcast(true); });
     // Trocou o que compartilha no meio ("compartilhar esta aba"): reavalia o som (FR-205).
     video?.addEventListener('configurationchange', () => this.reapplyAudio(stream, wanted));
     stream.addEventListener('addtrack', () => this.reapplyAudio(stream, wanted));
@@ -763,7 +780,8 @@ export class RoomStore {
     const q = this.quality!;
     this.appliedQuality = q;
     await this.constrainCapture(q);
-    this.mesh?.setLocal(stream, q);
+    if (epoch !== this.broadcastEpoch || this.stream !== stream) return;
+    this.mesh?.setLocal(stream, this.quality ?? q);
     this.sendLive();
     this.toast({ kind: 'live', text: 'Você está ao vivo pra sala' });
     if (a.warn) this.warnScreenAudio();
@@ -771,13 +789,19 @@ export class RoomStore {
 
   /** App desktop: o próprio app captura a fonte escolhida na grade, sem o seletor do Windows. */
   private async startNativeBroadcast(prefs: GoLivePrefs, source: CaptureSource) {
+    const epoch = ++this.broadcastEpoch;
+    const previous = this.nativeOpeningTask;
+    if (previous) await previous.catch(() => {});
+    if (epoch !== this.broadcastEpoch) return;
+    const openingController = new AbortController();
+    this.nativeOpening = openingController;
     this.goLivePrefs = prefs;
     saveGoLivePrefs(prefs);
     this.goLiveOpen = false;
     let session: NativeSession;
     try {
-      session = await startNative(prefs, source.id, {
-        ended: () => this.stopBroadcast(true),
+      const opening = startNative(prefs, source.id, {
+        ended: () => { if (epoch === this.broadcastEpoch) this.stopBroadcast(true); },
         audio: (kind, warn) => {
           const b = this.myBroadcast;
           if (!b || this.native !== session) return;
@@ -787,9 +811,12 @@ export class RoomStore {
             this.sendLive();
           }
         },
-        warn: () => this.toast({ kind: 'error', text: BLACK_WARN }),
-      });
+        warn: () => { if (epoch === this.broadcastEpoch) this.toast({ kind: 'error', text: BLACK_WARN }); },
+      }, undefined, openingController.signal);
+      this.nativeOpeningTask = opening;
+      session = await opening;
     } catch (err) {
+      if (epoch !== this.broadcastEpoch || openingController.signal.aborted || (err instanceof DOMException && err.name === 'AbortError')) return;
       if (err === 'source_gone') {
         this.toast({ kind: 'error', text: 'Essa janela fechou — escolhe outra.' });
         this.selectedId = null;
@@ -802,7 +829,13 @@ export class RoomStore {
       this.goLiveOpen = true;
       this.startPicker();
       return;
+    } finally {
+      if (this.nativeOpening === openingController) {
+        this.nativeOpening = null;
+        this.nativeOpeningTask = null;
+      }
     }
+    if (epoch !== this.broadcastEpoch) { await session.stop(); return; }
     const stream = session.stream;
     this.native = session;
     this.stream = stream;
@@ -830,7 +863,8 @@ export class RoomStore {
     const q = this.quality!;
     this.appliedQuality = q;
     await this.constrainCapture(q);
-    this.mesh?.setLocal(stream, q);
+    if (epoch !== this.broadcastEpoch || this.stream !== stream) return;
+    this.mesh?.setLocal(stream, this.quality ?? q);
     this.sendLive();
     this.toast({ kind: 'live', text: 'Você está ao vivo pra sala' });
     if (session.result.audioWarn) this.toast({ kind: 'error', text: NATIVE_AUDIO_WARN[session.result.audioWarn] });
@@ -958,6 +992,7 @@ export class RoomStore {
   }
 
   private async startCameraBroadcast(prefs: GoLivePrefs) {
+    const epoch = ++this.broadcastEpoch;
     const mobile = !canShareScreen();
     const video = this.camVideos.find((v) => v.id === this.camVideoId);
     if (!mobile && !video) return;
@@ -986,6 +1021,7 @@ export class RoomStore {
         fps: chosen.fps,
       });
     } catch (err) {
+      if (epoch !== this.broadcastEpoch) return;
       if (isPermissionDenied(err)) this.camPermission = 'denied';
       if (isBusy(err)) this.toast({ kind: 'error', text: 'Essa câmera está sendo usada por outro programa.' });
       else if (!isPermissionDenied(err)) this.toast({ kind: 'error', text: 'Não deu pra abrir a câmera.' });
@@ -994,11 +1030,12 @@ export class RoomStore {
       void this.enterCameraTab();
       return;
     }
+    if (epoch !== this.broadcastEpoch) { stopStream(stream); return; }
     this.stream = stream;
     const track = stream.getVideoTracks()[0];
     // Câmera desplugada / celular trocou de app: a transmissão acaba (FR-608). O som nunca fica
     // sem a câmera (FR-606b): stopBroadcast para todas as faixas.
-    track?.addEventListener('ended', () => this.stopBroadcast(true));
+    track?.addEventListener('ended', () => { if (this.stream === stream) this.stopBroadcast(true); });
     if (mobile && track) {
       track.addEventListener('mute', () => {
         clearTimeout(this.muteTimer);
@@ -1020,7 +1057,8 @@ export class RoomStore {
     const q = this.quality!;
     this.appliedQuality = q;
     await this.constrainCapture(q);
-    this.mesh?.setLocal(stream, q);
+    if (epoch !== this.broadcastEpoch || this.stream !== stream) return;
+    this.mesh?.setLocal(stream, this.quality ?? q);
     this.sendLive();
     this.toast({ kind: 'live', text: 'Sua câmera está ao vivo pra sala' });
   }
@@ -1070,30 +1108,45 @@ export class RoomStore {
     const prev = this.appliedQuality;
     if (!this.stream || (prev && prev.resolution === q.resolution && prev.fps === q.fps && prev.maxBitrate === q.maxBitrate)) return;
     this.appliedQuality = q;
-    await this.constrainCapture(q);
-    this.mesh?.setQuality(q);
-    if (!prev || prev.resolution !== q.resolution || prev.fps !== q.fps) this.sendLive();
+    const stream = this.stream;
+    const epoch = this.broadcastEpoch;
+    const revision = ++this.qualityRevision;
+    this.qualityQueue = this.qualityQueue.catch(() => {}).then(async () => {
+      if (epoch !== this.broadcastEpoch || revision !== this.qualityRevision || this.stream !== stream) return;
+      await this.constrainCapture(q);
+      if (epoch !== this.broadcastEpoch || revision !== this.qualityRevision || this.stream !== stream) return;
+      this.mesh?.setQuality(q);
+      if (!prev || prev.resolution !== q.resolution || prev.fps !== q.fps) this.sendLive();
+    });
+    await this.qualityQueue;
   }
 
   /** Reduz na captura (alivia a CPU de todos os envios de uma vez). */
   private async constrainCapture(q: Quality) {
-    // App desktop: o track é gerado; quem reduz é o app (capture_set_quality).
-    if (this.native) {
-      try {
-        await this.native.setQuality(q.resolution, q.fps);
-      } catch (err) {
-        console.warn('[espia] capture_set_quality', err);
+    const stream = this.stream;
+    const native = this.native;
+    const epoch = this.broadcastEpoch;
+    this.captureQualityQueue = this.captureQualityQueue.catch(() => {}).then(async () => {
+      if (this.stream !== stream || epoch !== this.broadcastEpoch || this.appliedQuality !== q) return;
+      // App desktop: o track é gerado; quem reduz é o app (capture_set_quality).
+      if (native) {
+        try {
+          await native.setQuality(q.resolution, q.fps);
+        } catch (err) {
+          console.warn('[espia] capture_set_quality', err);
+        }
+        return;
       }
-      return;
-    }
-    const track = this.stream?.getVideoTracks()[0];
-    if (!track) return;
-    const width = q.resolution === 1080 ? 1920 : 1280;
-    try {
-      await track.applyConstraints({ width: { max: width }, height: { max: q.resolution }, frameRate: { max: q.fps } });
-    } catch (err) {
-      console.warn('[espia] applyConstraints', err);
-    }
+      const track = stream?.getVideoTracks()[0];
+      if (!track) return;
+      const width = q.resolution === 1080 ? 1920 : 1280;
+      try {
+        await track.applyConstraints({ width: { max: width }, height: { max: q.resolution }, frameRate: { max: q.fps } });
+      } catch (err) {
+        console.warn('[espia] applyConstraints', err);
+      }
+    });
+    await this.captureQualityQueue;
   }
 
   /** Como estou vendo a tela de cada pessoa ao vivo. Quem não está no mapa: escondida. */
@@ -1118,13 +1171,24 @@ export class RoomStore {
     this.sendLast.clear();
   }
 
+  /** Inspeção manual local; sem identificadores de pessoas e sem envio ao servidor. */
+  mediaDiagnostics() {
+    return { version: 1, links: this.mesh?.diagnostics() ?? [] };
+  }
+
   /** CPU no limite em alguma pessoa em tela cheia por 10 s → um degrau a menos; 60 s de folga → um a mais. */
   private async watchSend() {
     const q = this.quality;
-    if (!this.mesh || !q || this.sendBusy) return;
+    const mesh = this.mesh;
+    const epoch = this.statsEpoch;
+    if (!mesh || this.sendBusy) return;
     this.sendBusy = true;
     try {
-      const all = await this.mesh.sendStats();
+      const reading = await mesh.pollStats();
+      if (this.mesh !== mesh || this.statsEpoch !== epoch || this.quality !== q) return;
+      // A coleta continua para quem apenas assiste; o governor só roda com envio ativo.
+      if (!q) return;
+      const all = reading.filter((x): x is typeof x & { stats: NonNullable<typeof x.stats> } => x.stats !== null);
       const full = all.filter((x) => x.view === 'full');
       if (full.length) {
         const down = stepDown(q);
@@ -1146,22 +1210,26 @@ export class RoomStore {
     } catch (err) {
       console.warn('[espia] stats de envio', err);
     } finally {
-      this.sendBusy = false;
+      if (epoch === this.statsEpoch) this.sendBusy = false;
     }
   }
 
   private stopBroadcast(notify: boolean) {
+    this.broadcastEpoch++;
+    this.qualityRevision++;
+    this.nativeOpening?.abort();
     if (!this.stream) return;
-    if (this.native) {
-      const native = this.native;
-      this.native = null;
-      void native.stop();
-    } else stopCapture(this.stream);
+    const native = this.native;
+    const stream = this.stream;
+    this.native = null;
     clearTimeout(this.muteTimer);
     this.stream = null;
     this.myBroadcast = null;
     this.appliedQuality = null;
+    this.mesh?.clearDiagnostics();
     this.mesh?.setLocal(null, null);
+    if (native) void native.stop();
+    else stopCapture(stream);
     if (notify) this.signaling.send({ t: 'unlive' });
   }
 
@@ -1182,6 +1250,7 @@ export class RoomStore {
           this.theirViews = this.mesh?.theirViews() ?? {};
         },
       });
+      this.statsTimer = setInterval(() => void this.watchSend(), 1000);
     }
     this.mesh.setIceServers(iceServers);
     this.mesh.sync(this.peers.map((p) => p.id));
@@ -1245,6 +1314,10 @@ export class RoomStore {
   }
 
   private closeMedia() {
+    clearInterval(this.statsTimer);
+    this.statsTimer = undefined;
+    this.statsEpoch++;
+    this.sendBusy = false;
     this.mesh?.close();
     this.mesh = null;
     clearTimeout(this.turnTimer);

@@ -6,6 +6,7 @@ pub mod procs;
 pub mod sources;
 pub mod thumbs;
 pub mod video;
+mod publish;
 
 #[cfg(windows)]
 pub use imp::*;
@@ -34,10 +35,10 @@ mod imp {
   use std::{
     sync::{
       Arc, Mutex,
-      atomic::{AtomicBool, Ordering},
+      atomic::{AtomicBool, AtomicU64, Ordering},
     },
     thread,
-    time::Duration,
+    time::{Duration, Instant},
   };
 
   use serde_json::{Value, json};
@@ -55,6 +56,7 @@ mod imp {
     video::{Item, SlotSet, Video},
   };
   use crate::links;
+  use super::publish::{Message, PublishQueue};
 
   const VERSION: u32 = 1;
 
@@ -75,9 +77,15 @@ mod imp {
 
   /// Uma transmissão nativa por vez.
   #[derive(Default)]
-  pub struct Capture(Mutex<Option<Session>>);
+  pub struct Capture {
+    session: Mutex<Option<Session>>,
+    epoch: AtomicU64,
+    pending: Mutex<Option<Arc<Mutex<PublishQueue>>>>,
+    starting: tauri::async_runtime::Mutex<()>,
+  }
 
   struct Session {
+    publication: Arc<Mutex<PublishQueue>>,
     video: Video,
     sound: Arc<Mutex<Option<Loopback>>>,
     /// Vigia do Discord (tela inteira com som).
@@ -87,6 +95,7 @@ mod imp {
 
   impl Session {
     fn stop<R: Runtime>(self, webview: &Webview<R>, reason: &str) {
+      self.publication.lock().unwrap().stop();
       self.watching.store(false, Ordering::Relaxed);
       self.sound.lock().unwrap().take();
       self.video.stop(reason);
@@ -96,7 +105,9 @@ mod imp {
 
   /// Para a transmissão nativa (recarregou/navegou a página, fechou a janela).
   pub fn stop_all<R: Runtime>(webview: &Webview<R>, capture: &Capture) {
-    if let Some(s) = capture.0.lock().unwrap().take() {
+    capture.epoch.fetch_add(1, Ordering::SeqCst);
+    if let Some(q) = capture.pending.lock().unwrap().take() { q.lock().unwrap().stop(); }
+    if let Some(s) = capture.session.lock().unwrap().take() {
       s.stop(webview, "stopped");
     }
   }
@@ -170,21 +181,42 @@ mod imp {
     }
   }
 
-  fn post_json<R: Runtime>(webview: &Webview<R>, json: String) {
+  fn schedule_publish<R: Runtime>(webview: &Webview<R>, queue: &Arc<Mutex<PublishQueue>>) {
     use webview2_com::Microsoft::Web::WebView2::Win32::ICoreWebView2;
     use windows::core::HSTRING;
-    let msg = HSTRING::from(json);
-    let _ = webview.with_webview(move |wv| unsafe {
+    {
+      let mut q = queue.lock().unwrap();
+      if q.scheduled || !q.pending() { return; }
+      q.scheduled = true;
+    }
+    let q2 = queue.clone();
+    let webview2 = webview.clone();
+    let result = webview.with_webview(move |wv| unsafe {
+      let messages = q2.lock().unwrap().take(Instant::now());
       let core: Result<ICoreWebView2, _> = wv.controller().CoreWebView2();
       if let Ok(core) = core {
-        let _ = core.PostWebMessageAsJson(&msg);
+        for message in messages {
+          if q2.lock().unwrap().stopped { break; }
+          let json = match message {
+            Message::Frame(m) => json!({"espia":"f","m":m}).to_string(),
+            Message::Pcm(bytes) => sound_json(&bytes),
+          };
+          let _ = core.PostWebMessageAsJson(&HSTRING::from(json));
+        }
       }
+      q2.lock().unwrap().scheduled = false;
+      schedule_publish(&webview2, &q2);
     });
+    if result.is_err() { queue.lock().unwrap().scheduled = false; }
   }
 
-  fn frame_sink<R: Runtime>(webview: &Webview<R>) -> FrameSink {
+  fn frame_sink<R: Runtime>(webview: &Webview<R>, queue: &Arc<Mutex<PublishQueue>>) -> FrameSink {
     let webview = webview.clone();
-    FrameSink(Arc::new(move |m| post_json(&webview, json!({ "espia": "f", "m": m }).to_string())))
+    let queue = queue.clone();
+    FrameSink(Arc::new(move |m| {
+      queue.lock().unwrap().frame(m, Instant::now());
+      schedule_publish(&webview, &queue);
+    }))
   }
 
   /// Mensagem de som para a página: `{"espia":"pcm","d":"<base64>"}`.
@@ -196,9 +228,13 @@ mod imp {
   /// O som vai pelo canal de mensagens do WebView2 (`chrome.webview` "message"), não por um canal do Tauri:
   /// cada mensagem do Tauri vira um script executado na página (`eval`), e 100 por segundo faziam a página do
   /// motor crescer sem parar (specs/010, research R2).
-  fn sound_sink<R: Runtime>(webview: &Webview<R>) -> SoundSink {
+  fn sound_sink<R: Runtime>(webview: &Webview<R>, queue: &Arc<Mutex<PublishQueue>>) -> SoundSink {
     let webview = webview.clone();
-    Arc::new(move |bytes| post_json(&webview, sound_json(bytes)))
+    let queue = queue.clone();
+    Arc::new(move |bytes| {
+      queue.lock().unwrap().pcm(bytes, Instant::now());
+      schedule_publish(&webview, &queue);
+    })
   }
 
   /// Liga o som do plano; se o Windows não deixar, fica sem som e avisa (nunca o PC inteiro).
@@ -242,11 +278,15 @@ mod imp {
     if !origin_ok(&webview) {
       return Err(denied());
     }
+    let _starting = state.starting.lock().await;
     let resolution = if resolution >= 1080 { 1080 } else { 720 };
     let fps = if fps >= 60 { 60 } else { 30 };
     let source = parse_id(&id).ok_or("source_gone")?;
     // Uma sessão por vez: começar outra encerra a anterior.
     stop_all(&webview, &state);
+    let epoch = state.epoch.load(Ordering::SeqCst);
+    let publication = Arc::new(Mutex::new(PublishQueue::default()));
+    *state.pending.lock().unwrap() = Some(publication.clone());
 
     let (item, target) = match source {
       SourceId::Window(h) => {
@@ -267,9 +307,10 @@ mod imp {
     let wv = webview.clone();
     // Os canais `frames`/`sound` do Tauri continuam no contrato (páginas antigas mandam), mas não são mais usados.
     let _ = frames;
-    let frames2 = frame_sink(&webview);
+    let frames2 = frame_sink(&webview, &publication);
     let _ = sound;
-    let sound2 = sound_sink(&webview);
+    let sound2 = sound_sink(&webview, &publication);
+    let cleanup = publication.clone();
     let session = tauri::async_runtime::spawn_blocking(move || {
       let _com = super::com_init();
       let video = Video::start(&item, resolution, fps, frames2.clone(), |w, h| SlotSet::post(&wv, 1, w, h)).map_err(|e| {
@@ -285,13 +326,28 @@ mod imp {
         watch_discord(watching.clone(), sound_slot.clone(), plan, sound2.clone(), frames2.clone());
       }
       let out = result(&video, plan);
-      Ok::<_, String>((Session { video, sound: sound_slot, watching, generation: 1 }, out))
+      Ok::<_, String>((Session { publication, video, sound: sound_slot, watching, generation: 1 }, out))
     })
     .await
-    .map_err(|_| "capture_failed".to_string())??;
+    .map_err(|_| "capture_failed".to_string())
+    .and_then(|r| r);
+
+    let session = match session {
+      Ok(s) => s,
+      Err(e) => {
+        cleanup.lock().unwrap().stop();
+        SlotSet::release(&webview, 1);
+        return Err(e);
+      }
+    };
 
     let (session, out) = session;
-    *state.0.lock().unwrap() = Some(session);
+    let mut guard = state.session.lock().unwrap();
+    if state.epoch.load(Ordering::SeqCst) != epoch {
+      session.stop(&webview, "stopped");
+      return Err("capture_failed".into());
+    }
+    *guard = Some(session);
     Ok(out)
   }
 
@@ -347,12 +403,13 @@ mod imp {
     }
     let resolution = if resolution >= 1080 { 1080 } else { 720 };
     let fps = if fps >= 60 { 60 } else { 30 };
-    let mut guard = state.0.lock().unwrap();
+    let mut guard = state.session.lock().unwrap();
     let session = guard.as_mut().ok_or("not_live")?;
     let next = session.generation + 1;
     let before = session.video.size();
     let (w, h) = session.video.set_quality(resolution, fps, |w, h| SlotSet::post(&webview, next, w, h))?;
     if (w, h) != before {
+      session.publication.lock().unwrap().generation(next as u64);
       SlotSet::release(&webview, session.generation);
       session.generation = next;
     }

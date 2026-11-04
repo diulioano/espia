@@ -3,6 +3,7 @@
 // educado (polite) desiste da sua. Candidatos ICE vão aos poucos (trickle) pela sinalização.
 import type { IceServer, SignalData } from '../shared/protocol';
 import { sendParams, wantsSound, type Quality, type ViewMode } from './quality';
+import { MediaStats, type MediaStatsSample, type StatsRow } from './media-stats';
 
 export interface PeerCallbacks {
   signal(data: SignalData): void;
@@ -25,6 +26,10 @@ export interface SendStats {
   encoder: string;
   /** powerEfficientEncoder: true = compressão na placa de vídeo. null = o motor não informou. */
   hardware: boolean | null;
+}
+export interface PeerStats {
+  send: SendStats | null;
+  sample: MediaStatsSample;
 }
 const VIEW_MODES: ViewMode[] = ['full', 'thumb', 'hidden'];
 
@@ -62,6 +67,11 @@ export class PeerLink {
   theirView: ViewMode = 'full';
   private restarted = false;
   private closed = false;
+  private mediaStats = new MediaStats();
+  private statsPending: Promise<PeerStats | null> | null = null;
+  private statsEpoch = 0;
+  private localRevision = 0;
+  private localQueue: Promise<void> = Promise.resolve();
   /** getParameters/setParameters não podem se cruzar (dá InvalidModificationError). */
   private encodingQueue: Promise<void> = Promise.resolve();
   /** Certificado DTLS do outro lado. Muda quando a pessoa recarrega a página (conexão nova). */
@@ -90,7 +100,9 @@ export class PeerLink {
     this.pc.onicecandidate = ({ candidate }) => {
       if (candidate) this.cb.signal({ candidate: candidate.toJSON() as Record<string, unknown> });
     };
-    this.pc.ontrack = ({ track }) => {
+    this.pc.ontrack = ({ track, receiver }) => {
+      if (this.closed) return;
+      preferLowLatency(receiver);
       if (!this.remoteStream.getTrackById(track.id)) this.remoteStream.addTrack(track);
       this.cb.remote(this.remoteStream);
     };
@@ -138,6 +150,9 @@ export class PeerLink {
   setMyView(mode: ViewMode) {
     if (mode === this.myView) return;
     this.myView = mode;
+    if (mode === 'full' || mode === 'thumb') {
+      for (const receiver of this.pc.getReceivers()) preferLowLatency(receiver);
+    }
     this.sendView();
   }
 
@@ -177,14 +192,19 @@ export class PeerLink {
   }
 
   /** Começa ou para de enviar a nossa tela para esta pessoa. */
-  async setLocal(stream: MediaStream | null, quality: Quality | null) {
-    if (this.closed) return;
+  setLocal(stream: MediaStream | null, quality: Quality | null): Promise<void> {
+    if (this.closed) return Promise.resolve();
     this.quality = quality;
-    const videoTrack = stream?.getVideoTracks()[0] ?? null;
-    const audioTrack = stream?.getAudioTracks()[0] ?? null;
-    this.video = await this.attach(this.video, 'video', videoTrack, stream);
-    this.audio = await this.attach(this.audio, 'audio', audioTrack, stream);
-    await this.applyEncodings();
+    const revision = ++this.localRevision;
+    this.localQueue = this.localQueue.catch(() => {}).then(async () => {
+      if (this.closed || revision !== this.localRevision) return;
+      this.video = await this.attach(this.video, 'video', stream?.getVideoTracks()[0] ?? null, stream, revision);
+      if (this.closed || revision !== this.localRevision) return;
+      this.audio = await this.attach(this.audio, 'audio', stream?.getAudioTracks()[0] ?? null, stream, revision);
+      if (this.closed || revision !== this.localRevision) return;
+      await this.applyEncodings();
+    });
+    return this.localQueue;
   }
 
   private async attach(
@@ -192,8 +212,9 @@ export class PeerLink {
     kind: 'video' | 'audio',
     track: MediaStreamTrack | null,
     stream: MediaStream | null,
+    revision: number,
   ): Promise<RTCRtpTransceiver | null> {
-    if (this.closed) return t;
+    if (this.closed || revision !== this.localRevision) return t;
     if (!t) {
       if (!track || !stream) return null;
       // O teto entra junto com a faixa: antes da primeira negociação o setParameters não tem efeito, e o
@@ -212,7 +233,7 @@ export class PeerLink {
     }
     try {
       await t.sender.replaceTrack(track);
-      if (this.closed) return t;
+      if (this.closed || revision !== this.localRevision) return t;
       if (track && stream) t.sender.setStreams(stream);
       // Mudar a direção dispara a renegociação (onnegotiationneeded).
       t.direction = track ? 'sendonly' : 'inactive';
@@ -247,11 +268,37 @@ export class PeerLink {
 
   /** O que o motor está enviando de vídeo para esta pessoa agora (specs/010). Sem envio: null. */
   async sendStats(): Promise<SendStats | null> {
-    const sender = this.video?.sender;
-    if (this.closed || !sender?.track) return null;
+    return (await this.pollStats())?.send ?? null;
+  }
+
+  /** Uma consulta por link, compartilhada pelo diagnóstico e pelo governor. */
+  pollStats(): Promise<PeerStats | null> {
+    if (this.closed) return Promise.resolve(null);
+    if (this.statsPending) return this.statsPending;
+    const epoch = this.statsEpoch;
+    this.statsPending = this.collectStats(epoch).catch(() => null).finally(() => {
+      this.statsPending = null;
+    });
+    return this.statsPending;
+  }
+
+  diagnostics(): MediaStatsSample[] {
+    return this.mediaStats.history();
+  }
+
+  clearDiagnostics() {
+    this.statsEpoch++;
+    this.mediaStats.clear();
+  }
+
+  private async collectStats(epoch: number): Promise<PeerStats | null> {
+    const report = await this.pc.getStats();
+    if (this.closed || epoch !== this.statsEpoch) return null;
+    const rows: StatsRow[] = [];
     let out: SendStats | null = null;
-    (await sender.getStats()).forEach((s) => {
-      if (s.type !== 'outbound-rtp' || s.kind !== 'video') return;
+    report.forEach((s) => {
+      rows.push(s as unknown as StatsRow);
+      if (!this.video?.sender.track || s.type !== 'outbound-rtp' || s.kind !== 'video') return;
       const r = s as RTCOutboundRtpStreamStats & {
         qualityLimitationReason?: string;
         pliCount?: number;
@@ -268,7 +315,7 @@ export class PeerLink {
         hardware: r.powerEfficientEncoder ?? null,
       };
     });
-    return out;
+    return { send: out, sample: this.mediaStats.read(rows, performance.now()) };
   }
 
   /** Credenciais TURN novas: vale para as próximas coletas de candidatos. */
@@ -285,8 +332,20 @@ export class PeerLink {
 
   close() {
     this.closed = true;
+    this.localRevision++;
+    this.clearDiagnostics();
     this.pc.close();
     for (const t of this.remoteStream.getTracks()) t.stop();
+  }
+}
+
+/** Preferência opcional, em ms. Não garante o atraso efetivo do motor. */
+export function preferLowLatency(receiver: RTCRtpReceiver | undefined) {
+  if (!receiver || !('jitterBufferTarget' in receiver)) return;
+  try {
+    (receiver as RTCRtpReceiver & { jitterBufferTarget: number | null }).jitterBufferTarget = 0;
+  } catch {
+    // Motor sem suporte ou que recusou a preferência: recepção padrão continua.
   }
 }
 

@@ -1,0 +1,87 @@
+<!doctype html>
+<html lang="pt-BR">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Espia — régua de atraso</title>
+<style>
+  :root { color-scheme: dark; font-family: system-ui, sans-serif; }
+  body { margin: 0; background: #101719; color: #f4f4e9; }
+  main { max-width: 1100px; margin: auto; padding: 32px; }
+  h1 { font-size: 24px; }
+  output { display: block; font: bold clamp(40px, 10vw, 120px) ui-monospace, monospace; font-variant-numeric: tabular-nums; }
+  canvas { width: 100%; background: #233437; border: 2px solid #f4f4e9; }
+  button { padding: 12px 24px; font: inherit; cursor: pointer; }
+  p { max-width: 75ch; line-height: 1.5; }
+</style>
+<main>
+  <h1>Espia — régua de atraso</h1>
+  <p>Transmita esta janela. Compare este contador com o recebido no outro aparelho, usando a mesma referência visual.</p>
+  <button id="start" type="button">Iniciar contador e som</button>
+  <output id="clock" aria-label="Tempo desde o início">000000.000 s</output>
+  <canvas id="scene" width="1000" height="300" aria-label="Movimento contínuo e flash de referência"></canvas>
+  <p id="status" role="status">Pronto. O flash e o beep acontecem a cada 2 segundos.</p>
+  <p>O flash e o beep têm o mesmo instante planejado, mas a tela e o alto-falante podem ter latências próprias. Calibre a origem antes de medir A/V. Esta página não grava mídia nem mede sozinha o atraso da transmissão.</p>
+</main>
+<script type="module">
+  const button = document.querySelector('#start');
+  const clock = document.querySelector('#clock');
+  const status = document.querySelector('#status');
+  const canvas = document.querySelector('#scene');
+  const ctx = canvas.getContext('2d');
+  let audio, origin = null, timer, nextPulse = 0, raf;
+  const period = 2;
+  function schedule() {
+    // Agenda pelo relógio do áudio; o canvas usa esse mesmo domínio.
+    while (nextPulse < audio.currentTime + 0.25) {
+      if (nextPulse >= audio.currentTime) {
+        const oscillator = audio.createOscillator();
+        const gain = audio.createGain();
+        oscillator.frequency.value = 880;
+        gain.gain.setValueAtTime(0, nextPulse);
+        gain.gain.linearRampToValueAtTime(0.12, nextPulse + 0.003);
+        gain.gain.setValueAtTime(0.12, nextPulse + 0.045);
+        gain.gain.linearRampToValueAtTime(0, nextPulse + 0.05);
+        oscillator.connect(gain).connect(audio.destination);
+        oscillator.start(nextPulse);
+        oscillator.stop(nextPulse + 0.06);
+        oscillator.onended = () => { oscillator.disconnect(); gain.disconnect(); };
+      }
+      nextPulse += period;
+    }
+  }
+  function draw() {
+    const seconds = origin === null ? 0 : Math.max(0, audio.currentTime - origin);
+    clock.textContent = `${seconds.toFixed(3).padStart(10, '0')} s`;
+    const flash = origin !== null && audio.currentTime >= origin && seconds % period < 0.1;
+    ctx.fillStyle = flash ? '#f4f4e9' : '#233437';
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+    ctx.fillStyle = flash ? '#101719' : '#e5a544';
+    ctx.fillRect((seconds * 200) % 940, 100, 60, 100);
+    ctx.font = '28px monospace';
+    ctx.fillText(`Evento ${Math.floor(seconds / period)} | ${flash ? 'FLASH' : 'movimento'}`, 20, 45);
+    raf = requestAnimationFrame(draw);
+  }
+  button.addEventListener('click', async () => {
+    button.disabled = true;
+    try {
+      audio ??= new AudioContext();
+      await audio.resume();
+      origin = audio.currentTime + 0.5;
+      nextPulse = origin;
+      schedule();
+      clearInterval(timer);
+      timer = setInterval(schedule, 50);
+      status.textContent = 'Em execução. Flash e beep a cada 2 segundos. Mantenha esta janela visível.';
+      button.textContent = 'Reiniciar contador e som';
+    } catch {
+      status.textContent = 'Não foi possível iniciar o som. Confira a permissão de áudio e tente novamente.';
+    } finally { button.disabled = false; }
+  });
+  document.addEventListener('visibilitychange', () => {
+    if (document.hidden) status.textContent = 'Janela oculta: o navegador pode limitar a animação. Volte para medir.';
+    else status.textContent = origin === null ? 'Pronto para iniciar.' : 'Em execução. Desconsidere intervalos em que a origem ficou oculta.';
+  });
+  addEventListener('pagehide', () => { clearInterval(timer); cancelAnimationFrame(raf); void audio?.close(); });
+  draw();
+</script>
+</html>

@@ -5,6 +5,7 @@
 // aqui viram VideoFrames num MediaStreamTrackGenerator. Som: pedaços de 10 ms de f32 → AudioData.
 import { Channel, invoke } from '@tauri-apps/api/core';
 import type { AudioKind, CaptureSource, GoLivePrefs } from './types';
+import { CaptureTiming, MAX_MEDIA_AGE_US } from './capture-timing';
 
 export const NATIVE_VERSION = 1;
 export const POLL_MS = 2_000;
@@ -262,7 +263,9 @@ export async function startNative(
   sourceId: string,
   events: NativeEvents,
   bridge: Bridge = tauriBridge,
+  signal?: AbortSignal,
 ): Promise<NativeSession> {
+  if (signal?.aborted) throw new DOMException('Captura cancelada', 'AbortError');
   const slots = new SlotTable((b) => bridge.releaseBuffer(b));
   const offBuffers = bridge.onSharedBuffer((buffer, meta) => slots.add(buffer, meta));
   const video = new MediaStreamTrackGenerator({ kind: 'video' });
@@ -271,12 +274,9 @@ export async function startNative(
   // Faixa de som só existe enquanto chega som (o vigia do Discord pode ligar/desligar no meio).
   let audio: MediaStreamTrackGenerator | null = null;
   let audioWriter: WritableStreamDefaultWriter<VideoFrame | AudioData> | null = null;
-  // Imagem e som no MESMO relógio (o da página, em µs, como as câmeras do navegador). O receptor sincroniza
-  // pelos horários: com zeros diferentes, ele atrasava a imagem de propósito (até centenas de ms).
-  // Imagem: o app conta a partir do início da captura ≈ agora. Som: começa na hora em que chega o 1º pedaço
-  // e depois anda pela contagem de amostras.
-  const clockZeroUs = Math.round(performance.now() * 1000);
-  let audioTs = -1;
+  // O relógio nativo só começa DEPOIS de preparar GPU/permissões, não antes do invoke.
+  const timing = new CaptureTiming();
+  let audioGeneration = 0;
   /** Som já entregue ao gerador e ainda não consumido (µs). */
   let audioQueuedUs = 0;
   let soundDropped = 0;
@@ -286,15 +286,27 @@ export async function startNative(
     stream.addTrack(audio);
   };
   const removeAudio = () => {
+    audioGeneration++;
+    timing.resetAudio();
     if (!audio) return;
     stream.removeTrack(audio);
     audio.stop();
+    void audioWriter?.abort?.().catch(() => {});
     audio = audioWriter = null;
     audioQueuedUs = 0;
   };
   let newest = -1;
   let busy = false;
   let done = false;
+  let qualityRevision = 0;
+  let qualityQueue: Promise<void> = Promise.resolve();
+  let hostStopped = false;
+  const stopHost = async () => {
+    if (hostStopped) return;
+    hostStopped = true;
+    await bridge.invoke('capture_stop').catch(() => {});
+  };
+  let offAbort = () => {};
   let dropped = 0;
   let sent = 0;
   const stats = setInterval(() => {
@@ -302,16 +314,21 @@ export async function startNative(
     sent = dropped = soundDropped = 0;
   }, 10_000);
 
-  const finish = () => {
+  const finish = (notify = true) => {
     if (done) return;
     done = true;
+    qualityRevision++;
+    offAbort();
+    timing.stop();
     clearInterval(stats);
     offBuffers();
     offHost();
     slots.clear();
     video.stop();
     audio?.stop();
-    events.ended();
+    void videoWriter.abort?.().catch(() => {});
+    void audioWriter?.abort?.().catch(() => {});
+    if (notify) events.ended();
   };
 
   const onFrame = (msg: FrameMsg) => {
@@ -322,12 +339,15 @@ export async function startNative(
       return events.audio(msg.kind, msg.warn);
     }
     if (msg.t === 'warn') return events.warn(msg.reason);
+    if (!Number.isSafeInteger(msg.seq) || msg.seq < 0 || !Number.isSafeInteger(msg.ts) || msg.ts < 0) return;
     newest = Math.max(newest, msg.seq);
     const slot = slots.stale(msg, newest) || busy ? null : slots.take(msg);
     if (!slot) {
       dropped++;
       return;
     }
+    const timestamp = timing.video(msg.ts, msg.seq);
+    if (timestamp === null) { dropped++; return; }
     const { width, height } = slot.meta;
     let frame: VideoFrame;
     try {
@@ -336,7 +356,7 @@ export async function startNative(
         format: 'NV12',
         codedWidth: width,
         codedHeight: height,
-        timestamp: clockZeroUs + msg.ts,
+        timestamp,
         colorSpace: NV12_COLOR,
       });
     } catch (err) {
@@ -346,36 +366,45 @@ export async function startNative(
     }
     busy = true;
     sent++;
-    videoWriter.write(frame).then(
-      () => (busy = false),
-      () => (busy = false),
-    );
+    try {
+      videoWriter.write(frame).then(
+        () => (busy = false),
+        () => { frame.close(); busy = false; },
+      );
+    } catch { frame.close(); busy = false; }
   };
 
   const onSound = (msg: unknown) => {
     const buf = soundBytes(msg);
-    if (done || !buf) return;
+    if (done || !buf || !buf.byteLength || buf.byteLength % (CHANNELS * 4) !== 0) return;
     if (!audioWriter) addAudio();
     const data = new Float32Array(buf);
     const frames = data.length / CHANNELS;
     const us = Math.round((frames / RATE) * 1_000_000);
-    if (audioTs < 0) audioTs = Math.round(performance.now() * 1000);
-    const ts = audioTs;
-    // O tempo anda mesmo quando o pedaço é descartado: o som continua alinhado com a imagem.
-    audioTs += us;
-    if (shouldDropSound(audioQueuedUs / 1000)) {
+    const ts = timing.audio(frames);
+    if (ts === null || audioQueuedUs + us > MAX_MEDIA_AGE_US) {
       soundDropped++;
       return;
     }
     const chunk = new AudioData({ format: 'f32', sampleRate: RATE, numberOfChannels: CHANNELS, numberOfFrames: frames, timestamp: ts, data });
     audioQueuedUs += us;
-    const consumed = () => (audioQueuedUs = Math.max(0, audioQueuedUs - us));
-    audioWriter!.write(chunk).then(consumed, consumed);
+    const generation = audioGeneration;
+    const consumed = () => {
+      if (generation === audioGeneration) audioQueuedUs = Math.max(0, audioQueuedUs - us);
+    };
+    try { audioWriter!.write(chunk).then(consumed, () => { chunk.close(); consumed(); }); }
+    catch { chunk.close(); consumed(); }
   };
   // App 0.1.7+: pelo canal de mensagens do WebView2. Apps antigos: pelos canais do Tauri.
   const offHost = bridge.onHostMessage((m) => (m.espia === 'pcm' ? onSound(m.d) : onFrame(m.m)));
   const frames = bridge.channel<FrameMsg>(onFrame);
   const sound = bridge.channel<ArrayBuffer | number[]>(onSound);
+  const abort = () => {
+    finish();
+    void stopHost();
+  };
+  signal?.addEventListener('abort', abort, { once: true });
+  offAbort = () => signal?.removeEventListener('abort', abort);
 
   let result: StartResult;
   try {
@@ -388,13 +417,13 @@ export async function startNative(
       sound,
     });
   } catch (err) {
-    done = true;
-    clearInterval(stats);
-    offBuffers();
-    offHost();
-    slots.clear();
-    video.stop();
+    finish(false);
     throw err;
+  }
+
+  if (done) {
+    await stopHost();
+    throw new DOMException('Captura encerrada durante a abertura', 'AbortError');
   }
 
   // Já com a faixa de som, se vai ter som: a malha manda as duas de uma vez.
@@ -405,12 +434,18 @@ export async function startNative(
     stream,
     result,
     async setQuality(resolution, fps) {
-      await bridge.invoke('capture_set_quality', { resolution, fps });
-      video.contentHint = fps === 60 ? 'motion' : 'detail';
+      if (done) return;
+      const revision = ++qualityRevision;
+      qualityQueue = qualityQueue.catch(() => {}).then(async () => {
+        if (done || revision !== qualityRevision) return;
+        await bridge.invoke('capture_set_quality', { resolution, fps });
+        if (!done && revision === qualityRevision) video.contentHint = fps === 60 ? 'motion' : 'detail';
+      });
+      await qualityQueue;
     },
     async stop() {
       finish();
-      await bridge.invoke('capture_stop').catch(() => {});
+      await stopHost();
     },
   };
 }

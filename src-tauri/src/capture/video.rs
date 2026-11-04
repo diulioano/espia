@@ -433,7 +433,10 @@ mod imp {
         let winrt = AgileDevice(winrt.clone());
         windows::Foundation::TypedEventHandler::<Direct3D11CaptureFramePool, windows::core::IInspectable>::new(move |pool, _| {
           let Some(pool) = pool.as_ref() else { return Ok(()) };
-          let frame = pool.TryGetNextFrame()?;
+          if shared.ended.load(Ordering::SeqCst) { return Ok(()); }
+          let mut frame = pool.TryGetNextFrame()?;
+          // O pool tem dois buffers: após uma pausa, usar o mais recente disponível.
+          while let Ok(newer) = pool.TryGetNextFrame() { frame = newer; }
           let content = frame.ContentSize()?;
           // A janela mudou de tamanho: o pool acompanha (o tamanho de saída não muda).
           {
@@ -457,6 +460,7 @@ mod imp {
           // Ordem fixa dos travamentos (pipeline → slots), a mesma do set_quality: o tamanho do NV12
           // e o do buffer de destino nunca se desencontram.
           let mut pipeline = shared.pipeline.lock().unwrap();
+          if shared.ended.load(Ordering::SeqCst) { return Ok(()); }
           let seq = shared.seq.fetch_add(1, Ordering::Relaxed);
           let slot = (seq % 3) as usize;
           let (generation, ptr) = {
@@ -468,6 +472,7 @@ mod imp {
           };
           let luma = pipeline.convert(&tex, (content.Width.max(0) as u32, content.Height.max(0) as u32), ptr)?;
           drop(pipeline);
+          if shared.ended.load(Ordering::SeqCst) { return Ok(()); }
           let ts = (now - shared.started).as_micros() as u64;
           let _ = frames.send(json!({ "t": "frame", "gen": generation, "slot": slot, "seq": seq, "ts": ts }));
           // Jogo em tela cheia exclusiva costuma sair preto (T546).
@@ -528,9 +533,12 @@ mod imp {
     }
 
     pub fn stop(&self, reason: &str) {
+      let was_ended = self.shared.ended.swap(true, Ordering::SeqCst);
+      // Aguarda uma cópia já em andamento antes de liberar os buffers compartilhados.
+      drop(self.shared.pipeline.lock().unwrap());
       let _ = self.session.Close();
       let _ = self.pool.Close();
-      if !self.shared.ended.swap(true, Ordering::SeqCst) {
+      if !was_ended {
         let _ = self.frames.send(json!({ "t": "ended", "reason": reason }));
       }
       let _ = &self.device;

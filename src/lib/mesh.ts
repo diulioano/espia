@@ -14,6 +14,8 @@ export interface MeshCallbacks {
 
 export class Mesh {
   private links = new Map<string, PeerLink>();
+  private linkNumbers = new Map<string, number>();
+  private nextLinkNumber = 0;
   private iceServers: IceServer[] = [];
   private local: MediaStream | null = null;
   private quality: Quality | null = null;
@@ -46,6 +48,7 @@ export class Mesh {
   remove(id: string) {
     this.links.get(id)?.close();
     this.links.delete(id);
+    this.linkNumbers.delete(id);
   }
 
   receive(from: string, data: SignalData) {
@@ -92,10 +95,26 @@ export class Mesh {
 
   /** Envio de vídeo por pessoa, com como ela me vê (specs/010). */
   async sendStats(): Promise<{ id: string; view: ViewMode; stats: SendStats }[]> {
-    const out = await Promise.all(
-      [...this.links].map(async ([id, l]) => ({ id, view: l.theirView, stats: await l.sendStats().catch(() => null) })),
-    );
+    const out = await this.pollStats();
     return out.filter((x): x is { id: string; view: ViewMode; stats: SendStats } => x.stats !== null);
+  }
+
+  /** Inclui quem só recebe mídia. IDs de pessoas permanecem apenas na coordenação interna. */
+  async pollStats(): Promise<{ id: string; view: ViewMode; stats: SendStats | null }[]> {
+    const out = await Promise.all([...this.links].map(async ([id, link]) => {
+      const result = await link.pollStats();
+      return result && this.links.get(id) === link ? { id, view: link.theirView, stats: result.send } : null;
+    }));
+    return out.filter((x): x is NonNullable<typeof x> => x !== null);
+  }
+
+  diagnostics() {
+    return [...this.links].map(([id, link]) => ({ link: this.linkNumbers.get(id)!, samples: link.diagnostics() }));
+  }
+
+  clearDiagnostics(id?: string) {
+    if (id !== undefined) this.links.get(id)?.clearDiagnostics();
+    else for (const link of this.links.values()) link.clearDiagnostics();
   }
 
   /** Quantas conexões estão de pé (espectadores possíveis da sua transmissão). */
@@ -115,6 +134,7 @@ export class Mesh {
       view: (mode) => this.cb.view(id, mode),
     });
     this.links.set(id, link);
+    this.linkNumbers.set(id, ++this.nextLinkNumber);
     link.setMyView(this.myViews[id] ?? 'hidden');
     if (this.local) void link.setLocal(this.local, this.quality);
     return link;
