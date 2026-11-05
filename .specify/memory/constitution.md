@@ -1,6 +1,10 @@
 <!--
 Sync Impact Report
-- Versão: 1.5.0 → 2.0.0 (MAJOR: III redefinido — "Sem contas e nada sobre as pessoas": sala fixa guarda nome/último uso/hash da chave do dono no servidor; Suas salas e chaves de dono no navegador) — feature 011, pedido de 2026-10-29/30 (salas fixas e chamada que sobrevive a quedas)
+- Versão: 2.0.0 → 3.0.0 (MAJOR: I redefine o caminho obrigatório: dois passos até entrar na sala e clique explícito para começar a receber cada transmissão). Pedido de 2026-11-05, confirmado na remediação da análise da feature 017.
+- Princípio modificado: I. Simplicidade para quem usa (título preservado). Princípios II–VI preservados; SFU não autorizada por esta emenda.
+- Seções adicionadas/removidas: nenhuma. Placeholders e TODOs pendentes: nenhum.
+- Revisar este relatório temporário e removê-lo antes de um eventual commit; esta execução não cria commit.
+- Anterior: 1.5.0 → 2.0.0 (MAJOR: III redefinido — "Sem contas e nada sobre as pessoas": sala fixa guarda nome/último uso/hash da chave do dono no servidor; Suas salas e chaves de dono no navegador) — feature 011, pedido de 2026-10-29/30 (salas fixas e chamada que sobrevive a quedas)
 - Anterior: 1.4.0 → 1.5.0 (restrição técnica do app desktop: + aviso de sala, `app_set_room`) — feature 009, pedido de 2026-10-29 (soltar o motor de página escondido fora de sala, Q1: A)
 - Anterior: 1.3.0 → 1.4.0 (restrição técnica do app desktop: + aviso de ao vivo para a bandeja, `app_set_live`) — feature 007, pedido de 2026-10-29 (fechar para a bandeja sem perder a transmissão)
 - Anterior: 1.2.0 → 1.3.0 (I: som de uma câmera transmitida permitido; restrição: celular transmite câmera) — feature 006, pedido de 2026-10-29 (Q1: C, Q3: B)
@@ -19,7 +23,10 @@ Sync Impact Report
 ## Core Principles
 
 ### I. Simplicidade para quem usa
-Do link aberto até assistir uma tela deve haver no máximo dois passos: digitar apelido e entrar.
+Do link aberto até entrar na sala MUST haver no máximo dois passos: digitar apelido e entrar.
+Começar a receber vídeo e som de cada transmissão alheia MUST depender de clicar em **Assistir**.
+Entrar na sala, iniciar transmissão própria, mudar destaque ou restaurar a janela MUST NOT
+iniciar recepção não escolhida. Essa escolha evita consumo de mídia que a pessoa não pediu.
 Nenhuma funcionalidade pode exigir instalação, conta, login ou senha. Textos da interface são em
 português informal (o tom do design "Espia"). Funcionalidades fora do escopo (voz, chat de texto,
 contas, amigos) MUST NOT ser adicionadas sem emenda desta constituição. Um app desktop **opcional**
@@ -86,4 +93,4 @@ Esta constituição prevalece sobre preferências de implementação. Emendas: e
 subir a versão (MAJOR remove/redefine princípio; MINOR adiciona princípio/seção; PATCH esclarece)
 e registrar o motivo no Sync Impact Report. Todo `plan.md` passa pelo Constitution Check.
 
-**Version**: 2.0.0 | **Ratified**: 2026-10-28 | **Last Amended**: 2026-10-30
+**Version**: 3.0.0 | **Ratified**: 2026-10-28 | **Last Amended**: 2026-11-05
