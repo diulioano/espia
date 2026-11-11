@@ -14,7 +14,7 @@ Gerado por `npm run desktop:release` (`scripts/copy-installer.mjs`) e publicado 
   "pub_date": "2026-11-01T12:00:00Z",
   "platforms": {
     "windows-x86_64": {
-      "url": "https://espia.espia.workers.dev/download/Espia_0.1.9_x64-setup.exe",
+      "url": "https://espia.diuliano.com/download/Espia_0.1.9_x64-setup.exe",
       "signature": "<conteúdo do .sig gerado pelo build>"
     }
   }

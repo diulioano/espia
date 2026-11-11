@@ -1,6 +1,6 @@
 # Contrato: bandeja do app desktop (007)
 
-Vale só dentro do app desktop, na janela `main`, para a origem `https://espia.espia.workers.dev`. No navegador nada disso existe e o site funciona igual (FR-708).
+Vale só dentro do app desktop, na janela `main`, para a origem `https://espia.diuliano.com`. No navegador nada disso existe e o site funciona igual (FR-708).
 
 ## Página → app
 

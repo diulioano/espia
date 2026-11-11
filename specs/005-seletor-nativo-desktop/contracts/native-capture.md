@@ -1,6 +1,6 @@
 # Contrato — ponte de captura nativa (app desktop ↔ site)
 
-Esta é a **única** API nativa que o app expõe à página (emenda 1.2.0 da constituição). Ela só existe na janela `main`, só para a origem `https://espia.espia.workers.dev` (e `http://127.0.0.1:*` em builds de debug), e é liberada por `src-tauri/capabilities/capture.json` (`remote.urls`). Os tipos estão em [data-model.md](../data-model.md).
+Esta é a **única** API nativa que o app expõe à página (emenda 1.2.0 da constituição). Ela só existe na janela `main`, só para a origem `https://espia.diuliano.com` (e `http://127.0.0.1:*` em builds de debug), e é liberada por `src-tauri/capabilities/capture.json` (`remote.urls`). Os tipos estão em [data-model.md](../data-model.md).
 
 ## Comandos (`invoke`)
 

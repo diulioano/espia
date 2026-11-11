@@ -1,6 +1,6 @@
 # Contrato — Armazenamento no aparelho
 
-Origem do site (`espia.espia.workers.dev`). O app desktop tem o próprio armazenamento (perfil do WebView2), então as listas são separadas sem nenhuma API nativa nova.
+Origem do site (`espia.diuliano.com`). O app desktop tem o próprio armazenamento (perfil do WebView2), então as listas são separadas sem nenhuma API nativa nova.
 
 | Chave (`localStorage`) | Formato | Notas |
 |---|---|---|
