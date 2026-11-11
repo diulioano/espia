@@ -18,6 +18,9 @@
     onretry,
     onwatch,
     onpip,
+    onfullscreen,
+    videoHidden = false,
+    volumeAdjustable = true,
     still,
   }: {
     view: StreamView;
@@ -39,6 +42,12 @@
     onwatch?: (on: boolean) => void;
     /** Entrou/saiu do picture-in-picture (specs/014 US2): a tela continua chegando com a janela escondida. */
     onpip?: (on: boolean) => void;
+    /** Celular (specs/018): o botão de tela cheia abre o visualizador em vez de pôr o tile em tela cheia. */
+    onfullscreen?: () => void;
+    /** Visualizador aberto por cima (specs/018): sem <video> aqui, o som continua. */
+    videoHidden?: boolean;
+    /** false = iPhone, onde a página não muda o volume (specs/018 R8): só o mudo. */
+    volumeAdjustable?: boolean;
     /**
      * Imagem parada no lugar do vídeo (specs/014 US3, a sua prévia). `null` = ainda sem quadro (placeholder).
      * Ausente = vídeo normal.
@@ -69,7 +78,7 @@
   const you = $derived(youProp || !!view.you);
   const thumb = $derived(size === 'thumb');
   /** Parou de assistir (specs/014): cartão "Assistir" no lugar do vídeo; o som continua. */
-  const watching = $derived(view.watching !== false);
+  const watching = $derived(you || view.watching === true);
   const hasControls = $derived(controls && watching && view.status === 'ok' && !thumb);
   const showName = $derived(alwaysName || size !== 'stage' || active);
   // Com a descrição (specs/012), ela já diz se é câmera: "Lu · Câmera · C920".
@@ -112,10 +121,13 @@
     if (!watching && video && document.pictureInPictureElement === video) void document.exitPictureInPicture().catch(() => {});
   });
 
-  function wake() {
+  /** No toque os controles ficam mais tempo (specs/018 R8): não dá pra "passar o mouse" de novo. */
+  let touch = false;
+  function wake(e?: PointerEvent | FocusEvent) {
+    if (e && 'pointerType' in e && e.type === 'pointerdown') touch = e.pointerType === 'touch';
     active = true;
     clearTimeout(hideTimer);
-    hideTimer = setTimeout(() => (active = false), 2000);
+    hideTimer = setTimeout(() => (active = false), touch ? 3000 : 2000);
   }
   function sleep() {
     clearTimeout(hideTimer);
@@ -142,6 +154,7 @@
   }
   async function fullscreen(e: MouseEvent) {
     e.stopPropagation();
+    if (onfullscreen) return onfullscreen();
     if (document.fullscreenElement) await document.exitFullscreen();
     else await container.requestFullscreen().catch(() => {});
   }
@@ -162,7 +175,10 @@
   onkeydown={handleKey}
   onpointermove={wake}
   onpointerdown={wake}
-  onpointerleave={sleep}
+  onpointerleave={(e) => {
+    // No toque o dedo "sai" ao soltar: esconder aqui fazia o clique cair no tile, não no botão (specs/018).
+    if (e.pointerType !== 'touch') sleep();
+  }}
   onfocusin={wake}
 >
   <!-- Parou de assistir: sem som também (specs/014). Em segundo plano o tile continua e o som segue. -->
@@ -184,7 +200,7 @@
           <Eye size={18} strokeWidth={2.75} />
         </button>
       {:else}
-        <span class="unwatched-title">Você parou de assistir {label}</span>
+        <span class="unwatched-title">{view.watchState === 'stopped' ? `Você parou de assistir ${label}` : `Transmissão de ${label}`}</span>
         <span class="unwatched-sub">Nem a tela nem o som chegam até você clicar.</span>
         <button
           class="btn btn-primary watch"
@@ -205,8 +221,10 @@
       <div class="placeholder"><span>{view.caption ?? 'sua tela'}</span></div>
     {/if}
   {:else if view.status === 'ok'}
-    {#if view.stream}
+    {#if view.stream && !videoHidden}
       <video bind:this={video} autoplay playsinline></video>
+    {:else if view.stream}
+      <div class="placeholder"></div>
     {:else}
       <div class="placeholder"><span>{view.caption ?? `${view.source === 'camera' ? 'câmera' : 'tela'} de ${view.name}`}</span></div>
     {/if}
@@ -223,7 +241,7 @@
       {:else}
         <div class="fail-text">
           <span class="fail-title">Não deu pra conectar com {view.name}</span>
-          <span class="fail-body">A conexão caiu ou a rede de alguém está bloqueando. Às vezes uma segunda tentativa resolve.</span>
+          <span class="fail-body">Não deu para conectar diretamente. Esta versão está sem retransmissão; algumas redes podem não conectar.</span>
         </div>
         <button
           class="btn btn-primary retry"
@@ -258,6 +276,7 @@
         <button class="ctl" aria-label={view.muted ? 'Ativar som' : 'Silenciar'} onclick={() => ontogglemute?.()}>
           {#if view.muted}<VolumeX size={18} strokeWidth={2.75} />{:else}<Volume2 size={18} strokeWidth={2.75} />{/if}
         </button>
+        {#if volumeAdjustable}
         <input
           class="slider"
           type="range"
@@ -269,6 +288,7 @@
           aria-label="Volume"
           oninput={(e) => onvolume?.(Number(e.currentTarget.value))}
         />
+        {/if}
       {/if}
       <div class="spacer"></div>
       {#if onwatch && !you}
@@ -410,4 +430,10 @@
     appearance: none; width: 14px; height: 14px; margin-top: -4px; border-radius: 50%; background: #f5ead8; border: 0;
   }
   .slider::-moz-range-thumb { width: 14px; height: 14px; border-radius: 50%; background: #f5ead8; border: 0; }
+
+  /* Toque (specs/018 FR-013): botões de 44 px em todo tamanho, barra de volume com área de toque de 44 px. */
+  @media (pointer: coarse) {
+    .ctl, .size-grid .ctl { --c: 44px; }
+    .slider { height: 44px; }
+  }
 </style>

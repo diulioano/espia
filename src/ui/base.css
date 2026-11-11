@@ -32,6 +32,13 @@ button { font: inherit; }
 .btn-icon { width: 36px; height: 36px; padding: 0; background: rgba(245, 234, 216, 0.08); }
 .btn-icon:hover { background: rgba(245, 234, 216, 0.14); }
 
+/* Toque (specs/018 FR-013): nenhum botão menor que 44 × 44. */
+/* !important: vale mesmo quando o componente define uma altura menor pro mouse. */
+@media (pointer: coarse) {
+  .btn { min-height: 44px !important; }
+  .btn-icon { width: 44px !important; height: 44px !important; min-width: 44px; }
+}
+
 /* — rolagem — pílula na cor de destaque, sem setas, trilho transparente (app e site). No Chromium/
    WebView2 as pseudo-classes ::-webkit-* só valem se o elemento não definir scrollbar-width/color. */
 ::-webkit-scrollbar { width: 12px; height: 12px; }

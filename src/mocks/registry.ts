@@ -9,8 +9,11 @@ export interface MockScene {
   id: string;
   code: string;
   label: string;
-  /** 'mobile' = renderiza num quadro de 390×844 (iframe), para os media queries valerem. */
-  device?: 'mobile';
+  /**
+   * 'mobile' = renderiza num quadro de 390×844 (iframe), para os media queries valerem.
+   * 'mobile-landscape' = celular deitado, quadro de 844×390 (specs/018).
+   */
+  device?: 'mobile' | 'mobile-landscape';
 }
 
 export interface MockScreen {

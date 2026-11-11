@@ -9,7 +9,7 @@ describe('parseRoomId (código ou link colado na tela inicial)', () => {
   });
 
   it('aceita o link do site e o link do app desktop', () => {
-    expect(parseRoomId('https://espia.espia.workers.dev/s/k7f-q2x')).toBe('k7f-q2x');
+    expect(parseRoomId('https://espia.diuliano.com/s/k7f-q2x')).toBe('k7f-q2x');
     expect(parseRoomId('espia://s/k7f-q2x')).toBe('k7f-q2x');
   });
 

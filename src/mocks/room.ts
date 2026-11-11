@@ -2,6 +2,8 @@
 import type { CameraView, CaptureSource, GoLivePrefs, ParticipantView, PickerView, RoomView, StreamView, ToastView } from '../lib/types';
 
 export const ROOM_SCENES = [
+  {id:'update-required',code:'017',label:'Atualização necessária'},
+  ...(['available','stopped','opening','playing','unavailable','reconnecting'] as const).map(state=>({id:`watch-${state}` as const,code:'017',label:`Assistir: ${state}`})),
   { id: 'connecting', code: 'E1', label: 'Conectando' },
   { id: 'empty', code: 'D3', label: 'Ninguém ao vivo' },
   { id: 'copied', code: 'D3', label: 'Convite copiado' },
@@ -216,6 +218,25 @@ export function isRoomScene(value: string | null): value is RoomScene {
 }
 
 export function buildRoomScene(scene: RoomScene): RoomView {
+ const view=rawRoomScene(scene);
+ for(const stream of view.streams) stream.watching ??= true;
+ return view;
+}
+function rawRoomScene(scene: RoomScene): RoomView {
+ if(scene==='update-required') return {...buildRoomScene('empty'),requiresUpdate:true};
+ if(scene.startsWith('watch-')) {
+  const view=buildRoomScene('grid');
+  view.streams=view.streams.slice(0,2);view.toasts=[];
+  if(scene==='watch-reconnecting') view.link='reconnecting';
+  for(const person of view.participants) person.live=view.streams.some(stream=>stream.id===person.id);
+  for(const stream of view.streams) {
+   const state=scene.slice(6);
+   stream.watching=state==='opening'||state==='playing'||state==='unavailable'||state==='reconnecting';
+   stream.watchState=state==='stopped'?'stopped':state==='opening'||state==='reconnecting'?'opening':state==='playing'?'playing':state==='unavailable'?'unavailable':'available';
+   stream.status=stream.watchState==='opening'?'loading':stream.watchState==='unavailable'?'failed':'ok';
+  }
+  return view;
+ }
   // Queda (specs/011 Q1–Q3): a mesma sala de "Você ao vivo", com o aviso por cima.
   // Sala fixa: a mesma sala, com o nome no lugar do título.
   if (scene === 'fixed' || scene === 'created' || scene === 'guest' || scene === 'ownermenu' || scene === 'rename' || scene === 'delete') {
@@ -294,6 +315,7 @@ export function buildRoomScene(scene: RoomScene): RoomView {
     capacity: 10,
     streams,
     focusedId: scene === 'focus' || scene === 'streamfail' ? 'bia' : null,
+    fullscreenId: null,
     myBroadcast: meLive
       ? {
           ...DEFAULT_PREFS,

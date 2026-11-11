@@ -155,7 +155,10 @@
 
   /* Celular (M1): sem card, conteúdo na metade de baixo. */
   @media (max-width: 639px) {
-    .join-page { padding: 60px 22px 34px; }
+    .join-page {
+      padding: max(60px, calc(env(safe-area-inset-top) + 24px)) max(22px, env(safe-area-inset-right))
+        max(34px, env(safe-area-inset-bottom)) max(22px, env(safe-area-inset-left));
+    }
     .blob, .problem .blob {
       right: -140px; top: -80px; bottom: auto; width: 360px; height: 360px; background: rgba(198, 113, 57, 0.14);
     }
@@ -177,5 +180,10 @@
     .nick :global(.input) { min-height: 54px; padding-inline: 20px; background: var(--color-surface); }
     .enter { min-height: 56px; font-size: 18px; }
     .actions { flex-direction: column; }
+  }
+
+  /* Celular deitado (specs/018 R7): o entalhe fica de lado. */
+  @media (pointer: coarse) and (max-height: 540px) and (min-width: 640px) {
+    .join-page { padding-left: env(safe-area-inset-left); padding-right: env(safe-area-inset-right); padding-bottom: env(safe-area-inset-bottom); }
   }
 </style>

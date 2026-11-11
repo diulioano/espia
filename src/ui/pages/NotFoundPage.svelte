@@ -78,7 +78,10 @@
 
   /* Celular: sem card, conteúdo na metade de baixo (como a tela de entrada). */
   @media (max-width: 639px) {
-    .not-found { padding: 60px 22px 34px; }
+    .not-found {
+      padding: max(60px, calc(env(safe-area-inset-top) + 24px)) max(22px, env(safe-area-inset-right))
+        max(34px, env(safe-area-inset-bottom)) max(22px, env(safe-area-inset-left));
+    }
     .blob { right: -140px; top: -80px; width: 360px; height: 360px; background: rgba(198, 113, 57, 0.14); }
     .top { padding: 0; }
     .logo-desktop { display: none; }
@@ -86,5 +89,10 @@
     .card { margin: auto 0 0; width: auto; max-width: none; padding: 0; gap: 20px; background: none; border-radius: 0; }
     h1 { font-size: 34px; }
     .actions { flex-direction: column; }
+  }
+
+  /* Celular deitado (specs/018 R7): o entalhe fica de lado. */
+  @media (pointer: coarse) and (max-height: 540px) and (min-width: 640px) {
+    .not-found { padding-left: env(safe-area-inset-left); padding-right: env(safe-area-inset-right); padding-bottom: env(safe-area-inset-bottom); }
   }
 </style>

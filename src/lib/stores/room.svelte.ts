@@ -18,9 +18,10 @@ import { audioRole, isCaptureCard, previewIds, suggestAudio, type AudioRole, typ
 import { untrack } from 'svelte';
 import { Mesh } from '../mesh';
 import { detectNative, matchLastSource, pollSources, sourceKey, startNative, type AudioWarn, type NativeSession } from '../native-capture';
+import { chooseWatch, pruneWatching, type WatchChoice } from '../watch-state';
 import { CpuGovernor } from '../cpu-governor';
 import { countFullViewers, effectiveQuality, isAdjusted, stepDown, wantsVideo, type Quality, type ViewMode } from '../quality';
-import { pruneUnwatched, stageLayout, viewModes } from '../room-view';
+import { keepFullscreen, stageLayout, viewModes } from '../room-view';
 import {
   loadGoLivePrefs,
   forgetOwnerKey,
@@ -113,11 +114,16 @@ export class RoomStore {
   /** Layout de celular (a rota avisa). Muda como eu vejo as telas dos outros. */
   mobile = $state(false);
   /** Quem eu parei de assistir → início daquela transmissão (specs/014 US1, research R4). Trocado por inteiro. */
-  unwatched = $state.raw<Map<string, number>>(new Map());
+  watching = $state.raw<Map<string, WatchChoice>>(new Map());
+  private stopped = $state.raw<Map<string,number>>(new Map());
+  private captureRequest: { requestId:string; broadcastSeq:number } | null = null;
+  private highestBroadcastSeq = -1;
   /** Página à vista (specs/014 US2): minimizada, na bandeja ou aba de trás = false. Nunca pelo foco. */
   pageVisible = $state(typeof document === 'undefined' || document.visibilityState === 'visible');
   /** Tela em picture-in-picture: continua chegando com a página escondida (specs/014 R3). */
   pipId = $state<string | null>(null);
+  /** Visualizador em tela cheia do celular (specs/018 R5). Só apresentação: não muda o que chega. */
+  fullscreenId = $state<string | null>(null);
   /** A sua tela grande no palco, ao vivo (specs/014 US3). Volta a false com Esc, outro foco ou o fim. */
   selfOnStage = $state(false);
   /** Quadro parado da sua transmissão (specs/014 US3). ImageBitmap não vira proxy: $state.raw. */
@@ -210,6 +216,8 @@ export class RoomStore {
       onBack: () => {
         if (this.link === 'ok') return;
         clearTimeout(this.downTimer);
+        // Voltou depois de "Não deu pra voltar": o visualizador já tinha sumido e não reabre sozinho (specs/018 R5).
+        if (this.link === 'failed') this.fullscreenId = null;
         this.link = 'ok';
         this.toast({ kind: 'copied', text: 'De volta!' });
       },
@@ -303,9 +311,19 @@ export class RoomStore {
 
   /** Escolhas de "parar de assistir" que ainda valem depois de uma mudança na lista. */
   private pruneWatch() {
-    const next = pruneUnwatched(this.unwatched, this.peers);
-    if (next.size !== this.unwatched.size) this.unwatched = next;
+    const next = pruneWatching(this.watching, this.peers);
+    if (next.size !== this.watching.size) this.watching = next;
+    this.mesh?.setRemoteKeys(this.peers);
     if (this.pipId && !this.peers.some((p) => p.id === this.pipId && p.live)) this.pipId = null;
+    // Transmissão acabou ou recomeçou (escolha nova): o visualizador fecha (specs/018 FR-007).
+    if (this.fullscreenId) this.fullscreenId = keepFullscreen(this.fullscreenId, this.watchingLive(), this.pipId);
+  }
+
+  /** Transmissões que estou assistindo e que continuam no ar, na mesma transmissão escolhida. */
+  private watchingLive(): Set<string> {
+    const ids = new Set<string>();
+    for (const p of this.peers) if (p.live && this.watching.get(p.id)?.transmission.startedAt === p.live.startedAt) ids.add(p.id);
+    return ids;
   }
 
   /** Manda os modos e, pra quem volta a ser visto, espera o vídeo de novo (não conta o tempo escondido). */
@@ -351,6 +369,9 @@ export class RoomStore {
   private receive(msg: ServerMessage) {
     switch (msg.t) {
       case 'welcome': {
+        if(this.me && this.me.id!==msg.you.id) { this.watching=new Map(); this.stopped=new Map(); }
+        this.highestBroadcastSeq=msg.broadcastOrder?.highestBroadcastSeq??-1;
+        if(!msg.broadcastOrder || msg.broadcastOrder.requestId!==this.captureRequest?.requestId) this.captureRequest=null;
         this.me = msg.you;
         this.peers = msg.peers;
         this.capacity = msg.capacity;
@@ -367,10 +388,18 @@ export class RoomStore {
         if (this.focusedId && !this.peers.some((p) => p.id === this.focusedId)) this.focusedId = null;
         this.pruneWatch();
         // Voltou como pessoa nova (passou da tolerância) com a captura ainda rodando: avisa de novo.
-        if (this.myBroadcast && !msg.you.live) this.sendLive();
+        if (this.myBroadcast && (!msg.you.live || !this.captureRequest)) this.sendLive();
+        if(!this.myBroadcast && msg.you.live && msg.broadcastOrder) this.signaling.send({t:'unlive',requestId:msg.broadcastOrder.requestId,broadcastSeq:msg.broadcastOrder.highestBroadcastSeq});
         this.syncMesh(msg.you.id, msg.iceServers);
         this.scheduleTurnRefresh(msg.iceExpiresAt);
-        for (const p of this.peers) if (p.live && !this.media[p.id]?.video) this.waitFirstFrame(p.id);
+        this.mesh?.setLocalKey(msg.you.live && this.myBroadcast && msg.broadcastOrder?.requestId===this.captureRequest?.requestId ? {peerId:msg.you.id,startedAt:msg.you.live.startedAt} : null);
+        return;
+      }
+      case 'live-ack': {
+        if(!this.myBroadcast || !this.me || msg.requestId!==this.captureRequest?.requestId || msg.broadcastSeq!==this.captureRequest.broadcastSeq) return;
+        this.highestBroadcastSeq=Math.max(this.highestBroadcastSeq,msg.broadcastSeq);
+        this.me={...this.me,live:msg.live};
+        this.mesh?.setLocalKey({peerId:this.me.id,startedAt:msg.live.startedAt});
         return;
       }
       case 'peer-joined': {
@@ -412,7 +441,7 @@ export class RoomStore {
         }
         if (!msg.live && this.focusedId === msg.id) this.focusedId = null;
         this.pruneWatch();
-        if (started) this.waitFirstFrame(peer.id);
+        if (started && this.watching.has(peer.id)) this.waitFirstFrame(peer.id);
         if (!msg.live) {
           this.clearFrameTimer(peer.id);
           this.mesh?.clearDiagnostics(peer.id);
@@ -461,7 +490,8 @@ export class RoomStore {
           audioStream: m?.audio ?? undefined,
           source: p.live!.source,
           label: p.live!.label,
-          watching: !this.unwatched.has(p.id),
+          watching: this.watching.get(p.id)?.transmission.startedAt===p.live!.startedAt,
+          watchState: this.watching.has(p.id) ? failed ? 'unavailable' : flowing ? 'playing' : 'opening' : this.stopped.get(p.id)===p.live!.startedAt ? 'stopped' : 'available',
         };
       });
     // A sua tela no palco (specs/014 US3): uma tela a mais, sempre muda, fora do que vai pra sala.
@@ -478,6 +508,8 @@ export class RoomStore {
         source: self.source,
         label: self.label,
         you: true,
+        watching: true,
+        watchState: 'playing',
       });
     }
     const focusedId = self && me ? me.id : streams.some((s) => s.id === this.focusedId) ? this.focusedId : null;
@@ -489,6 +521,7 @@ export class RoomStore {
       capacity: this.capacity,
       streams,
       focusedId,
+      fullscreenId: this.fullscreenId,
       myBroadcast: this.myBroadcast && {
         ...this.myBroadcast,
         // Mostra a qualidade efetiva, não só a escolhida.
@@ -590,14 +623,22 @@ export class RoomStore {
       },
       pip: (id) => {
         if (id === null || this.peers.some((p) => p.id === id && p.live)) this.pipId = id;
+        // O PiP abre a partir da tela cheia: ela fecha e a imagem flutuante continua (specs/018 R5).
+        if (id !== null) this.fullscreenId = null;
+      },
+      fullscreen: (id) => {
+        this.fullscreenId = id === null ? null : keepFullscreen(id, this.watchingLive(), this.pipId);
       },
       watch: (id, on) => {
         const peer = this.peers.find((p) => p.id === id);
         if (!peer?.live) return;
-        const next = new Map(this.unwatched);
-        if (on) next.delete(id);
-        else next.set(id, peer.live.startedAt);
-        this.unwatched = next;
+        this.watching=chooseWatch(this.watching,peer,on,this.mobile);
+        const stopped=new Map(this.stopped);
+        if(on) stopped.delete(id); else {stopped.set(id,peer.live.startedAt);this.clearFrameTimer(id);this.timedOut[id]=false;if(this.media[id]) this.media[id].video=false;}
+        this.stopped=stopped;
+        if(on&&this.mobile) this.focusedId=id;
+        // Parou de assistir (ou o celular trocou de tela): o visualizador fecha (specs/018 FR-007).
+        if(this.fullscreenId) this.fullscreenId=keepFullscreen(this.fullscreenId,this.watchingLive(),this.pipId);
       },
       toggleMute: (id) => {
         const a = this.audioOf(id);
@@ -612,13 +653,14 @@ export class RoomStore {
         if (peer) saveVolume(peer.nickname, volume);
       },
       retry: (id) => {
+        if(!this.watching.has(id)) return;
         this.timedOut[id] = false;
         this.waitFirstFrame(id);
         this.mesh?.retry(id);
       },
       toastAction: (id) => {
         const peerId = this.toastPeer.get(id);
-        if (peerId && this.peers.some((p) => p.id === peerId && p.live)) this.focusedId = peerId;
+        if (peerId && this.peers.some((p) => p.id === peerId && p.live)) { this.actions.watch?.(peerId,true); this.focusedId = peerId; }
         this.dismiss(id);
       },
       dismissToast: (id) => this.dismiss(id),
@@ -1092,10 +1134,17 @@ export class RoomStore {
   /** Anuncia a transmissão com a qualidade efetiva (quem assiste vê no subtítulo). */
   private sendLive() {
     const b = this.myBroadcast;
-    if (!b) return;
+    if (!b || !this.connected) return;
+    if(!this.captureRequest) {
+      if(this.highestBroadcastSeq>=Number.MAX_SAFE_INTEGER) return;
+      this.captureRequest={requestId:crypto.randomUUID(),broadcastSeq:++this.highestBroadcastSeq};
+    }
     const q = this.quality ?? b;
+    const video=this.stream?.getVideoTracks()[0];
+    if(video && !video.contentHint) { try { video.contentHint=b.source==='camera'?'motion':'detail'; } catch { /* Preferência opcional do motor. */ } }
     this.signaling.send({
       t: 'live',
+      ...this.captureRequest,
       resolution: q.resolution,
       fps: q.fps,
       audio: b.audioKind,
@@ -1157,7 +1206,7 @@ export class RoomStore {
       layout: stageLayout(v),
       focusedId: v.focusedId,
       mobile: this.mobile,
-      unwatched: new Set(this.unwatched.keys()),
+      watching: new Set(this.watching.keys()),
       pageVisible: this.pageVisible,
       pipId: this.pipId,
       selfId: this.selfOnStage ? (this.me?.id ?? null) : null,
@@ -1230,7 +1279,10 @@ export class RoomStore {
     this.mesh?.setLocal(null, null);
     if (native) void native.stop();
     else stopCapture(stream);
-    if (notify) this.signaling.send({ t: 'unlive' });
+    this.mesh?.setLocalKey(null);
+    if (notify && this.captureRequest) this.signaling.send({ t: 'unlive', ...this.captureRequest });
+    this.captureRequest=null;
+    if(this.me) this.me={...this.me,live:null};
   }
 
   // ---------- WebRTC ----------
@@ -1253,6 +1305,7 @@ export class RoomStore {
       this.statsTimer = setInterval(() => void this.watchSend(), 1000);
     }
     this.mesh.setIceServers(iceServers);
+    this.mesh.setRemoteKeys(this.peers);
     this.mesh.sync(this.peers.map((p) => p.id));
     untrack(() => this.applyViews(this.myViews()));
     if (this.stream && this.quality) this.mesh.setLocal(this.stream, this.quality);
@@ -1271,8 +1324,8 @@ export class RoomStore {
     if (sound.length !== had.length || sound.some((t, i) => t !== had[i])) e.audio = sound.length ? new MediaStream(sound) : null;
     for (const track of stream.getVideoTracks()) {
       const update = () => {
-        this.entry(id).video = !track.muted && track.readyState === 'live';
-        if (!track.muted) {
+        this.entry(id).video = this.watching.has(id) && !track.muted && track.readyState === 'live';
+        if (!track.muted && this.watching.has(id)) {
           this.clearFrameTimer(id);
           this.timedOut[id] = false;
         }

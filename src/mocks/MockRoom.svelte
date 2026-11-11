@@ -2,6 +2,7 @@
   // Sala com dados falsos: as ações mexem só no estado local, para dar pra clicar e ver as transições.
   import type { RoomActions, RoomView, ToastView } from '../lib/types';
   import MobileRoomPage from '../ui/pages/MobileRoomPage.svelte';
+  import UpdateRequired from '../ui/components/UpdateRequired.svelte';
   import RoomPage from '../ui/pages/RoomPage.svelte';
   import type { Navigate } from './registry';
   import { MOCK_AUDIO_INPUTS, mockCameraDevices } from './room';
@@ -102,7 +103,12 @@
     focus(id) {
       view.focusedId = id;
     },
-    pip() {},
+    pip(id) {
+      if (id !== null) view.fullscreenId = null;
+    },
+    fullscreen(id) {
+      if (id === null || stream(id)?.watching === true) view.fullscreenId = id;
+    },
     askRemove(peerId) {
       const p = view.participants.find((x) => x.id === peerId);
       if (p) view.removeDialog = { name: p.name, busy: false, error: null };
@@ -119,7 +125,8 @@
     },
     watch(id, on) {
       const s = stream(id);
-      if (s) s.watching = on;
+      if (s) { s.watching = on; s.watchState=on?'playing':'stopped'; }
+      if (!on && view.fullscreenId === id) view.fullscreenId = null;
     },
     toggleMute(id) {
       const s = stream(id);
@@ -197,7 +204,9 @@
   };
 </script>
 
-{#if mobile}
+{#if view.requiresUpdate}
+  <UpdateRequired onreload={() => {}} />
+{:else if mobile}
   <MobileRoomPage {view} {actions} />
 {:else}
   <RoomPage {view} {actions} />

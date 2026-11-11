@@ -26,5 +26,7 @@
     border-radius: var(--radius-pill);
   }
   .logo:focus-visible { outline: none; box-shadow: var(--ring-focus); }
+  /* Toque (specs/018 FR-013). */
+  @media (pointer: coarse) { .logo { min-height: 44px; } }
   .word { font-family: var(--font-heading); font-size: var(--w); line-height: 1; }
 </style>

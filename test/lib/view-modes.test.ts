@@ -1,12 +1,12 @@
 import { describe, expect, it } from 'vitest';
-import { pruneUnwatched, viewModes, type ViewModesInput } from '../../src/lib/room-view';
+import { viewModes, type ViewModesInput } from '../../src/lib/room-view';
 
 const base: ViewModesInput = {
   streams: [{ id: 'lu' }, { id: 'bia' }],
   layout: 'grid',
   focusedId: null,
   mobile: false,
-  unwatched: new Set(),
+  watching: new Set(['lu','bia']),
   pageVisible: true,
   pipId: null,
   selfId: null,
@@ -14,7 +14,9 @@ const base: ViewModesInput = {
 const modes = (over: Partial<ViewModesInput>) => viewModes({ ...base, ...over });
 
 describe('viewModes (specs/014 R5)', () => {
-  it('grade: todo mundo cheio, como antes', () => {
+  it('sem escolha não recebe mídia nem em destaque',()=>{ expect(modes({watching:new Set(),focusedId:'lu'})).toEqual({lu:'off',bia:'off'}); });
+
+  it('grade: somente escolhas explícitas', () => {
     expect(modes({})).toEqual({ lu: 'full', bia: 'full' });
   });
 
@@ -28,8 +30,8 @@ describe('viewModes (specs/014 R5)', () => {
   });
 
   it('parou de assistir: sem vídeo e sem som (off), mesmo focada', () => {
-    expect(modes({ unwatched: new Set(['lu']) })).toEqual({ lu: 'off', bia: 'full' });
-    expect(modes({ layout: 'focus', focusedId: 'lu', unwatched: new Set(['lu']) })).toEqual({ lu: 'off', bia: 'thumb' });
+    expect(modes({ watching: new Set(['bia']) })).toEqual({ lu: 'off', bia: 'full' });
+    expect(modes({ layout: 'focus', focusedId: 'lu', watching: new Set(['bia']) })).toEqual({ lu: 'off', bia: 'thumb' });
   });
 
   it('página escondida: sem vídeo, som continua (hidden), menos o picture-in-picture', () => {
@@ -38,7 +40,7 @@ describe('viewModes (specs/014 R5)', () => {
   });
 
   it('não assistida ganha do picture-in-picture', () => {
-    expect(modes({ pageVisible: false, pipId: 'bia', unwatched: new Set(['bia']) })).toEqual({ lu: 'hidden', bia: 'off' });
+    expect(modes({ pageVisible: false, pipId: 'bia', watching: new Set(['lu']) })).toEqual({ lu: 'hidden', bia: 'off' });
   });
 
   it('celular com a tela apagada: a selecionada segue com som, as outras sem nada', () => {
@@ -50,28 +52,13 @@ describe('viewModes (specs/014 R5)', () => {
   });
 });
 
-describe('pruneUnwatched (specs/014 R4)', () => {
-  const unwatched = new Map([['lu', 100]]);
-
-  it('mesma transmissão: continua sem assistir (inclusive depois de uma queda)', () => {
-    expect(pruneUnwatched(unwatched, [{ id: 'lu', live: { startedAt: 100 } }])).toEqual(new Map([['lu', 100]]));
-  });
-
-  it('parou, recomeçou ou saiu: volta a assistir', () => {
-    expect(pruneUnwatched(unwatched, [{ id: 'lu', live: null }]).size).toBe(0);
-    expect(pruneUnwatched(unwatched, [{ id: 'lu', live: { startedAt: 200 } }]).size).toBe(0);
-    expect(pruneUnwatched(unwatched, []).size).toBe(0);
-  });
-});
-
 describe('mensagem de como estou vendo (specs/014)', async () => {
   const { encodeView, decodeView } = await import('../../src/lib/peer');
   const { wantsSound, wantsVideo, sendParams } = await import('../../src/lib/quality');
 
-  it('off vai como hidden + sound:false (versão antiga pausa vídeo e som); volta como off', () => {
-    expect(encodeView('off')).toEqual({ t: 'view', mode: 'hidden', sound: false });
-    expect(decodeView(encodeView('off'))).toBe('off');
-    for (const m of ['full', 'thumb', 'hidden'] as const) expect(decodeView(encodeView(m))).toBe(m);
+  it('v2 identifica a transmissão e a revisão; não aceita v1', () => {
+    const key={peerId:'0123456789abcdef',startedAt:100};
+    for(const mode of ['full','thumb','hidden','off'] as const) expect(decodeView(encodeView(mode,key,1))).toMatchObject({mode,transmission:key,version:2});
   });
 
   it('mensagem estranha: ignorada', () => {
@@ -86,5 +73,12 @@ describe('mensagem de como estou vendo (specs/014)', async () => {
     expect([wantsVideo('full'), wantsSound('full')]).toEqual([true, true]);
     const q = { resolution: 1080 as const, fps: 60 as const, maxBitrate: 6_000_000 };
     expect(sendParams(q, 'off').active).toBe(false);
+  });
+
+  // specs/018 FR-005: o visualizador em tela cheia é só apresentação. viewModes nem recebe fullscreenId,
+  // então abrir, girar ou aproximar nunca muda o que chega: no celular a aberta já é a 'full'.
+  it('tela cheia no celular: a mesma recepção de antes', () => {
+    expect(modes({ mobile: true, focusedId: 'lu' })).toEqual({ lu: 'full', bia: 'off' });
+    expect(Object.keys(base)).not.toContain('fullscreenId');
   });
 });

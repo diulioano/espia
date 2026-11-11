@@ -1,5 +1,6 @@
 // View-models: contrato entre a camada visual (src/ui) e quem fornece os dados (mocks ou lógica real).
 import type { AudioKind, LiveSource } from '../shared/protocol';
+import type { ZoomState } from './zoom';
 
 export type { AudioKind, LiveSource };
 
@@ -48,8 +49,9 @@ export interface StreamView {
   label?: string;
   /** Câmera/placa (specs/006): o tile diz "câmera de …". */
   source?: LiveSource;
-  /** false = parou de assistir (specs/014 US1): cartão "Assistir", sem vídeo. Ausente = assistindo. */
+  /** true somente após escolha explícita; ausente/false nunca autoriza receber mídia. */
   watching?: boolean;
+  watchState?: 'available'|'opening'|'playing'|'stopped'|'unavailable';
   /** A sua própria transmissão no palco (specs/014 US3): sempre muda, sem controles de som. */
   you?: boolean;
 }
@@ -148,6 +150,7 @@ export interface MyBroadcastView extends GoLivePrefs {
 }
 
 export interface RoomView {
+  requiresUpdate?: boolean;
   roomId: string;
   inviteUrl: string;
   status: 'connecting' | 'ready';
@@ -157,6 +160,10 @@ export interface RoomView {
   /** Transmissões dos outros (a sua fica só na sidebar). */
   streams: StreamView[];
   focusedId: string | null;
+  /** Transmissão aberta no visualizador em tela cheia do celular (specs/018). Não muda o que chega. */
+  fullscreenId: string | null;
+  /** Só mocks (specs/018): estado inicial do visualizador. A store real nunca preenche. */
+  mockViewer?: { controls: boolean; zoom: ZoomState; volume?: boolean };
   myBroadcast: MyBroadcastView | null;
   copied: boolean;
   goLiveOpen: boolean;
@@ -350,6 +357,8 @@ export interface RoomActions {
   watch(id: string, on: boolean): void;
   /** Uma tela entrou (id) ou saiu (null) do picture-in-picture: continua chegando fora de vista (specs/014 US2). */
   pip(id: string | null): void;
+  /** Abre (id) ou fecha (null) o visualizador em tela cheia do celular (specs/018). Só aceita o que estou assistindo. */
+  fullscreen(id: string | null): void;
   /** Clicou na prévia "Você está ao vivo": põe/tira a sua tela grande no palco (specs/014 US3). */
   toggleSelfStage(): void;
   toggleMute(id: string): void;

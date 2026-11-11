@@ -20,7 +20,9 @@
   const scene = $derived(
     screen && (screen.scenes.find((s) => s.id === params.get('scene')) ?? screen.scenes.find((s) => s.id === screen.defaultScene)!),
   );
-  const inPhoneFrame = $derived(scene?.device === 'mobile' && !framed);
+  const inPhoneFrame = $derived(!!scene?.device && !framed);
+  /** Celular deitado (specs/018): quadro 844×390. */
+  const landscape = $derived(scene?.device === 'mobile-landscape');
 
   function navigate(screenId: string, sceneId?: string) {
     history.replaceState(null, '', mockHref(screenId, sceneId, framed));
@@ -33,7 +35,12 @@
 {#if screen && scene}
   {#if inPhoneFrame}
     <div class="phone-stage">
-      <iframe class="phone" title="Celular 390×844" src={mockHref(screen.id, scene.id, true)}></iframe>
+      <iframe
+        class="phone"
+        class:landscape
+        title={landscape ? 'Celular deitado 844×390' : 'Celular 390×844'}
+        src={mockHref(screen.id, scene.id, true)}
+      ></iframe>
     </div>
   {:else}
     {#key `${screen.id}/${scene.id}`}
@@ -63,4 +70,5 @@
     width: 390px; height: 844px; max-width: 100%; border: 0; border-radius: 44px;
     box-shadow: var(--shadow-lg), 0 0 0 10px #0c0b0a;
   }
+  .phone.landscape { width: 844px; height: 390px; }
 </style>

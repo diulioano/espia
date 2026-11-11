@@ -92,8 +92,8 @@ export interface ViewModesInput {
   layout: StageLayout;
   focusedId: string | null;
   mobile: boolean;
-  /** Quem eu parei de assistir (specs/014 US1). */
-  unwatched: ReadonlySet<string>;
+  /** Quem escolhi assistir nesta transmissão (specs/017). */
+  watching: ReadonlySet<string>;
   /** A página está à vista (specs/014 US2): minimizada, na bandeja ou aba de trás = false. */
   pageVisible: boolean;
   /** Tela em picture-in-picture: continua chegando com a página escondida. */
@@ -103,7 +103,7 @@ export interface ViewModesInput {
 }
 
 /**
- * Como estou vendo a tela de cada pessoa (specs/014 research R5). Quem não está no mapa: escondida.
+ * Como estou vendo a tela de cada pessoa (specs/014 research R5). Sem escolha explícita: off.
  * `hidden` (segundo plano) pausa só o vídeo; `off` (parou de assistir) pausa vídeo e som.
  */
 export function viewModes(i: ViewModesInput): Record<string, ViewMode> {
@@ -112,7 +112,7 @@ export function viewModes(i: ViewModesInput): Record<string, ViewMode> {
   const selected = i.focusedId ?? streams[0]?.id;
   for (const { id } of streams) {
     // Parou de assistir: nem vídeo nem som.
-    if (i.unwatched.has(id)) out[id] = 'off';
+    if (!i.watching.has(id)) out[id] = 'off';
     // Celular: só a selecionada aparece e toca; as outras ficam nos chips (como na 010, sem som).
     else if (i.mobile && id !== selected) out[id] = 'off';
     // Segundo plano: sem vídeo, o som continua.
@@ -125,17 +125,20 @@ export function viewModes(i: ViewModesInput): Record<string, ViewMode> {
 }
 
 /**
- * Escolhas de "parar de assistir" que ainda valem (specs/014 research R4): a escolha é por transmissão,
- * identificada pelo início dela. Parou, recomeçou ou saiu da sala → volta a assistir sozinho.
+ * A transmissão aberta no visualizador em tela cheia do celular (specs/018 R5).
+ * Só enquanto ela existe e estou assistindo; some com a ligação em 'failed' (a tela de "não deu pra voltar" manda).
+ * 'reconnecting' mantém aberto.
  */
-export function pruneUnwatched(
-  unwatched: ReadonlyMap<string, number>,
-  peers: { id: string; live: { startedAt: number } | null }[],
-): Map<string, number> {
-  const out = new Map<string, number>();
-  for (const [id, startedAt] of unwatched) {
-    const p = peers.find((x) => x.id === id);
-    if (p?.live && p.live.startedAt === startedAt) out.set(id, startedAt);
-  }
-  return out;
+export function viewerStream(view: RoomView): StreamView | undefined {
+  if (!view.fullscreenId || view.link === 'failed') return undefined;
+  const s = view.streams.find((x) => x.id === view.fullscreenId);
+  return s?.watching === true ? s : undefined;
+}
+
+/**
+ * O visualizador continua aberto em `id`? Só se ainda estou assistindo àquela transmissão (fim ou reinício fecha)
+ * e ela não foi para o picture-in-picture. Abrir e fechar nunca mexe em assistir (FR-005).
+ */
+export function keepFullscreen(id: string, watchingLive: ReadonlySet<string>, pipId: string | null): string | null {
+  return watchingLive.has(id) && pipId !== id ? id : null;
 }

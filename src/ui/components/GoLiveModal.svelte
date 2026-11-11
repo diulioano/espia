@@ -328,7 +328,8 @@
 
 <style>
   .backdrop {
-    position: fixed; inset: 0; z-index: 20; display: grid; place-items: safe center; padding: 16px;
+    position: fixed; inset: 0; z-index: 20; display: grid; place-items: safe center;
+    padding: max(16px, env(safe-area-inset-top)) max(16px, env(safe-area-inset-right)) max(16px, env(safe-area-inset-bottom)) max(16px, env(safe-area-inset-left));
     overflow-y: auto; background: var(--color-backdrop);
   }
   .dialog {
@@ -451,4 +452,9 @@
   .actions { margin-left: auto; display: flex; gap: 8.8px; }
   .actions .btn { padding: 12px 20px; font-size: 15px; }
   .actions .btn-primary { padding: 12px 22px; }
+
+  /* Celular (specs/018 R7): no topo, pro teclado não cobrir o campo nem o botão. */
+  @media (max-width: 639px), (pointer: coarse) and (hover: none) and (max-height: 540px) {
+    .backdrop { place-items: start center; }
+  }
 </style>

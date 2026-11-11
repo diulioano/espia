@@ -244,8 +244,8 @@
     .blob-a { right: -300px; }
   }
   @media (max-width: 639px) {
-    .top { padding: 28px 22px 0; }
-    .content { padding: 40px 22px 40px; gap: 18px; }
+    .top { padding: max(28px, calc(env(safe-area-inset-top) + 12px)) max(22px, env(safe-area-inset-right)) 0 max(22px, env(safe-area-inset-left)); }
+    .content { padding: 40px max(22px, env(safe-area-inset-right)) max(40px, env(safe-area-inset-bottom)) max(22px, env(safe-area-inset-left)); gap: 18px; }
     h1 { font-size: 44px; }
     .lead { font-size: 17px; }
     .row { flex-direction: column; }
@@ -257,5 +257,10 @@
     .fixed-row { display: none; }
     .join { flex-wrap: wrap; }
     .join-label { width: 100%; line-height: 1.4; }
+  }
+
+  /* Celular deitado (specs/018 R7): o entalhe fica de lado. */
+  @media (pointer: coarse) and (max-height: 540px) and (min-width: 640px) {
+    .home { padding-left: env(safe-area-inset-left); padding-right: env(safe-area-inset-right); padding-bottom: env(safe-area-inset-bottom); }
   }
 </style>

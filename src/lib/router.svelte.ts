@@ -1,7 +1,7 @@
 // Rotas da SPA: "/" e "/s/:código". History API, sem biblioteca.
-import { ROOM_ID_RE } from './room-id';
+import { parseRoute as parse, sameRoute, type Route } from './route';
 
-export type Route = { name: 'home' } | { name: 'room'; code: string };
+export type { Route };
 
 /** Estado passado entre telas na navegação (não vai para a URL). */
 export interface NavState {
@@ -11,12 +11,6 @@ export interface NavState {
   created?: boolean;
   /** Aviso pra tela inicial (specs/014 US4). */
   notice?: 'removed';
-}
-
-function parse(pathname: string): Route {
-  const m = pathname.match(/^\/s\/([^/]+)\/?$/);
-  if (m && ROOM_ID_RE.test(m[1])) return { name: 'room', code: m[1] };
-  return { name: 'home' };
 }
 
 class Router {
@@ -29,7 +23,9 @@ class Router {
     // Endereço desconhecido vira "/".
     if (this.route.name === 'home' && location.pathname !== '/') history.replaceState(null, '', '/' + location.search);
     addEventListener('popstate', () => {
-      this.route = parse(location.pathname);
+      // Mesmo endereço (ex.: o "voltar" que fecha a tela cheia, specs/018): a rota fica a mesma.
+      const next = parse(location.pathname);
+      if (!sameRoute(next, this.route)) this.route = next;
       this.state = (history.state as NavState | null) ?? {};
     });
   }

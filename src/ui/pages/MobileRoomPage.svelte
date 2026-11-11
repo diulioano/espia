@@ -1,6 +1,9 @@
 <script lang="ts">
   // Sala no celular (M2/M3): só assistir. Mesmo RoomView/RoomActions da RoomPage.
   import { Check, Ellipsis, Link, Smartphone } from '@lucide/svelte';
+  import { flushSync } from 'svelte';
+  import { canSetVolume } from '../../lib/media-caps';
+  import { viewerStream } from '../../lib/room-view';
   import type { CameraActions, RoomActions, RoomView } from '../../lib/types';
   import Avatar from '../components/Avatar.svelte';
   import DeleteRoomDialog from '../components/DeleteRoomDialog.svelte';
@@ -14,6 +17,7 @@
   import ReconnectFail from '../components/ReconnectFail.svelte';
   import ReconnectPill from '../components/ReconnectPill.svelte';
   import ToastStack from '../components/ToastStack.svelte';
+  import Viewer from '../components/Viewer.svelte';
 
   let { view, actions }: { view: RoomView; actions: RoomActions } = $props();
 
@@ -32,10 +36,23 @@
   // No celular sempre há uma transmissão em destaque: a focada ou a primeira.
   const selected = $derived(view.streams.find((s) => s.id === view.focusedId) ?? view.streams[0]);
   const fixed = $derived(view.room.kind === 'fixed' ? view.room : null);
-  const watchingText = $derived(selected ? `Vendo ${selected.name}` : 'Ninguém transmitindo agora');
+  const watchingText = $derived(selected ? `${selected.watching === true ? 'Vendo' : 'Transmissão de'} ${selected.name}` : 'Ninguém transmitindo agora');
   // Sala fixa (M5): o nome em cima, quem você vê embaixo.
-  const title = $derived(connecting ? 'Entrando na sala…' : fixed ? fixed.name : selected ? `Vendo ${selected.name}` : 'Sala da galera');
+  const title = $derived(connecting ? 'Entrando na sala…' : fixed ? fixed.name : selected ? `${selected.watching === true ? 'Vendo' : 'Transmissão de'} ${selected.name}` : 'Sala da galera');
   const subtitle = $derived(fixed && !connecting ? watchingText : `sala ${view.roomId}`);
+
+  // Tela cheia (specs/018): o visualizador cobre a sala; o tile fica montado embaixo com o som.
+  const viewer = $derived(viewerStream(view));
+  const volumeAdjustable = $derived(view.mockViewer?.volume ?? canSetVolume());
+  let viewerEl: Viewer | undefined = $state();
+
+  function openViewer() {
+    if (!selected) return;
+    actions.fullscreen(selected.id);
+    // Monta já, pra pedir a tela cheia do sistema ainda dentro do toque (os navegadores exigem gesto).
+    flushSync();
+    viewerEl?.requestSystemFullscreen();
+  }
 </script>
 
 <div class="mobile-room">
@@ -84,6 +101,9 @@
             onretry={() => actions.retry(selected.id)}
             onwatch={(on) => actions.watch(selected.id, on)}
             onpip={(on) => actions.pip(on ? selected.id : null)}
+            onfullscreen={openViewer}
+            videoHidden={!!viewer}
+            {volumeAdjustable}
           />
         {/key}
       {:else}
@@ -134,13 +154,15 @@
     {#if !view.canShare}
       <p class="note">
         <Smartphone size={16} strokeWidth={2.75} />
-        <span>
+        <span class="note-long">
           {#if view.streams.length > 0}
             Celulares não deixam compartilhar a tela pelo navegador. Pra transmitir, abra o link no computador.
           {:else}
             Pra transmitir, abra o link no computador.
           {/if}
         </span>
+        <!-- Deitado (specs/018): a coluna é baixa, o aviso cabe numa linha. -->
+        <span class="note-short">Pra transmitir, use o computador.</span>
       </p>
     {/if}
     <div class="bar-actions">
@@ -166,6 +188,19 @@
   {/if}
   {#if view.removeDialog}
     <RemoveDialog view={view.removeDialog} onconfirm={actions.confirmRemove} onclose={actions.closeDialogs} />
+  {/if}
+
+  {#if viewer}
+    <Viewer
+      bind:this={viewerEl}
+      view={viewer}
+      link={view.link}
+      {volumeAdjustable}
+      initial={view.mockViewer}
+      onclose={() => actions.fullscreen(null)}
+      ontogglemute={() => actions.toggleMute(viewer.id)}
+      onvolume={(v) => actions.setVolume(viewer.id, v)}
+    />
   {/if}
 
   {#if view.link === 'failed'}
@@ -194,21 +229,21 @@
   }
   .scroll {
     flex: 1; min-height: 0; overflow-y: auto; display: flex; flex-direction: column; gap: 18px;
-    padding: max(54px, env(safe-area-inset-top)) 0 18px;
+    padding: max(20px, calc(env(safe-area-inset-top) + 8px)) env(safe-area-inset-right) 18px env(safe-area-inset-left);
   }
 
   .header { display: flex; align-items: center; gap: 10px; padding: 0 16px 0 20px; }
   .titles { position: relative; display: flex; flex-direction: column; margin-right: auto; min-width: 0; }
   .title-line { display: flex; align-items: center; gap: 6px; min-width: 0; }
   .title-line h1 { min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-  .owner-btn { flex: none; width: 36px; height: 36px; color: var(--color-text); background: transparent; }
+  .owner-btn { flex: none; width: 44px; height: 44px; color: var(--color-text); background: transparent; }
   .titles :global(.menu.room) { z-index: 8; }
   h1 { margin: 0; font-family: var(--font-heading); font-weight: 400; font-size: 22px; line-height: 1.1; }
   .subtitle { font-size: 13px; color: var(--color-text-muted); }
   .invite { min-height: 44px; padding: 0 16px; font-size: 14px; }
 
   .stage {
-    position: relative; flex: none; margin: 0 12px; aspect-ratio: 16 / 9;
+    position: relative; flex: none; margin: 0 12px; aspect-ratio: 16 / 9; max-height: 60dvh;
     border-radius: var(--radius-tile); background: var(--color-stage); overflow: hidden;
   }
   .stage-msg {
@@ -244,7 +279,7 @@
 
   .bar {
     flex: none; display: flex; flex-direction: column; gap: 12px;
-    padding: 16px 16px max(30px, env(safe-area-inset-bottom));
+    padding: 16px max(16px, env(safe-area-inset-right)) max(16px, env(safe-area-inset-bottom)) max(16px, env(safe-area-inset-left));
     border-radius: 32px 32px 0 0; background: var(--color-surface);
   }
   .note {
@@ -253,10 +288,47 @@
   }
   .note :global(svg) { flex: none; margin-top: 2px; }
   .bar-actions { display: flex; gap: 10px; }
+  .note-short { display: none; }
   .golive { flex: 1; min-height: 50px; font-size: 16px; }
   .leave { min-height: 50px; padding: 0 18px; }
 
   /* Toasts centralizados acima da barra (M3). */
   .toasts { position: absolute; left: 0; right: 0; bottom: 150px; pointer-events: none; }
   .toasts :global(.stack) { pointer-events: auto; }
+
+  /*
+   * Celular deitado (specs/018 US2, research R6): o palco fica com a altura toda à esquerda e o resto
+   * numa coluna à direita. Só CSS: a marcação é a mesma, então girar não remonta o vídeo nem corta o som.
+   */
+  @media (orientation: landscape) {
+    .mobile-room {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) clamp(280px, 34vw, 340px);
+      grid-template-rows: auto auto minmax(0, 1fr) auto;
+      grid-template-areas: 'stage header' 'stage chips' 'stage people' 'stage bar';
+    }
+    .scroll { display: contents; }
+    .header {
+      grid-area: header;
+      padding: max(12px, env(safe-area-inset-top)) max(12px, env(safe-area-inset-right)) 0 16px;
+    }
+    .stage {
+      grid-area: stage; align-self: stretch; aspect-ratio: auto; max-height: none;
+      margin: max(10px, env(safe-area-inset-top)) 0 max(10px, env(safe-area-inset-bottom)) max(10px, env(safe-area-inset-left));
+    }
+    .section { padding-right: max(16px, env(safe-area-inset-right)); }
+    .section:not(.people) { grid-area: chips; padding-top: 12px; }
+    .chips { flex-wrap: wrap; overflow: visible; }
+    .people { grid-area: people; min-height: 0; overflow-y: auto; padding-top: 12px; padding-bottom: 8px; }
+    .bar {
+      grid-area: bar; gap: 8px; border-radius: 24px 0 0 0;
+      padding: 12px max(12px, env(safe-area-inset-right)) max(12px, env(safe-area-inset-bottom)) 12px;
+    }
+    .note { font-size: 12px; align-items: center; }
+    .note :global(svg) { margin-top: 0; }
+    .note-long { display: none; }
+    .note-short { display: inline; }
+    .golive, .leave { min-height: 44px; }
+    .toasts { left: auto; right: 0; width: clamp(280px, 34vw, 340px); bottom: 120px; }
+  }
 </style>

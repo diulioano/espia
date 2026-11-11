@@ -8,12 +8,15 @@
   import { installStopHook, reportLive, reportRoom } from '../lib/desktop';
   import { forgetOwnerKey, loadNickname, loadSession, saveNickname } from '../lib/prefs';
   import { forgetRoom, loadSavedRooms, saveSavedRooms } from '../lib/saved-rooms';
+  import { PHONE_LAYOUT_QUERY } from '../lib/layout';
   import { router } from '../lib/router.svelte';
   import { RoomStore } from '../lib/stores/room.svelte';
   import type { JoinActions, JoinView, NotFoundActions, NotFoundView } from '../lib/types';
   import JoinPage from '../ui/pages/JoinPage.svelte';
   import MobileRoomPage from '../ui/pages/MobileRoomPage.svelte';
   import NotFoundPage from '../ui/pages/NotFoundPage.svelte';
+  import UpdateRequired from '../ui/components/UpdateRequired.svelte';
+  import MediaDiagnostics from '../ui/components/MediaDiagnostics.svelte';
   import RoomPage from '../ui/pages/RoomPage.svelte';
 
   let { code }: { code: string } = $props();
@@ -25,6 +28,7 @@
 
   let store = $state<RoomStore | null>(null);
   /** A sala não existe (mais): rápida que acabou, fixa apagada/expirada (specs/011). */
+  let needsUpdate = $state(false);
   let gone = $state<NotFoundView | null>(null);
   // svelte-ignore state_referenced_locally
   let join = $state<JoinView>({
@@ -36,8 +40,8 @@
     canShare: canShareScreen() || canUseCamera(),
   });
 
-  // Celular: layout próprio abaixo de 640px.
-  const narrow = matchMedia('(max-width: 639px)');
+  // Celular: layout próprio em tela estreita ou celular deitado (specs/018 R1).
+  const narrow = matchMedia(PHONE_LAYOUT_QUERY);
   let mobile = $state(narrow.matches);
   narrow.addEventListener('change', (e) => (mobile = e.matches));
 
@@ -84,7 +88,8 @@
     if (!ended) return;
     store = null;
     // O dono apagou com você dentro (N2).
-    if (ended === 'deleted') notFound('kicked');
+    if (ended === 'update') { needsUpdate = true; }
+    else if (ended === 'deleted') notFound('kicked');
     // O dono tirou você (specs/014 US4): início com o aviso; o link continua valendo.
     else if (ended === 'removed') router.go('/', { notice: 'removed' });
     // Não existe: a prévia diz se era rápida (404) ou fixa apagada/expirada (410).
@@ -139,9 +144,12 @@
   });
 </script>
 
-{#if gone}
+{#if needsUpdate}
+  <UpdateRequired onreload={() => location.reload()} />
+{:else if gone}
   <NotFoundPage view={gone} actions={notFoundActions} />
 {:else if store}
+  <MediaDiagnostics read={store.mediaDiagnostics.bind(store)} />
   {#if mobile}
     <MobileRoomPage view={store.view} actions={store.actions} />
   {:else}
