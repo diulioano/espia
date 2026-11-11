@@ -2,7 +2,7 @@
   "$schema": "../node_modules/@tauri-apps/cli/config.schema.json",
   "productName": "Espia",
   "mainBinaryName": "Espia",
-  "version": "0.1.9",
+  "version": "0.1.10",
   "identifier": "dev.espia.app",
   "build": {
     "frontendDist": "www"
@@ -10,7 +10,7 @@
   "app": {
     "windows": [],
     "security": {
-      "csp": "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src https://espia.espia.workers.dev; base-uri 'none'; object-src 'none'"
+      "csp": "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src https://espia.diuliano.com; base-uri 'none'; object-src 'none'"
     }
   },
   "plugins": {

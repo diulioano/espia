@@ -2,8 +2,10 @@
 use url::Url;
 
 /// Onde o Espia está publicado. O app só abre esta origem; o resto vai pro navegador.
-pub const ORIGIN: &str = "https://espia.espia.workers.dev";
-pub const HOST: &str = "espia.espia.workers.dev";
+pub const ORIGIN: &str = "https://espia.diuliano.com";
+pub const HOST: &str = "espia.diuliano.com";
+/// Endereço antigo (antes do domínio próprio): links de sala já enviados com ele continuam abrindo no app.
+const LEGACY_HOST: &str = "espia.espia.workers.dev";
 
 /// Mesmo alfabeto de src/lib/room-id.ts (sem 0/1/i/l/o).
 const ALPHABET: &str = "abcdefghjkmnpqrstuvwxyz23456789";
@@ -15,14 +17,14 @@ fn valid_code(code: &str) -> bool {
     && code.chars().enumerate().all(|(i, c)| i == 3 || ALPHABET.contains(c))
 }
 
-/// "/s/k7f-q2x" a partir de `espia://s/k7f-q2x` ou `https://espia.espia.workers.dev/s/k7f-q2x`.
+/// "/s/k7f-q2x" a partir de `espia://s/k7f-q2x` ou `https://espia.diuliano.com/s/k7f-q2x`.
 /// Qualquer outra coisa (inclusive código inválido) dá None.
 pub fn room_path(link: &str) -> Option<String> {
   let url = Url::parse(link.trim()).ok()?;
   let code = match url.scheme() {
     // espia://s/k7f-q2x → host "s", caminho "/k7f-q2x"
     "espia" if url.host_str() == Some("s") => url.path().trim_matches('/').to_owned(),
-    "https" if url.host_str() == Some(HOST) => url.path().strip_prefix("/s/")?.trim_end_matches('/').to_owned(),
+    "https" if matches!(url.host_str(), Some(h) if h == HOST || h == LEGACY_HOST) => url.path().strip_prefix("/s/")?.trim_end_matches('/').to_owned(),
     _ => return None,
   };
   let code = code.to_ascii_lowercase();
@@ -56,8 +58,9 @@ mod tests {
 
   #[test]
   fn https_link() {
+    assert_eq!(room_path("https://espia.diuliano.com/s/k7f-q2x").as_deref(), Some("/s/k7f-q2x"));
+    assert_eq!(room_path("https://espia.diuliano.com/s/k7f-q2x?x=1").as_deref(), Some("/s/k7f-q2x"));
     assert_eq!(room_path("https://espia.espia.workers.dev/s/k7f-q2x").as_deref(), Some("/s/k7f-q2x"));
-    assert_eq!(room_path("https://espia.espia.workers.dev/s/k7f-q2x?x=1").as_deref(), Some("/s/k7f-q2x"));
   }
 
   #[test]
@@ -69,8 +72,8 @@ mod tests {
       "espia://s/k7f-q2o", // "o" não está no alfabeto
       "espia://x/k7f-q2x",
       "https://evil.example/s/k7f-q2x",
-      "http://espia.espia.workers.dev/s/k7f-q2x",
-      "https://espia.espia.workers.dev/k7f-q2x",
+      "http://espia.diuliano.com/s/k7f-q2x",
+      "https://espia.diuliano.com/k7f-q2x",
       "k7f-q2x",
       "",
     ] {
@@ -88,10 +91,10 @@ mod tests {
   #[test]
   fn internal_urls() {
     let ok = |s: &str| is_internal(&Url::parse(s).unwrap());
-    assert!(ok("https://espia.espia.workers.dev/s/abc-def"));
+    assert!(ok("https://espia.diuliano.com/s/abc-def"));
     assert!(ok("http://tauri.localhost/index.html"));
     assert!(!ok("https://github.com/DiulianoVargas/espia"));
-    assert!(!ok("https://espia.espia.workers.dev.evil.example/"));
+    assert!(!ok("https://espia.diuliano.com.evil.example/"));
     assert!(!ok("file:///C:/Windows"));
   }
 }

@@ -1,6 +1,6 @@
 // Confere se o Espia publicado responde e segue pra ele (levando a sala do link, se houver).
 // Sem conexão, mostra a tela "Sem conexão" com "Tentar de novo". Ver contracts/deep-link.md.
-const ORIGIN = 'https://espia.espia.workers.dev';
+const ORIGIN = 'https://espia.diuliano.com';
 const ROOM_PATH = /^\/s\/[a-hjkmnp-z2-9]{3}-[a-hjkmnp-z2-9]{3}$/;
 const TIMEOUT_MS = 8000;
 

@@ -120,7 +120,7 @@ fn describe(hwnd: HWND) -> (String, i32) {
   (String::from_utf16_lossy(&buf[..len]), height)
 }
 
-/// O título da barra cita o site que está capturando ("espia.espia.workers.dev está compartilhando…").
+/// O título da barra cita o site que está capturando ("espia.diuliano.com está compartilhando…").
 fn title_is_bar(title: &str) -> bool {
   title.contains(crate::links::HOST) || (cfg!(debug_assertions) && title.contains("127.0.0.1"))
 }
@@ -131,8 +131,8 @@ mod tests {
 
   #[test]
   fn matches_only_our_site() {
-    assert!(title_is_bar("espia.espia.workers.dev está compartilhando uma janela."));
-    assert!(title_is_bar("espia.espia.workers.dev is sharing your screen."));
+    assert!(title_is_bar("espia.diuliano.com está compartilhando uma janela."));
+    assert!(title_is_bar("espia.diuliano.com is sharing your screen."));
     assert!(!title_is_bar("Espia"));
     assert!(!title_is_bar("youtube.com está compartilhando sua tela."));
   }
