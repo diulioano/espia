@@ -68,6 +68,7 @@ src/lib/quality.ts                     # perfis de conteúdo e tetos existentes
 src/lib/cpu-governor.ts                # pressão local, separada da rede de um receptor
 src/lib/signaling.ts                   # negociação de versão e política
 src/lib/types.ts
+src/shared/media.ts                   # novo: identidade, ordem e política puras
 src/shared/protocol.ts
 src/worker/validate.ts
 src/worker/room.ts
@@ -114,3 +115,8 @@ História 4 entrega baseline e protocolo de comparação. Se SFU não passar pel
 Nenhuma violação constitucional remanescente após a emenda separada. O controle de ordem da transmissão guarda somente um maior broadcastSeq, o requestId correspondente, lastStartedAt e o estado live/ended na identidade já existente do membro; não cria histórico ilimitado de pedidos.
 
 O aceite aplica integralmente SC-003 e SC-007 revisados: 1.800 instantes, cobertura instrumental ≥99%, lacunas máximas de 2 s, fluidez ≥27 fps, interrupções ≤1% sem pausa >1 s e regressão de FPS do jogo ≤5%. A ferramenta distingue lacuna de medição de falta de vídeo. Gates de desempenho real e eventual SFU permanecem condições de aceitação, não resultados deste planejamento.
+
+
+## Registro de execução local
+
+A implementação desenvolveu e testou os perfis de conteúdo por hints, sem retunar tetos nem limiares 10/60 s, enquanto a baseline real T028 segue indisponível. A revisão 0.1.9 anterior está preservada para comparação. Preparação local não aprova eficácia nem autoriza publicação; o aceite e a ativação comparativa dependem das medições previstas. A supressão TURN foi efetivada nos fundamentos antes de welcome v2. Detalhes e limitações em relatorio.md.

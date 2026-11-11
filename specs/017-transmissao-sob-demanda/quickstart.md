@@ -50,3 +50,12 @@ Não declarar proteção da conta até concluir o procedimento de drenagem em [m
 ## Fechamento
 
 Produzir relatório local sem conteúdo gravado, IPs, SDP, nomes ou identificadores permanentes. Separar checks locais, medições reais e condições não testadas. Registrar todos os SC individualmente como pass/fail/pending. Sem espectadores/instrumentos, entregar apenas evidência disponível e pendências. Planejamento, testes e build não autorizam deploy.
+
+
+## Ferramentas locais implementadas
+
+Executar `node --test test/scripts/acceptance-017.test.mjs` para os limites numéricos. Importar uma recepção com `node scripts/acceptance-017.mjs .wrangler/acceptance-017/run.json`. O JSON aceita samples com second de 0 a 1799, kind measured/no-video/instrument-gap, delayMs quando measured e avOffsetMs opcional. Não aceita campos de identidade. A ferramenta relata p95 diagnóstico, cobertura, slots bem-sucedidos e quality/latency/status; dados faltantes mantêm pending.
+
+Para SC-007, campos opcionais sourceFps, decodedFrames, interruptionSeconds, maxPauseSeconds, textCorrect, baselineGameFps e candidateGameFps precisam representar o mesmo trecho estável de 1.800 segundos. Sem os campos necessários, a ferramenta não aprova qualidade. Transições e prazo de recuperação continuam exigindo o instrumento e o registro do roteiro acima; avMaxMs é diagnóstico, não aprovação automática de SC-004.
+
+Com `npm run dev`, abrir `/scripts/watch-017.html` e clicar em Iniciar ensaio. O roteiro cria duas fontes sintéticas, espera 60 segundos sem consentimento, escolhe uma, para e troca a chave. Mostra contadores numéricos e PASS/FAIL no próprio documento, encerrando os tracks/conexões ao terminar. Não substitui baseline ou teste de nove aparelhos. Para mocks mobile, usar `/?mock=mobile&scene=watch-available&frame=1`; a atualização de versão tem `/?mock=room&scene=update-required`.

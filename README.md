@@ -2,11 +2,12 @@
 
 Compartilhamento de tela entre amigos, estilo "Go Live" do Discord. Cria uma sala, manda o link, e
 quem quiser clica em **Transmitir**. O vídeo vai direto de um PC pro outro (WebRTC P2P); o servidor só
-apresenta as pessoas.
+apresenta as pessoas. Cada transmissão aparece com **Assistir**: vídeo e som só chegam após esse clique.
 
-- **Site**: https://espia.espia.workers.dev (Chrome/Edge para transmitir; qualquer navegador para assistir)
-- **App para Windows (opcional, leve)**: baixe o `Espia_*_x64-setup.exe` na
-  [última release](../../releases/latest).
+A versão 0.1.10 usa somente conexão direta, sem TURN enquanto o limite de custo de mídia não for comprovado. Algumas redes podem não conectar; o Espia informa a limitação.
+
+- **Site**: https://espia.diuliano.com (Chrome/Edge para transmitir; qualquer navegador para assistir)
+- **App para Windows (opcional, leve)**: [baixar o instalador mais recente](https://espia.diuliano.com/download/Espia-setup.exe).
 
 ## App desktop
 
@@ -36,6 +37,7 @@ npm ci
 npm run dev            # site com Vite (a API fica no `wrangler dev`: npm run dev:worker)
 npm run check          # svelte-check + tsc
 npm test               # Vitest (lib + Worker)
+node --test test/scripts/acceptance-017.test.mjs  # métricas de aceitação da 017
 npm run desktop:dev    # app desktop apontando para o site publicado
 npm run desktop:build  # instalador em src-tauri/target/release/bundle/nsis/
 ```

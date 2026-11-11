@@ -42,12 +42,13 @@ Compartilhamento de tela entre amigos, no estilo "Go Live" do Discord, focado em
 - **Durable Object (um por sala)**: sinalização via WebSocket. Apresenta os navegadores uns aos outros, mantém a lista de participantes e entrega credenciais TURN temporárias só para quem está na sala (a chave secreta nunca vai para o navegador).
 - **Cloudflare Realtime TURN**: retransmite o vídeo (cifrado) quando a conexão direta falha (4G, CGNAT, redes corporativas). US$ 0,05/GB, 1.000 GB/mês grátis.
 - **Vídeo**: WebRTC nativo, uma conexão por par de pessoas, criptografia fim a fim (DTLS-SRTP). Nada é gravado.
-- **Deploy**: `wrangler`, publicado em `*.workers.dev`, sem domínio próprio.
+- **Deploy**: `wrangler`; endereço público `espia.diuliano.com` (domínio próprio na Cloudflare), com `*.workers.dev` ainda respondendo.
 - Detalhes: `specs/001-espia-screen-share/architecture.md` (como funciona) e `security.md` (segurança e privacidade).
 
 ## Limitações conhecidas
 - Quem transmite envia uma cópia para cada espectador: 1080p60 para 4 pessoas usa ~15–25 Mbps de upload.
 - No celular dá para assistir, mas não compartilhar a tela.
+- No iPhone a página não muda o volume: a tela cheia e o tile mostram só o mudo, e o volume fica nos botões do aparelho (specs/018 R8).
 - Som da janela precisa de Chrome/Edge 141+ no Windows; Firefox/Safari têm limitações. Som do sistema inteiro nunca vai (vazaria o Discord).
 - Na conexão direta, quem está na sala vê o IP público dos outros participantes — aceito, já que o uso é entre amigos (D-1 em `security.md`).
 
@@ -66,3 +67,27 @@ Compartilhamento de tela entre amigos, no estilo "Go Live" do Discord, focado em
 - Cópia local (handoff): `design_handoff_espia/`. O `README.md` de lá descreve telas, componentes e tokens; `tokens.css` já foi copiado para `src/ui/tokens.css`.
 - Arquivo principal: `Espia.dc.html` (quadro com todas as telas). Ele importa `_ds/organic-a1d220e8-9438-4bb5-a7ba-867248d96bf3/_ds_bundle.js`, `_ds/organic-a1d220e8-9438-4bb5-a7ba-867248d96bf3/styles.css` e `support.js`.
 - Para reimportar a versão mais nova: MCP `claude_design` (https://api.anthropic.com/v1/design/mcp, login com `/design-login`).
+
+
+## Decisões da feature 017 (implementação local, 2026-11-05)
+
+Cada transmissão alheia começa num cartão Assistir, sem receber imagem ou som até o clique. Parar corta ambos; uma captura nova exige outra escolha. A retomada da mesma transmissão preserva a escolha. Isso substitui o início automático definido na 014, conforme constituição 3.0.0.
+
+O caminho desta entrega é P2P direto com STUN. A emissão/renovação TURN fica desabilitada mesmo com segredos configurados, até haver prova de proteção financeira agregada e encerramento efetivo. Credenciais anteriores e outros emissores ainda exigem drenagem e inventário antes de declarar a conta protegida. As referências anteriores a TURN descrevem a versão anterior; o código local 017 não habilita esse serviço.
+
+SFU continua em avaliação documental e depende de emenda constitucional II, decisão de criptografia e controle comprovado de custo. Não houve provisionamento ou publicação. A meta de 500 ms depende do ensaio real; resultados locais de consentimento não demonstram essa meta nem ganho no jogo.
+
+
+### Publicação de teste em 2026-11-05
+
+A versão 0.1.10 foi publicada por pedido explícito para o teste com o grupo, incluindo site/Worker e instalador Windows em https://espia.espia.workers.dev/download/Espia-setup.exe. O smoke de assets/download e sinalização v2 passou. Esta publicação sucede as observações de implementação somente local acima; atraso de 500 ms e desempenho em vários aparelhos ainda exigem medição real. TURN permanece desabilitado no código publicado; a drenagem de credenciais antigas da conta não foi declarada concluída.
+
+
+## Decisões da feature 018 (tela cheia e sala responsiva no celular, 2026-11-07)
+
+- A sala de celular vale em tela estreita **ou** em celular deitado (toque sem hover e altura de até 540 px). Antes, deitado caía na sala de computador. Tablet deitado e computador continuam com a sala de computador.
+- Deitado, o vídeo fica à esquerda com a altura toda e o resto numa coluna à direita. Girar só troca o CSS, então o vídeo e o som não reiniciam.
+- A tela cheia no celular é um visualizador próprio por cima da sala, com imagem inteira, controles de toque e zoom de dois dedos (até 4×, toque duplo volta). No Android e no iPad ele também vira tela cheia do sistema; no iPhone ocupa a página toda.
+- Não usamos o player nativo do iPhone porque ele controla o vídeo, que é mudo, e não o som, que toca separado (specs/014). O botão de mudo ficaria mentindo e perderíamos o zoom.
+- O "voltar" do celular fecha a tela cheia sem sair da sala. Abrir, fechar, girar ou aproximar não contam como Assistir e não mudam nada do que chega.
+- Com `viewport-fit=cover`, toda página respeita as áreas seguras (entalhe, ilha, barra de gestos). No toque, nenhum botão fica menor que 44 px.
