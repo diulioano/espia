@@ -9,6 +9,27 @@ const out = (timestamp: number, over: Partial<StatsRow> = {}): StatsRow => ({
 });
 
 describe('MediaStats — diagnóstico local, não atraso ponta a ponta', () => {
+  it('mede FPS pelo intervalo RTP e informa resolução e limitação reais', () => {
+    const stats = new MediaStats();
+    const fields = { frameWidth: 1280, frameHeight: 720, qualityLimitationReason: 'bandwidth' };
+    stats.read([out(1000, { ...fields, framesEncoded: 60 })], 1000);
+    const row = stats.read([out(3000, { ...fields, framesEncoded: 150 })], 9000).streams[0];
+    expect(row.fps).toBe(45);
+    expect(row.width).toBe(1280);
+    expect(row.height).toBe(720);
+    expect(row.limitation).toBe('bandwidth');
+  });
+
+  it('não inventa FPS e descarta limitações e dimensões inválidas', () => {
+    const stats = new MediaStats();
+    const row = stats.read([out(1000, { frameWidth: '1920', frameHeight: NaN, qualityLimitationReason: 'private-value' })], 1000).streams[0];
+    expect(row.fps).toBeNull();
+    expect(row.width).toBeNull();
+    expect(row.height).toBeNull();
+    expect(row.limitation).toBeNull();
+    expect(JSON.stringify(stats.history())).not.toContain('private-value');
+  });
+
   it('usa deltas, converte segundos para ms e não inventa a primeira amostra', () => {
     const stats = new MediaStats();
     expect(stats.read([out(1000)], 1000).streams[0].encodeMs).toBeNull();

@@ -1,0 +1,40 @@
+<!doctype html><html lang="pt-BR"><meta charset="utf-8"><title>Espia: ensaio local de recepção</title>
+<h1>Ensaio local de escolha de transmissão</h1><p>Usa somente imagens e som sintéticos. Não captura tela, câmera nem microfone.</p>
+<button id="start">Iniciar ensaio de 60 segundos</button><pre id="result">Aguardando início.</pre>
+<canvas id="source" width="640" height="360"></canvas><video id="received" autoplay muted playsinline></video>
+<script type="module">
+import { PeerLink } from '/src/lib/peer.ts';
+const result=document.querySelector('#result');const button=document.querySelector('#start');
+const sleep=ms=>new Promise(r=>setTimeout(r,ms));
+const totals=async link=>{const stats=await link.pc.getStats();let video=0,audio=0;stats.forEach(r=>{if(r.type==='outbound-rtp') {if(r.kind==='video') video+=r.bytesSent??0;else audio+=r.bytesSent??0;}});return {video,audio};};
+button.onclick=async()=>{
+ button.disabled=true; const links=[]; const streams=[];let context;let timer;
+ try {
+  const canvas=document.querySelector('#source');const draw=canvas.getContext('2d');let n=0;
+  timer=setInterval(()=>{draw.fillStyle=n%2?'#4e7760':'#254a69';draw.fillRect(0,0,640,360);draw.fillStyle='white';draw.font='40px monospace';draw.fillText(`ESPIA ${++n}`,30,180);},33);
+  context=new AudioContext();await context.resume();const audio=context.createMediaStreamDestination();const tone=context.createOscillator();tone.connect(audio);tone.start();
+  const pairs=[];
+  for(let i=0;i<2;i++) {
+   let tx,rx;const key={peerId:i?'0000000000000002':'0000000000000001',startedAt:1};
+   tx=new PeerLink('0000000000000003',false,[],true,{signal:d=>rx.receive(d),remote(){},state(){},view(){}});
+   rx=new PeerLink(key.peerId,true,[],false,{signal:d=>tx.receive(d),remote:s=>{if(!i)document.querySelector('#received').srcObject=s;},state(){},view(){}});
+   links.push(tx,rx);tx.setLocalKey(key);rx.setRemoteKey(key);rx.setMyView('off');
+   const stream=canvas.captureStream(30);stream.addTrack(audio.stream.getAudioTracks()[0].clone());streams.push(stream);
+   await tx.setLocal(stream,{resolution:720,fps:30,maxBitrate:1000000});pairs.push({tx,rx,key});
+  }
+  const start=performance.now();while(pairs.some(p=>p.tx.pc.connectionState!=='connected')) {if(performance.now()-start>15000)throw Error('Conexão local não estabelecida.');await sleep(100);}
+  for(let second=0;second<60;second++) {result.textContent=`Conectado. Aguardando sem consentimento: ${second+1}/60 s`;await sleep(1000);}
+  const before=await Promise.all(pairs.map(p=>totals(p.tx)));
+  if(before.some(x=>x.video||x.audio))throw Error(`Mídia antes do clique: ${JSON.stringify(before)}`);
+  pairs[0].rx.setMyView('full');result.textContent='60 s sem mídia: PASS. Recebendo somente a primeira transmissão…';await sleep(8000);
+  const during=await Promise.all(pairs.map(p=>totals(p.tx)));
+  if(!during[0].video||!during[0].audio||during[1].video||during[1].audio)throw Error(`Escolha incorreta: ${JSON.stringify(during)}`);
+  pairs[0].rx.setMyView('off');await sleep(2000);const stopped=await totals(pairs[0].tx);await sleep(2000);const after=await totals(pairs[0].tx);
+  if(after.video!==stopped.video||after.audio!==stopped.audio)throw Error(`Envio continuou após parar: ${JSON.stringify({stopped,after})}`);
+  pairs[0].tx.setLocalKey({...pairs[0].key,startedAt:2});await sleep(2000);
+  const restarted=await totals(pairs[0].tx);if(restarted.video!==after.video||restarted.audio!==after.audio)throw Error('Nova transmissão herdou autorização.');
+  result.textContent=JSON.stringify({status:'PASS',scope:'WebRTC local sintético, sem medição de atraso em aparelhos distintos',before,during,stopped:after,restarted},null,2);
+ } catch(error) {result.textContent=`FAIL: ${error.message}`;}
+ finally {for(const link of links)link.close();for(const stream of streams)for(const track of stream.getTracks())track.stop();clearInterval(timer);await context?.close();button.disabled=false;}
+};
+</script></html>

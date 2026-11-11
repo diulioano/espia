@@ -7,7 +7,7 @@ export type SignalingStatus = 'connecting' | 'open' | 'reconnecting';
 /** Motivos que encerram a sala de vez (sem reconectar). */
 /** 'deleted' (specs/011): o dono apagou a sala com você dentro. */
 /** 'removed' (specs/014): o dono tirou você da sala. Não reconecta. */
-export type SignalingEnd = 'not-found' | 'full' | 'replaced' | 'kicked' | 'deleted' | 'removed';
+export type SignalingEnd = 'not-found' | 'full' | 'replaced' | 'kicked' | 'deleted' | 'removed' | 'update';
 
 export interface SignalingOptions {
   code: string;
@@ -63,8 +63,8 @@ export class Signaling {
     const ws = new WebSocket(`${proto}://${location.host}/ws/${this.opts.code}`);
     this.ws = ws;
     ws.onopen = () => {
-      if (this.session) this.send({ t: 'resume', ...this.session });
-      else this.send({ t: 'join', nickname: this.opts.nickname });
+      if (this.session) this.send({ t: 'resume', ...this.session, mediaProtocol: 2 });
+      else this.send({ t: 'join', nickname: this.opts.nickname, mediaProtocol: 2 });
       this.startPing();
     };
     ws.onmessage = (e) => this.receive(JSON.parse(e.data as string) as ServerMessage);
@@ -74,11 +74,13 @@ export class Signaling {
   }
 
   private receive(msg: ServerMessage) {
+    if (this.done) return;
     switch (msg.t) {
       case 'pong':
         clearTimeout(this.pongTimer);
         return;
       case 'welcome':
+        if (msg.mediaProtocol !== 2 || msg.mediaPolicy?.kind !== 'direct-only') return this.end('update');
         this.attempt = 0;
         this.session = { peerId: msg.you.id, resumeToken: msg.resumeToken };
         this.opts.onSession(this.session);
@@ -90,7 +92,7 @@ export class Signaling {
         // Passou da tolerância: entra de novo como pessoa nova.
         this.session = null;
         this.opts.onSession(null);
-        this.send({ t: 'join', nickname: this.opts.nickname });
+        this.send({ t: 'join', nickname: this.opts.nickname, mediaProtocol: 2 });
         return;
       case 'room-not-found':
         return this.end('not-found');
@@ -108,6 +110,7 @@ export class Signaling {
     this.stopPing();
     if (this.done) return;
     if (code === CLOSE.replaced) return this.end('replaced');
+    if (code === CLOSE.update) return this.end('update');
     if (code === CLOSE.policy) return this.end('kicked');
     if (code === CLOSE.notFound) return this.end('not-found');
     if (code === CLOSE.full) return this.end('full');

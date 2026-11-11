@@ -1,0 +1,36 @@
+<!doctype html><html lang="pt-BR"><meta charset="utf-8"><title>Espia: diagnóstico local</title>
+<h1>Ensaio de diagnóstico WebRTC</h1><p>Fonte sintética 640 × 360. Não usa câmera, microfone nem sala.</p>
+<button id="start">Iniciar diagnóstico local</button><pre id="result">Aguardando início.</pre>
+<canvas id="source" width="640" height="360"></canvas><video id="received" autoplay muted playsinline></video><div id="diagnostics"></div>
+<script type="module">
+import { mount } from 'svelte';
+import MediaDiagnostics from '/src/ui/components/MediaDiagnostics.svelte';
+import { PeerLink } from '/src/lib/peer.ts';
+let tx, rx, frozen;
+const read=()=>frozen??({version:1,links:rx?[{link:1,encoding:rx.encodingInfo(),samples:rx.diagnostics()}]:[]});
+mount(MediaDiagnostics, {target:document.querySelector('#diagnostics'),props:{read}});
+document.querySelector('#start').onclick=async()=>{
+ const result=document.querySelector('#result');document.querySelector('#start').disabled=true;
+ const canvas=document.querySelector('#source');const draw=canvas.getContext('2d');let n=0;let timer;
+ try {
+  timer=setInterval(()=>{draw.fillStyle=n%2?'#4e7760':'#254a69';draw.fillRect(0,0,640,360);draw.fillStyle='white';draw.font='40px monospace';draw.fillText(`ESPIA ${++n}`,30,180);},33);
+  const stream=canvas.captureStream(30);const key={peerId:'0000000000000001',startedAt:1};
+  tx=new PeerLink('0000000000000002',false,[],true,{signal:d=>rx.receive(d),remote(){},state(){},view(){}});
+  rx=new PeerLink(key.peerId,true,[],false,{signal:d=>tx.receive(d),remote:s=>document.querySelector('#received').srcObject=s,state(){},view(){}});
+  tx.setLocalKey(key);rx.setRemoteKey(key);rx.setMyView('full');
+  await tx.setLocal(stream,{resolution:720,fps:30,maxBitrate:1000000});
+  const deadline=performance.now()+15000;
+  while(performance.now()<deadline) {
+   await new Promise(resolve=>setTimeout(resolve,1000));await rx.pollStats();
+   const video=rx.diagnostics().at(-1)?.streams.find(s=>s.kind==='video'&&s.direction==='receive');
+   if(video?.mbps>0&&video.fps>0&&video.width===640&&video.height===360) {
+    frozen=read();
+    result.textContent=JSON.stringify({status:'PASS',scope:'Valida os contadores reais; não reproduz a perda de definição na fonte USB.',video},null,2);
+    return;
+   }
+  }
+  throw Error('Não recebeu dimensões, FPS e bitrate reais em 15 s.');
+ } catch(error) {result.textContent=`FAIL: ${error.message}`;}
+ finally {clearInterval(timer);for(const sender of tx?.pc.getSenders()??[])sender.track?.stop();tx?.close();rx?.close();}
+};
+</script></html>

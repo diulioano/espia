@@ -1,8 +1,9 @@
 // Uma RTCPeerConnection com outra pessoa da sala (architecture.md §4.5).
 // "Perfect negotiation": os dois lados podem renegociar; quando as ofertas se cruzam, o lado
 // educado (polite) desiste da sua. Candidatos ICE vão aos poucos (trickle) pela sinalização.
+import { directIceServers, isSafeSequence, sameTransmission, type TransmissionKey } from '../shared/media';
 import type { IceServer, SignalData } from '../shared/protocol';
-import { sendParams, wantsSound, type Quality, type ViewMode } from './quality';
+import { contentPreference, sendParams, wantsSound, type Quality, type ViewMode } from './quality';
 import { MediaStats, type MediaStatsSample, type StatsRow } from './media-stats';
 
 export interface PeerCallbacks {
@@ -31,21 +32,14 @@ export interface PeerStats {
   send: SendStats | null;
   sample: MediaStatsSample;
 }
-const VIEW_MODES: ViewMode[] = ['full', 'thumb', 'hidden'];
-
-/**
- * No fio, `off` vai como `hidden` + `sound: false` (specs/014): uma versão antiga do site entende
- * `hidden` e já pausa vídeo e som; a nova lê o `sound`.
- */
-export function encodeView(mode: ViewMode): { t: 'view'; mode: Exclude<ViewMode, 'off'>; sound?: false } {
-  return mode === 'off' ? { t: 'view', mode: 'hidden', sound: false } : { t: 'view', mode };
-}
-
-export function decodeView(msg: unknown): ViewMode | null {
-  if (typeof msg !== 'object' || msg === null) return null;
-  const m = msg as { t?: unknown; mode?: unknown; sound?: unknown };
-  if (m.t !== 'view' || !VIEW_MODES.includes(m.mode as ViewMode)) return null;
-  return m.mode === 'hidden' && m.sound === false ? 'off' : (m.mode as ViewMode);
+export interface ViewMessage { t:'view'; version:2; transmission:TransmissionKey; revision:number; mode:ViewMode }
+export function encodeView(mode:ViewMode, transmission:TransmissionKey, revision:number):ViewMessage { return {t:'view',version:2,transmission,revision,mode}; }
+export function decodeView(msg:unknown): ViewMessage | null {
+  if(typeof msg!=='object'||msg===null||!('t' in msg)||msg.t!=='view'||!('version' in msg)||msg.version!==2||!('transmission' in msg)||!('revision' in msg)||!('mode' in msg)) return null;
+  const key=msg.transmission;
+  if(typeof key!=='object'||key===null||!('peerId' in key)||typeof key.peerId!=='string'||!(/^[0-9a-f]{16}$/).test(key.peerId)||!('startedAt' in key)||!isSafeSequence(key.startedAt)||!isSafeSequence(msg.revision)) return null;
+  if(msg.mode!=='full'&&msg.mode!=='thumb'&&msg.mode!=='hidden'&&msg.mode!=='off') return null;
+  return {t:'view',version:2,transmission:{peerId:key.peerId,startedAt:key.startedAt},revision:msg.revision,mode:msg.mode};
 }
 
 export class PeerLink {
@@ -63,8 +57,15 @@ export class PeerLink {
   private ctl: RTCDataChannel | null = null;
   /** Como eu vejo a tela dessa pessoa (mando pra ela). */
   private myView: ViewMode | null = null;
-  /** Como essa pessoa vê a minha tela (ela me manda). Sem aviso, conta como tela cheia. */
-  theirView: ViewMode = 'full';
+  /** Como essa pessoa vê a minha tela (ela me manda). Sem autorização válida, nenhum track é enviado. */
+  theirView: ViewMode = 'off';
+  private localKey: TransmissionKey | null = null;
+  private remoteKey: TransmissionKey | null = null;
+  private localStream: MediaStream | null = null;
+  private grantRevision = -1;
+  private viewRevision = 0;
+  private encoderImplementation: string | null = null;
+  private encoderPowerEfficient: boolean | null = null;
   private restarted = false;
   private closed = false;
   private mediaStats = new MediaStats();
@@ -84,7 +85,7 @@ export class PeerLink {
     initiator: boolean,
     private readonly cb: PeerCallbacks,
   ) {
-    this.pc = new RTCPeerConnection({ iceServers: iceServers as RTCIceServer[] });
+    this.pc = new RTCPeerConnection({ iceServers: directIceServers(iceServers) as RTCIceServer[] });
 
     this.pc.onnegotiationneeded = async () => {
       try {
@@ -109,7 +110,7 @@ export class PeerLink {
     this.pc.onconnectionstatechange = () => {
       const s = this.pc.connectionState;
       console.debug('[peer]', this.remoteId.slice(0, 6), 'conexão:', s);
-      if (s === 'connected') this.restarted = false;
+      // Uma recuperação não repõe o orçamento de tentativas desta conexão.
       // Uma tentativa automática; se falhar de novo, o tile mostra "Tentar de novo".
       if (s === 'failed' && !this.restarted) {
         this.restarted = true;
@@ -131,19 +132,41 @@ export class PeerLink {
 
   private setupCtl(channel: RTCDataChannel) {
     this.ctl = channel;
-    channel.onopen = () => this.sendView();
+    channel.onopen = () => { this.sendView(); this.requestView(); };
+    channel.onclose = () => { this.theirView='off'; this.grantRevision=-1; this.cb.view('off'); void this.setLocal(this.localStream,this.quality); };
     channel.onmessage = (e) => {
+      if(this.closed || this.ctl!==channel || channel.readyState!=='open') return;
       try {
-        const mode = decodeView(JSON.parse(String(e.data)));
-        if (mode && mode !== this.theirView) {
-          this.theirView = mode;
-          this.cb.view(mode);
-          void this.applyEncodings();
+        const raw:unknown=JSON.parse(String(e.data));
+        if(typeof raw==='object'&&raw!==null&&'t' in raw&&raw.t==='view-sync'&&'version' in raw&&raw.version===2&&'transmission' in raw) {
+          const request=decodeView({...raw,t:'view',revision:0,mode:'off'});
+          if(request&&sameTransmission(request.transmission,this.remoteKey)) this.sendView();
+          return;
         }
-      } catch {
-        // Mensagem estranha no ctl: ignora.
-      }
+        const grant=decodeView(raw);
+        if(!grant||!sameTransmission(grant.transmission,this.localKey)||grant.revision<=this.grantRevision) return;
+        this.grantRevision=grant.revision;
+        this.theirView=grant.mode;
+        this.cb.view(grant.mode);
+        void this.setLocal(this.localStream,this.quality);
+      } catch { /* Entrada externa inválida nunca autoriza mídia. */ }
     };
+  }
+
+  setLocalKey(key:TransmissionKey|null) {
+    if(sameTransmission(key,this.localKey)||(!key&&!this.localKey)) return;
+    this.localKey=key; this.grantRevision=-1; this.theirView='off'; this.cb.view('off');
+    void this.setLocal(this.localStream,this.quality);
+    this.requestView();
+  }
+
+  setRemoteKey(key:TransmissionKey|null) {
+    if(sameTransmission(key,this.remoteKey)||(!key&&!this.remoteKey)) return;
+    this.remoteKey=key; this.myView='off'; this.sendView();
+  }
+
+  private requestView() {
+    if(this.localKey&&this.ctl?.readyState==='open') this.ctl.send(JSON.stringify({t:'view-sync',version:2,transmission:this.localKey}));
   }
 
   /** Avisa essa pessoa de como estou vendo a tela dela (só quando muda). */
@@ -157,7 +180,7 @@ export class PeerLink {
   }
 
   private sendView() {
-    if (this.myView && this.ctl?.readyState === 'open') this.ctl.send(JSON.stringify(encodeView(this.myView)));
+    if (this.remoteKey && this.ctl?.readyState === 'open') this.ctl.send(JSON.stringify(encodeView(this.myView ?? 'off',this.remoteKey,++this.viewRevision)));
   }
 
   receive(data: SignalData) {
@@ -178,6 +201,7 @@ export class PeerLink {
         this.sendDescription();
       }
     } else if (data.candidate) {
+      if(typeof data.candidate.candidate==='string' && /\btyp relay\b/i.test(data.candidate.candidate)) return;
       try {
         await this.pc.addIceCandidate(data.candidate as RTCIceCandidateInit);
       } catch (err) {
@@ -194,13 +218,14 @@ export class PeerLink {
   /** Começa ou para de enviar a nossa tela para esta pessoa. */
   setLocal(stream: MediaStream | null, quality: Quality | null): Promise<void> {
     if (this.closed) return Promise.resolve();
+    this.localStream = stream;
     this.quality = quality;
     const revision = ++this.localRevision;
     this.localQueue = this.localQueue.catch(() => {}).then(async () => {
       if (this.closed || revision !== this.localRevision) return;
-      this.video = await this.attach(this.video, 'video', stream?.getVideoTracks()[0] ?? null, stream, revision);
+      this.video = await this.attach(this.video, 'video', this.localKey && (this.theirView==='full'||this.theirView==='thumb') ? stream?.getVideoTracks()[0] ?? null : null, stream, revision);
       if (this.closed || revision !== this.localRevision) return;
-      this.audio = await this.attach(this.audio, 'audio', stream?.getAudioTracks()[0] ?? null, stream, revision);
+      this.audio = await this.attach(this.audio, 'audio', this.localKey && wantsSound(this.theirView) ? stream?.getAudioTracks()[0] ?? null : null, stream, revision);
       if (this.closed || revision !== this.localRevision) return;
       await this.applyEncodings();
     });
@@ -258,7 +283,7 @@ export class PeerLink {
       const p = sendParams(q, this.theirView);
       await setEncoding(this.video?.sender, {
         ...p,
-        degradation: q.fps === 60 ? 'maintain-framerate' : 'maintain-resolution',
+        degradation: contentPreference(this.localStream?.getVideoTracks()[0]?.contentHint ?? '', 'screen'),
       });
       // Segundo plano corta só o vídeo; parar de assistir corta vídeo e som (specs/014).
       await setEncoding(this.audio?.sender, { active: wantsSound(this.theirView), maxBitrate: AUDIO_BITRATE });
@@ -284,6 +309,11 @@ export class PeerLink {
 
   diagnostics(): MediaStatsSample[] {
     return this.mediaStats.history();
+  }
+
+  encodingInfo() {
+    const hint=this.localStream?.getVideoTracks()[0]?.contentHint;
+    return { profile:hint==='motion'||hint==='detail'||hint==='text'?hint:null, implementation:this.encoderImplementation, hardware:this.encoderPowerEfficient };
   }
 
   clearDiagnostics() {
@@ -314,13 +344,15 @@ export class PeerLink {
         encoder: r.encoderImplementation ?? '?',
         hardware: r.powerEfficientEncoder ?? null,
       };
+      this.encoderImplementation=r.encoderImplementation?.slice(0,120)??null;
+      this.encoderPowerEfficient=r.powerEfficientEncoder??null;
     });
     return { send: out, sample: this.mediaStats.read(rows, performance.now()) };
   }
 
   /** Credenciais TURN novas: vale para as próximas coletas de candidatos. */
   setIceServers(iceServers: IceServer[]) {
-    if (!this.closed) this.pc.setConfiguration({ ...this.pc.getConfiguration(), iceServers: iceServers as RTCIceServer[] });
+    if (!this.closed) this.pc.setConfiguration({ ...this.pc.getConfiguration(), iceServers: directIceServers(iceServers) as RTCIceServer[] });
   }
 
   /** "Tentar de novo" no tile. */
@@ -331,6 +363,8 @@ export class PeerLink {
   }
 
   close() {
+    this.localStream = null;
+    this.localKey = null;
     this.closed = true;
     this.localRevision++;
     this.clearDiagnostics();

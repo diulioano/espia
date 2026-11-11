@@ -1,6 +1,12 @@
 // Qualidade de quem transmite (architecture.md §4.1b e §4.2). Funções puras: sem WebRTC aqui.
 import type { Fps, GoLivePrefs, Resolution } from './types';
 
+export function contentPreference(hint: string, source: 'camera'|'screen'): RTCDegradationPreference {
+  if(hint==='motion') return 'maintain-framerate';
+  if(hint==='detail'||hint==='text') return 'maintain-resolution';
+  return source==='camera'?'maintain-framerate':'maintain-resolution';
+}
+
 /**
  * Como alguém está vendo a SUA tela. Vai pelo canal `ctl` de quem assiste para quem transmite.
  * - `hidden`: a janela dele está em segundo plano. Sem vídeo, o som continua.

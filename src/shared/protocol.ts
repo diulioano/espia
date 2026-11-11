@@ -1,6 +1,7 @@
 // Mensagens do WebSocket de sinalização (contracts/signaling.md). Usado pelo navegador e pelo Worker:
 // sem DOM e sem APIs do Workers aqui.
 
+import type { BroadcastOrder, MediaPolicy } from './media';
 export type Tone = 'accent' | 'sage' | 'sand' | 'deep';
 export const TONES: readonly Tone[] = ['deep', 'accent', 'sage', 'sand'];
 
@@ -66,11 +67,11 @@ export type SignalData =
   | { candidate: Record<string, unknown> | null };
 
 export type ClientMessage =
-  | { t: 'join'; nickname: string }
-  | { t: 'resume'; peerId: string; resumeToken: string }
+  | { t: 'join'; nickname: string; mediaProtocol: 2 }
+  | { t: 'resume'; peerId: string; resumeToken: string; mediaProtocol: 2 }
   | { t: 'signal'; to: string; data: SignalData }
-  | { t: 'live'; resolution: 720 | 1080; fps: 30 | 60; audio: AudioKind; source?: LiveSource; label?: string }
-  | { t: 'unlive' }
+  | { t: 'live'; requestId: string; broadcastSeq: number; resolution: 720 | 1080; fps: 30 | 60; audio: AudioKind; source?: LiveSource; label?: string }
+  | { t: 'unlive'; requestId: string; broadcastSeq: number }
   | { t: 'turn-refresh' };
 
 export type ErrorCode = 'bad-message' | 'not-joined' | 'unknown-peer' | 'rate-limited';
@@ -78,6 +79,9 @@ export type ErrorCode = 'bad-message' | 'not-joined' | 'unknown-peer' | 'rate-li
 export type ServerMessage =
   | {
       t: 'welcome';
+      mediaProtocol: 2;
+      mediaPolicy: MediaPolicy;
+      broadcastOrder: BroadcastOrder | null;
       you: Peer;
       peers: Peer[];
       iceServers: IceServer[];
@@ -87,6 +91,7 @@ export type ServerMessage =
       /** specs/011. Servidor antigo não manda: trate como sala rápida. */
       room?: RoomInfo;
     }
+  | { t: 'live-ack'; requestId: string; broadcastSeq: number; live: LiveInfo }
   | { t: 'room-not-found' }
   | { t: 'room-full'; capacity: number }
   | { t: 'resume-failed' }
@@ -106,6 +111,7 @@ export type ServerMessage =
 
 /** Códigos de fechamento do WebSocket. */
 export const CLOSE = {
+  update: 4426,
   policy: 1008,
   notFound: 4404,
   full: 4409,

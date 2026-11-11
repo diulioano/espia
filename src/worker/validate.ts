@@ -1,6 +1,7 @@
 // Validação de cada mensagem do cliente (security.md A4/A5). Escrita à mão: são poucos tipos.
 import { AUDIO_KINDS, LIVE_LABEL_MAX, LIVE_SOURCES, NICKNAME_MAX, SAVED_ROOMS_MAX, type AudioKind, type ClientMessage, type LiveSource, type SignalData } from '../shared/protocol';
 import { ROOM_ID_RE } from '../lib/room-id';
+import { isRequestId, isSafeSequence } from '../shared/media';
 import { normalizeRoomName } from '../shared/room-name';
 
 type Obj = Record<string, unknown>;
@@ -61,15 +62,15 @@ export function parseClientMessage(raw: string): ClientMessage | null {
 
   switch (m.t) {
     case 'join': {
-      if (!hasOnly(m, ['t', 'nickname'])) return null;
+      if (!hasOnly(m, ['t', 'nickname', 'mediaProtocol']) || m.mediaProtocol !== 2) return null;
       const nickname = cleanNickname(m.nickname);
-      return nickname ? { t: 'join', nickname } : null;
+      return nickname ? { t: 'join', nickname, mediaProtocol: 2 } : null;
     }
     case 'resume':
-      if (!hasOnly(m, ['t', 'peerId', 'resumeToken'])) return null;
+      if (!hasOnly(m, ['t', 'peerId', 'resumeToken', 'mediaProtocol']) || m.mediaProtocol !== 2) return null;
       if (typeof m.peerId !== 'string' || !ID_RE.test(m.peerId)) return null;
       if (typeof m.resumeToken !== 'string' || !TOKEN_RE.test(m.resumeToken)) return null;
-      return { t: 'resume', peerId: m.peerId, resumeToken: m.resumeToken };
+      return { t: 'resume', peerId: m.peerId, resumeToken: m.resumeToken, mediaProtocol: 2 };
     case 'signal': {
       if (!hasOnly(m, ['t', 'to', 'data'])) return null;
       if (typeof m.to !== 'string' || !ID_RE.test(m.to)) return null;
@@ -77,20 +78,20 @@ export function parseClientMessage(raw: string): ClientMessage | null {
       return data ? { t: 'signal', to: m.to, data } : null;
     }
     case 'live': {
-      if (!hasOnly(m, ['t', 'resolution', 'fps', 'audio', 'source', 'label'])) return null;
+      if (!hasOnly(m, ['t', 'resolution', 'fps', 'audio', 'source', 'label', 'requestId', 'broadcastSeq'])) return null;
+      if (!isRequestId(m.requestId) || !isSafeSequence(m.broadcastSeq)) return null;
       if (m.resolution !== 720 && m.resolution !== 1080) return null;
       if (m.fps !== 30 && m.fps !== 60) return null;
-      // boolean: abas abertas antes da 002 (compatibilidade temporária, contracts/signaling-delta.md).
-      if (typeof m.audio === 'boolean') return { t: 'live', resolution: m.resolution, fps: m.fps, audio: m.audio ? 'tab' : 'none', source: 'screen' };
       if (!AUDIO_KINDS.includes(m.audio as AudioKind)) return null;
       // Sem source: cliente de antes da 006 → tela (specs/006 contracts/signaling-live.md).
       const source = m.source === undefined ? 'screen' : m.source;
       if (!LIVE_SOURCES.includes(source as LiveSource)) return null;
       // Texto ruim não derruba o "ao vivo": só vai sem ele (specs/012).
       const label = cleanLiveLabel(m.label);
-      return { t: 'live', resolution: m.resolution, fps: m.fps, audio: m.audio as AudioKind, source: source as LiveSource, ...(label ? { label } : {}) };
+      return { t: 'live', requestId: m.requestId, broadcastSeq: m.broadcastSeq, resolution: m.resolution, fps: m.fps, audio: m.audio as AudioKind, source: source as LiveSource, ...(label ? { label } : {}) };
     }
     case 'unlive':
+      return hasOnly(m,['t','requestId','broadcastSeq']) && isRequestId(m.requestId) && isSafeSequence(m.broadcastSeq) ? {t:'unlive',requestId:m.requestId,broadcastSeq:m.broadcastSeq} : null;
     case 'turn-refresh':
       return hasOnly(m, ['t']) ? { t: m.t } : null;
     default:

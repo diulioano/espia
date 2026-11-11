@@ -15,6 +15,10 @@ export interface StreamMetrics {
   decodeMs: number | null;
   mbps: number | null;
   frames: number | null;
+  fps: number | null;
+  width: number | null;
+  height: number | null;
+  limitation: 'none' | 'cpu' | 'bandwidth' | 'other' | null;
   lostPackets: number | null;
   freezes: number | null;
 }
@@ -73,6 +77,8 @@ export class MediaStats {
       const outgoing = row.type === 'outbound-rtp';
       const bytes = delta(row, before, outgoing ? 'bytesSent' : 'bytesReceived');
       const elapsed = before ? row.timestamp - before.timestamp : 0;
+      const frames = delta(row, before, outgoing ? 'framesEncoded' : 'framesDecoded');
+      const reason = row.qualityLimitationReason;
       streams.push({
         direction: outgoing ? 'send' : 'receive', kind: row.kind,
         encodeMs: outgoing ? ratioMs(row, before, 'totalEncodeTime', 'framesEncoded') : null,
@@ -80,7 +86,12 @@ export class MediaStats {
         jitterMs: outgoing ? null : ratioMs(row, before, 'jitterBufferDelay', 'jitterBufferEmittedCount'),
         decodeMs: outgoing ? null : ratioMs(row, before, 'totalDecodeTime', 'framesDecoded'),
         mbps: bytes !== null && elapsed > 0 ? bytes * 8 / (elapsed * 1000) : null,
-        frames: delta(row, before, outgoing ? 'framesEncoded' : 'framesDecoded'),
+        frames,
+        fps: frames !== null && elapsed > 0 ? frames * 1000 / elapsed : null,
+        width: row.kind === 'video' ? number(row, 'frameWidth') : null,
+        height: row.kind === 'video' ? number(row, 'frameHeight') : null,
+        limitation: outgoing && row.kind === 'video' &&
+          (reason === 'none' || reason === 'cpu' || reason === 'bandwidth' || reason === 'other') ? reason : null,
         lostPackets: outgoing ? null : delta(row, before, 'packetsLost'),
         freezes: outgoing ? null : delta(row, before, 'freezeCount'),
       });

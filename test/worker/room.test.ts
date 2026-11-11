@@ -99,7 +99,17 @@ class Client {
     return { c, welcome };
   }
 
+  private broadcastSeq=0;
+  private requestId=crypto.randomUUID();
   send(msg: unknown) {
+    if(typeof msg==='object'&&msg!==null&&'t' in msg) {
+      if(msg.t==='join'||msg.t==='resume') msg={...msg,mediaProtocol:2};
+      else if(msg.t==='live'||msg.t==='unlive') {
+        const stopping=msg.t==='unlive';
+        msg={...msg,requestId:this.requestId,broadcastSeq:this.broadcastSeq};
+        if(stopping) {this.broadcastSeq++;this.requestId=crypto.randomUUID();}
+      }
+    }
     this.ws.send(typeof msg === 'string' ? msg : JSON.stringify(msg));
   }
 
@@ -258,14 +268,10 @@ describe('Som no live (specs/002)', () => {
     expect((await b.next('peer-live')).live).toMatchObject({ audio: 'window' });
   });
 
-  it('cliente antigo (boolean) é convertido', async () => {
-    const code = await createRoom();
-    const { c: a } = await Client.join(code, 'Rafa');
-    const { c: b } = await Client.join(code, 'Lu');
-    a.send(JSON.stringify({ t: 'live', resolution: 720, fps: 30, audio: true }));
-    expect((await b.next('peer-live')).live).toMatchObject({ audio: 'tab' });
-    a.send(JSON.stringify({ t: 'live', resolution: 720, fps: 30, audio: false }));
-    expect((await b.next('peer-live')).live).toMatchObject({ audio: 'none' });
+  it('cliente antigo com audio boolean é recusado', async()=>{
+    const {c:a}=await Client.join(await createRoom(),'Rafa');
+    a.send(JSON.stringify({t:'live',resolution:720,fps:30,audio:true}));
+    expect((await a.next('error')).code).toBe('bad-message');
   });
 
   it("repassa o som do PC sem o Discord (app desktop, specs/005): 'pc'", async () => {
@@ -497,57 +503,32 @@ describe('Entrada simultânea', () => {
   });
 });
 
-describe('TURN', () => {
-  it('welcome traz credenciais TURN sem a porta 53', async () => {
-    const code = await createRoom();
-    const { welcome } = await Client.join(code, 'Rafa');
-    const urls = welcome.iceServers.flatMap((s) => s.urls);
-    expect(urls).toContain('turn:turn.cloudflare.com:3478?transport=udp');
-    expect(urls.some((u) => u.includes(':53?'))).toBe(false);
-    expect(welcome.iceServers[0].credential).toBe('segredo');
-    expect(welcome.iceExpiresAt).toBeGreaterThan(Date.now() + 5 * 3600_000);
+describe('STUN-only',()=>{
+ it('recusa attachment legado antes de processar refresh',async()=>{
+  const code=await createRoom();const {c}=await Client.join(code,'Rafa');
+  await runInDurableObject(env.ROOM.get(env.ROOM.idFromName(code)),async(_instance,state)=>{
+   for(const ws of state.getWebSockets()) {
+    const att:unknown=ws.deserializeAttachment();
+    if(typeof att==='object'&&att!==null&&'member' in att&&typeof att.member==='object'&&att.member!==null&&'mediaProtocol' in att.member) {
+     att.member.mediaProtocol=1;ws.serializeAttachment(att);
+    }
+   }
   });
-
-  it('turn-refresh entrega credenciais novas', async () => {
-    const code = await createRoom();
-    const { c, welcome } = await Client.join(code, 'Rafa');
-    c.send({ t: 'turn-refresh' });
-    const fresh = await c.next('ice-servers');
-    expect(fresh.iceServers[0].username).not.toBe(welcome.iceServers[0].username);
-  });
-
-  it('sair revoga todas as credenciais da pessoa', async () => {
-    const code = await createRoom();
-    const { c, welcome } = await Client.join(code, 'Rafa');
-    await Client.join(code, 'Lu');
-    c.send({ t: 'turn-refresh' });
-    const fresh = await c.next('ice-servers');
-    c.ws.close(CLOSE.leave);
-    const mine = [welcome.iceServers[0].username!, fresh.iceServers[0].username!];
-    expect(await until(() => mine.every((u) => revoked.includes(u)))).toBe(true);
-  });
-
-  it('cair e não voltar revoga depois da tolerância; voltar a tempo não revoga', async () => {
-    const code = await createRoom();
-    const { c: a, welcome: wa } = await Client.join(code, 'Rafa');
-    const { c: b, welcome: wb } = await Client.join(code, 'Lu');
-    a.ws.close(1000);
-    b.ws.close(1000);
-    await sleep(100);
-    const b2 = await Client.open(code);
-    b2.send({ t: 'resume', peerId: wb.you.id, resumeToken: wb.resumeToken });
-    await b2.next('welcome');
-    await b2.next('peer-left', GRACE + 1500);
-    expect(revoked).toContain(wa.iceServers[0].username);
-    expect(revoked).not.toContain(wb.iceServers[0].username);
-  });
-
-  it('se a API do TURN falhar, entra mesmo assim só com STUN', async () => {
-    turnDown = true;
-    const code = await createRoom();
-    const { welcome } = await Client.join(code, 'Rafa');
-    expect(welcome.iceServers).toEqual([{ urls: 'stun:stun.cloudflare.com:3478' }]);
-  });
+  c.send({t:'turn-refresh'});expect((await c.waitClose())?.code).toBe(4426);
+ });
+ it('welcome, refresh e retomada não geram TURN',async()=>{
+  const code=await createRoom();const {c,welcome}=await Client.join(code,'Rafa');
+  expect(welcome.mediaPolicy).toEqual({kind:'direct-only',reason:'unverified-budget'});
+  expect(welcome.iceServers).toEqual([{urls:'stun:stun.cloudflare.com:3478'}]);
+  c.send({t:'turn-refresh'});expect((await c.next('ice-servers')).iceServers).toEqual(welcome.iceServers);
+  expect(globalThis.fetch).not.toHaveBeenCalled();
+  const back=await Client.open(code);back.send({t:'resume',peerId:welcome.you.id,resumeToken:welcome.resumeToken});
+  expect((await back.next('welcome')).iceServers).toEqual(welcome.iceServers);
+ });
+ it('cliente sem versão é fechado antes da entrada',async()=>{
+  const c=await Client.open(await createRoom());c.send(JSON.stringify({t:'join',nickname:'Antigo'}));
+  expect((await c.waitClose())?.code).toBe(4426);
+ });
 });
 
 describe('Abuso', () => {
@@ -769,7 +750,7 @@ describe('Dono (specs/011)', () => {
     await b.next('room-deleted');
     expect((await a.waitClose())?.code).toBe(CLOSE.deleted);
     expect((await b.waitClose())?.code).toBe(CLOSE.deleted);
-    expect(revoked.length).toBeGreaterThanOrEqual(2);
+    expect(revoked).toEqual([]);
     // Sobra só a lápide: nenhum fantasma (com apelido) recriado pelo fechamento das conexões.
     await sleep(150);
     const keys = await runInDurableObject(env.ROOM.get(env.ROOM.idFromName(code)), async (_i, state) =>
@@ -826,7 +807,7 @@ describe('Remover pessoa (specs/014 US4)', () => {
     await lu.next('removed');
     expect((await lu.waitClose())?.code).toBe(CLOSE.removed);
     expect((await dono.next('peer-left')).id).toBe(welcome.you.id);
-    expect(revoked.length).toBeGreaterThanOrEqual(1);
+    expect(revoked).toEqual([]);
     // Retomar o lugar (o que a queda faz) não funciona: saiu de verdade.
     const back = await Client.open(code);
     back.send({ t: 'resume', peerId: welcome.you.id, resumeToken: welcome.resumeToken });
@@ -899,4 +880,23 @@ describe('Descrição da transmissão (specs/012)', () => {
     const status = await call('/api/rooms/status', { method: 'POST', headers: ORIGIN, body: JSON.stringify({ codes: [code] }) });
     expect(await status.text()).not.toContain('Hollow');
   });
+});
+
+
+describe('Ordenação de capturas v2 no Durable Object real',()=>{
+ it('não reanuncia captura encerrada nem aceita stop antigo, inclusive após reinício',async()=>{
+  const code=await createRoom();const {c:a,welcome:wa}=await Client.join(code,'Rafa');
+  const packet={t:'live',requestId:crypto.randomUUID(),broadcastSeq:0,resolution:720,fps:30,audio:'none'};
+  a.send(JSON.stringify(packet));const first=await a.next('live-ack');
+  a.send(JSON.stringify({t:'unlive',requestId:packet.requestId,broadcastSeq:packet.broadcastSeq}));
+  a.send(JSON.stringify(packet));expect((await a.next('error')).code).toBe('bad-message');
+  const second={...packet,requestId:crypto.randomUUID(),broadcastSeq:1};
+  a.send(JSON.stringify(second));const next=await a.next('live-ack');expect(next.requestId).toBe(second.requestId);expect(next.live.startedAt).toBeGreaterThan(first.live.startedAt);
+  a.send(JSON.stringify({t:'unlive',requestId:packet.requestId,broadcastSeq:packet.broadcastSeq}));expect((await a.next('error')).code).toBe('bad-message');
+  await evictDurableObject(env.ROOM.get(env.ROOM.idFromName(code)),{webSockets:'close'});await a.waitClose();
+  const back=await Client.open(code);back.send({t:'resume',peerId:wa.you.id,resumeToken:wa.resumeToken});
+  const resumed=await back.next('welcome');expect(resumed.broadcastOrder?.highestBroadcastSeq).toBe(1);
+  back.send(JSON.stringify(packet));expect((await back.next('error')).code).toBe('bad-message');
+  back.send(JSON.stringify(second));expect((await back.next('live-ack')).live.startedAt).toBe(next.live.startedAt);
+ });
 });

@@ -27,9 +27,12 @@ import {
 } from '../shared/protocol';
 import { randomHex, tokensEqual } from './crypto';
 import { mintIceServers, revokeTurn } from './turn';
+import { DIRECT_ONLY, nextBroadcastOrder, type BroadcastOrder } from '../shared/media';
 import { parseClientMessage } from './validate';
 
 interface Member extends Peer {
+  mediaProtocol: 2;
+  broadcastOrder: BroadcastOrder | null;
   token: string;
   /** Ordem de entrada: a lista sai sempre nessa ordem (o runtime não garante a dos sockets). */
   seq: number;
@@ -237,6 +240,12 @@ export class Room extends DurableObject<Env> {
     const c = this.counter(ws);
     if (++c.count > FLOOD_MAX) return this.kick(ws);
 
+    let envelope: unknown;
+    try { envelope = JSON.parse(raw); } catch { envelope = null; }
+    if (typeof envelope === 'object' && envelope !== null && 't' in envelope && (envelope.t === 'join' || envelope.t === 'resume') && (!('mediaProtocol' in envelope) || envelope.mediaProtocol !== 2)) {
+      ws.close(CLOSE.update, 'atualização necessária');
+      return;
+    }
     const msg = parseClientMessage(raw);
     if (!msg) {
       if (++c.invalid > INVALID_MAX) return this.kick(ws);
@@ -244,6 +253,7 @@ export class Room extends DurableObject<Env> {
     }
 
     const att = ws.deserializeAttachment() as Attachment;
+    if (att.joined && att.member.mediaProtocol !== 2) { ws.close(CLOSE.update, 'atualização necessária'); return; }
     if (!att.joined) {
       if (msg.t === 'join') return this.join(ws, msg.nickname);
       if (msg.t === 'resume') return this.resume(ws, msg.peerId, msg.resumeToken);
@@ -286,6 +296,8 @@ export class Room extends DurableObject<Env> {
       nickname,
       tone,
       live: null,
+      mediaProtocol: 2,
+      broadcastOrder: null,
       token: randomHex(32),
       seq: joins,
       turn: username ? [username] : [],
@@ -324,6 +336,7 @@ export class Room extends DurableObject<Env> {
 
     const ghosts = await this.ghosts();
     const ghost = ghosts[peerId];
+    if (ghost && ghost.member.mediaProtocol !== 2) { ws.close(CLOSE.update, 'atualização necessária'); return; }
     if (ws.readyState === WebSocket.OPEN && ghost && tokensEqual(ghost.member.token, token)) {
       delete ghosts[peerId];
       await this.ctx.storage.put('ghosts', ghosts);
@@ -337,6 +350,7 @@ export class Room extends DurableObject<Env> {
 
     // Socket antigo ainda aberto (conexão meio morta): a nova conexão assume a identidade.
     const old = this.members().find((m) => m.member.id === peerId);
+    if (old && old.member.mediaProtocol !== 2) { ws.close(CLOSE.update, 'atualização necessária'); return; }
     if (ws.readyState === WebSocket.OPEN && old && tokensEqual(old.member.token, token)) {
       old.ws.serializeAttachment({ joined: false } satisfies Attachment);
       const member = withTurn(old.member);
@@ -359,6 +373,9 @@ export class Room extends DurableObject<Env> {
     const fixed = await this.fixed();
     send(ws, {
       t: 'welcome',
+      mediaProtocol: 2,
+      mediaPolicy: DIRECT_ONLY,
+      broadcastOrder: me.broadcastOrder,
       you: publicPeer(me),
       peers: others.map(publicPeer),
       ...ice,
@@ -404,6 +421,8 @@ export class Room extends DurableObject<Env> {
       }
       case 'live':
       case 'unlive': {
+        const broadcastOrder = nextBroadcastOrder(me.broadcastOrder, msg, Date.now());
+        if (!broadcastOrder) return send(ws, { t: 'error', code: 'bad-message', message: 'Transmissão encerrada ou substituída.' });
         const live: LiveInfo | null =
           msg.t === 'live'
             ? {
@@ -411,13 +430,14 @@ export class Room extends DurableObject<Env> {
                 fps: msg.fps,
                 audio: msg.audio,
                 source: msg.source ?? 'screen',
-                startedAt: me.live?.startedAt ?? Date.now(),
+                startedAt: broadcastOrder.lastStartedAt,
                 ...(msg.label ? { label: msg.label } : {}),
               }
             : null;
-        const member = { ...me, live };
+        const member = { ...me, live, broadcastOrder };
         ws.serializeAttachment({ joined: true, member } satisfies Attachment);
         await this.saveMember(member);
+        if (live) send(ws, { t: 'live-ack', requestId: msg.requestId, broadcastSeq: msg.broadcastSeq, live });
         return this.broadcast({ t: 'peer-live', id: me.id, live }, me.id);
       }
       case 'turn-refresh':
@@ -541,6 +561,7 @@ export class Room extends DurableObject<Env> {
     const out: { ws: WebSocket; member: Member }[] = [];
     for (const ws of this.ctx.getWebSockets()) {
       const att = ws.deserializeAttachment() as Attachment | null;
+      if(att?.joined && att.member.mediaProtocol!==2) { ws.serializeAttachment({joined:false} satisfies Attachment);ws.close(CLOSE.update,'atualização necessária');continue; }
       if (att?.joined) out.push({ ws, member: att.member });
     }
     return out;
@@ -548,7 +569,7 @@ export class Room extends DurableObject<Env> {
 
   /** Conectados e quem está na tolerância, em ordem de entrada. */
   private async everyone(): Promise<Member[]> {
-    const ghosts = Object.values(await this.ghosts()).map((g) => g.member);
+    const ghosts = Object.values(await this.ghosts()).map((g) => g.member).filter(m=>m.mediaProtocol===2);
     return [...this.members().map((m) => m.member), ...ghosts].sort((a, b) => a.seq - b.seq);
   }
 

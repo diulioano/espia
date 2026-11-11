@@ -1,5 +1,6 @@
 // Malha da sala: uma PeerLink por pessoa (architecture.md §4.1). Quem chega inicia a conexão com
 // quem já está; quem já está espera a primeira mensagem e cria a conexão nessa hora.
+import type { TransmissionKey } from '../shared/media';
 import type { IceServer, SignalData } from '../shared/protocol';
 import { fingerprintOf, PeerLink, type SendStats } from './peer';
 import type { Quality, ViewMode } from './quality';
@@ -18,6 +19,9 @@ export class Mesh {
   private nextLinkNumber = 0;
   private iceServers: IceServer[] = [];
   private local: MediaStream | null = null;
+  private localKey: TransmissionKey|null = null;
+  private remoteKeys = new Map<string,TransmissionKey>();
+  private policyRebuilt = new Set<string>();
   private quality: Quality | null = null;
   private myViews: Record<string, ViewMode> = {};
 
@@ -64,6 +68,12 @@ export class Mesh {
     (link ?? this.create(from, false)).receive(data);
   }
 
+  setLocalKey(key:TransmissionKey|null) { this.localKey=key; for(const link of this.links.values()) link.setLocalKey(key); }
+  setRemoteKeys(peers:{id:string;live:{startedAt:number}|null}[]) {
+    this.remoteKeys=new Map(peers.flatMap(p=>p.live?[[p.id,{peerId:p.id,startedAt:p.live.startedAt}] as const]:[]));
+    for(const [id,link] of this.links) link.setRemoteKey(this.remoteKeys.get(id)??null);
+  }
+
   /** Começa (stream) ou para (null) de transmitir para todo mundo. */
   setLocal(stream: MediaStream | null, quality: Quality | null) {
     this.local = stream;
@@ -79,7 +89,7 @@ export class Mesh {
   /** Como eu estou vendo a tela de cada pessoa (quem não está na lista: escondida). */
   setViews(views: Record<string, ViewMode>) {
     this.myViews = views;
-    for (const [id, link] of this.links) link.setMyView(views[id] ?? 'hidden');
+    for (const [id, link] of this.links) link.setMyView(views[id] ?? 'off');
   }
 
   /** Como cada pessoa conectada está vendo a minha tela. */
@@ -90,7 +100,9 @@ export class Mesh {
   }
 
   retry(id: string) {
-    this.links.get(id)?.restart();
+    this.policyRebuilt.delete(id);
+    const link=this.links.get(id);
+    if(link) link.restart(); else this.create(id,true);
   }
 
   /** Envio de vídeo por pessoa, com como ela me vê (specs/010). */
@@ -103,13 +115,19 @@ export class Mesh {
   async pollStats(): Promise<{ id: string; view: ViewMode; stats: SendStats | null }[]> {
     const out = await Promise.all([...this.links].map(async ([id, link]) => {
       const result = await link.pollStats();
+      if(result?.sample.route==='relay' && this.links.get(id)===link) {
+        this.remove(id);
+        if(!this.policyRebuilt.has(id)) { this.policyRebuilt.add(id);this.create(id,true); }
+        else this.cb.state(id,'failed');
+        return null;
+      }
       return result && this.links.get(id) === link ? { id, view: link.theirView, stats: result.send } : null;
     }));
     return out.filter((x): x is NonNullable<typeof x> => x !== null);
   }
 
   diagnostics() {
-    return [...this.links].map(([id, link]) => ({ link: this.linkNumbers.get(id)!, samples: link.diagnostics() }));
+    return [...this.links].map(([id, link]) => ({ link: this.linkNumbers.get(id)!, encoding: link.encodingInfo(), samples: link.diagnostics() }));
   }
 
   clearDiagnostics(id?: string) {
@@ -135,7 +153,9 @@ export class Mesh {
     });
     this.links.set(id, link);
     this.linkNumbers.set(id, ++this.nextLinkNumber);
-    link.setMyView(this.myViews[id] ?? 'hidden');
+    link.setLocalKey(this.localKey);
+    link.setRemoteKey(this.remoteKeys.get(id)??null);
+    link.setMyView(this.myViews[id] ?? 'off');
     if (this.local) void link.setLocal(this.local, this.quality);
     return link;
   }
