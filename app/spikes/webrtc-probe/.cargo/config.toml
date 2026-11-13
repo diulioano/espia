@@ -1,0 +1,4 @@
+# A libwebrtc pré-compilada usa a biblioteca C estática (/MT); o Rust precisa linkar do mesmo jeito,
+# senão o link.exe acusa "mismatch detected for 'RuntimeLibrary'" (LNK2038).
+[target.x86_64-pc-windows-msvc]
+rustflags = ["-C", "target-feature=+crt-static"]

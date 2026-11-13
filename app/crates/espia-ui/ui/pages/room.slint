@@ -1,0 +1,420 @@
+// Sala. Porte de src/ui/pages/RoomPage.svelte (versão de computador, a partir de 1024px de largura): a barra lateral
+// (logo, "Na sala", o cartão "Você está ao vivo"), o cabeçalho (título, menu do dono, convite), o palco e o rodapé.
+// Por cima: o menu do dono, os diálogos (renomear, apagar, tirar da sala), o seletor de transmissão e o diagnóstico.
+// A tela só lê `RoomState` (o RoomView, pronto) e devolve ações pelos callbacks dele. O app.slint não muda: ele
+// importa `RoomState` daqui, e daqui ele vem do arquivo dos componentes (que a página e os componentes dividem).
+// Não portado: a faixa horizontal de menos de 1024px (o app é só para desktop).
+
+import { Tokens } from "../tokens.slint";
+import { Logo } from "../components/logo.slint";
+import { Button, ButtonKind } from "../components/buttons.slint";
+import { Icon, Icons } from "../components/icon.slint";
+import { Scroll } from "../components/scroll.slint";
+import { NameDialog } from "../components/name-dialog.slint";
+import { DeleteRoomDialog } from "../components/delete-room-dialog.slint";
+import { RemoveDialog } from "../components/remove-dialog.slint";
+import { RoomMenu } from "../components/room-menu.slint";
+import { Participant } from "../components/participant.slint";
+import { MeLive } from "../components/me-live.slint";
+import { Stage } from "../components/stage.slint";
+import { GoLiveModal } from "../components/go-live-modal.slint";
+import { MediaDiagnostics } from "../components/media-diagnostics.slint";
+import { UpdateRequired } from "../components/update-required.slint";
+import { RoomState, StageMode } from "../components/room-state.slint";
+
+export { RoomState }
+
+export component RoomPage inherits Rectangle {
+    background: Tokens.color-bg;
+
+    property <bool> diag-open: false;
+    property <bool> overlay-open: RoomState.go-live-open || RoomState.name-open || RoomState.delete-open
+        || RoomState.remove-open || root.diag-open;
+    changed overlay-open => {
+        if (!root.overlay-open) {
+            fs.focus();
+        }
+    }
+
+    if RoomState.requires-update: UpdateRequired {
+        reload => { RoomState.reload(); }
+    }
+
+    fs := FocusScope {
+        visible: !RoomState.requires-update;
+        key-pressed(event) => {
+            if (event.modifiers.control && event.modifiers.shift && (event.text == "d" || event.text == "D" || event.text == "\u{4}")) {
+                root.diag-open = !root.diag-open;
+                return accept;
+            }
+            if (event.text == Key.Escape) {
+                if (root.diag-open) {
+                    root.diag-open = false;
+                    return accept;
+                }
+                if (RoomState.owner-menu) {
+                    RoomState.toggle-owner-menu(false);
+                    return accept;
+                }
+                // Esc também tira a sua tela do palco, mesmo quando ela é a única (specs/014 US3).
+                if ((RoomState.stage == StageMode.focus || RoomState.on-stage) && !RoomState.go-live-open) {
+                    RoomState.focus("");
+                    return accept;
+                }
+            }
+            return reject;
+        }
+
+        HorizontalLayout {
+            // ---- barra lateral: 300px, padding 28 20 24 28, gap 28 ----
+            VerticalLayout {
+                width: 300px;
+                padding-left: 28px;
+                padding-top: 28px;
+                padding-right: 20px;
+                padding-bottom: 24px;
+                spacing: 28px;
+
+                HorizontalLayout {
+                    alignment: start;
+                    Logo {
+                        size: 32px;
+                        home => { RoomState.go-home(); }
+                    }
+                }
+
+                // .people
+                VerticalLayout {
+                    spacing: 10px;
+                    // .people-head: título 18px e contagem 13px, padding-right 8
+                    HorizontalLayout {
+                        padding-right: 8px;
+                        height: 28px;
+                        Text {
+                            text: "Na sala";
+                            font-family: Tokens.font-heading;
+                            font-size: 18px;
+                            color: Tokens.color-text;
+                            vertical-alignment: center;
+                        }
+                        Rectangle { }
+                        if !RoomState.connecting: Text {
+                            text: RoomState.people-count;
+                            font-family: Tokens.font-body;
+                            font-size: 13px;
+                            color: Tokens.color-text-muted;
+                            vertical-alignment: center;
+                        }
+                    }
+                    // Conectando: três linhas de esqueleto.
+                    if RoomState.connecting: VerticalLayout {
+                        spacing: 14px;
+                        padding-top: 6px;
+                        for w[i] in [110, 80, 96]: HorizontalLayout {
+                            spacing: 12px;
+                            opacity: i == 2 ? 0.75 : 1;
+                            Rectangle {
+                                width: 38px;
+                                height: 38px;
+                                border-radius: 19px;
+                                background: Tokens.color-text.with-alpha(0.08);
+                            }
+                            VerticalLayout {
+                                alignment: center;
+                                Rectangle {
+                                    width: w * 1px;
+                                    height: 12px;
+                                    border-radius: 6px;
+                                    background: Tokens.color-text.with-alpha(0.08);
+                                }
+                            }
+                            Rectangle { }
+                        }
+                    }
+                    // .list: margem esquerda de -8px, rolagem própria; esmaece quando a ligação cai.
+                    if !RoomState.connecting: Rectangle {
+                        min-height: 0px;
+                        preferred-height: RoomState.people-height;
+                        opacity: RoomState.down ? 0.55 : 1;
+                        animate opacity { duration: 300ms; }
+                        Scroll {
+                            x: -8px;
+                            width: parent.width + 8px;
+                            height: parent.height;
+                            VerticalLayout {
+                                spacing: 4px;
+                                for p in RoomState.people: Participant {
+                                    person: p;
+                                    remove => { RoomState.ask-remove(p.id); }
+                                }
+                            }
+                        }
+                    }
+                }
+
+                Rectangle {
+                    vertical-stretch: 1;
+                }
+
+                if RoomState.broadcasting: MeLive { }
+            }
+
+            // ---- coluna principal: padding 24 28 24 0, gap 18 ----
+            VerticalLayout {
+                horizontal-stretch: 1;
+                padding-top: 24px;
+                padding-right: 28px;
+                padding-bottom: 24px;
+                spacing: 18px;
+
+                // .header: título à esquerda, convite à direita, gap 16
+                HorizontalLayout {
+                    min-height: 52px;
+                    spacing: 16px;
+                    titles := VerticalLayout {
+                        horizontal-stretch: 1;
+                        alignment: center;
+                        spacing: 2px;
+                        HorizontalLayout {
+                            spacing: 8px;
+                            Text {
+                                horizontal-stretch: 0;
+                                min-width: 0px;
+                                height: 31px;
+                                text: RoomState.title;
+                                font-family: Tokens.font-heading;
+                                font-size: 28px;
+                                color: Tokens.color-text;
+                                overflow: elide;
+                                vertical-alignment: center;
+                            }
+                            // Dono da sala fixa (specs/011 S2): só aparece no aparelho que criou.
+                            if RoomState.owner-button: VerticalLayout {
+                                alignment: center;
+                                Rectangle {
+                                    width: 36px;
+                                    height: 36px;
+                                    border-radius: 18px;
+                                    background: RoomState.down ? transparent
+                                        : RoomState.owner-menu || owner-ta.has-hover ? Tokens.color-text.with-alpha(0.12) : transparent;
+                                    opacity: RoomState.down ? 0.45 : 1;
+                                    accessible-role: button;
+                                    accessible-label: "Opções da sala";
+                                    accessible-expanded: RoomState.owner-menu;
+                                    animate background { duration: 120ms; easing: ease-out; }
+                                    Icon {
+                                        x: (parent.width - self.width) / 2;
+                                        y: (parent.height - self.height) / 2;
+                                        source: Icons.ellipsis;
+                                        size: 18px;
+                                        tint: Tokens.color-text;
+                                    }
+                                    owner-ta := TouchArea {
+                                        enabled: !RoomState.down;
+                                        mouse-cursor: RoomState.down ? MouseCursor.not-allowed : MouseCursor.pointer;
+                                        clicked => { RoomState.toggle-owner-menu(!RoomState.owner-menu); }
+                                    }
+                                }
+                            }
+                            Rectangle {
+                                horizontal-stretch: 1;
+                            }
+                        }
+                        Text {
+                            text: RoomState.subtitle;
+                            font-family: Tokens.font-body;
+                            font-size: 14px;
+                            color: Tokens.color-text-muted;
+                            overflow: elide;
+                            height: 22px;
+                            vertical-alignment: center;
+                        }
+                    }
+                    // .invite: pílula surface, padding 6 6 6 18, gap 6
+                    VerticalLayout {
+                        alignment: center;
+                        horizontal-stretch: 0;
+                        Rectangle {
+                            border-radius: self.height / 2;
+                            background: Tokens.color-surface;
+                            preferred-width: invite.preferred-width;
+                            max-width: invite.preferred-width;
+                            preferred-height: invite.preferred-height;
+                            invite := HorizontalLayout {
+                                padding-left: 18px;
+                                padding-right: 6px;
+                                padding-top: 6px;
+                                padding-bottom: 6px;
+                                spacing: 6px;
+                                Text {
+                                    text: RoomState.invite-label;
+                                    font-family: Tokens.font-mono;
+                                    font-size: 14px;
+                                    color: Tokens.color-text.with-alpha(0.75);
+                                    vertical-alignment: center;
+                                    overflow: elide;
+                                }
+                                Button {
+                                    kind: ButtonKind.invite;
+                                    copied: RoomState.copied;
+                                    label: RoomState.copied ? "Copiado!" : "Copiar convite";
+                                    icon: RoomState.copied ? Icons.check : Icons.link;
+                                    pad-v: 10px;
+                                    pad-h: 18px;
+                                    clicked => { RoomState.copy-invite(); }
+                                }
+                            }
+                        }
+                    }
+                }
+
+                Stage {
+                    vertical-stretch: 1;
+                }
+
+                // .footer: ação principal, dica ou "ao vivo há…", espaço, "Sair da sala" (gap 16)
+                HorizontalLayout {
+                    spacing: 16px;
+                    if RoomState.broadcasting: Button {
+                        kind: ButtonKind.stop;
+                        label: "Parar transmissão";
+                        icon: Icons.screen-share-off;
+                        icon-size: 20px;
+                        font-size: 17px;
+                        pad-v: 12px;
+                        pad-h: 24px;
+                        clicked => { RoomState.stop-go-live(); }
+                    }
+                    if RoomState.broadcasting: VerticalLayout {
+                        alignment: center;
+                        Rectangle {
+                            border-radius: self.height / 2;
+                            background: Tokens.color-accent.with-alpha(0.16);
+                            preferred-width: pill-row.preferred-width;
+                            preferred-height: pill-row.preferred-height;
+                            pill-row := HorizontalLayout {
+                                padding-left: 14px;
+                                padding-right: 14px;
+                                padding-top: 8px;
+                                padding-bottom: 8px;
+                                spacing: 8px;
+                                VerticalLayout {
+                                    alignment: center;
+                                    Rectangle {
+                                        width: 8px;
+                                        height: 8px;
+                                        border-radius: 4px;
+                                        background: Tokens.color-accent;
+                                    }
+                                }
+                                Text {
+                                    text: RoomState.down ? "Ao vivo · reconectando…" : "Você está ao vivo há " + RoomState.elapsed;
+                                    font-family: Tokens.font-body;
+                                    font-size: 14px;
+                                    color: Tokens.color-accent-300;
+                                    vertical-alignment: center;
+                                }
+                            }
+                        }
+                    }
+                    if !RoomState.broadcasting: Button {
+                        kind: ButtonKind.primary;
+                        label: "Transmitir";
+                        icon: Icons.monitor-up;
+                        icon-size: 20px;
+                        font-size: 17px;
+                        pad-v: 14px;
+                        pad-h: 26px;
+                        enabled: !RoomState.connecting && !RoomState.down && RoomState.can-share;
+                        clicked => { RoomState.open-go-live(); }
+                    }
+                    if !RoomState.broadcasting: Text {
+                        text: "Tela, janela ou aba — você escolhe.";
+                        font-family: Tokens.font-body;
+                        font-size: 14px;
+                        color: Tokens.color-text.with-alpha(0.55);
+                        vertical-alignment: center;
+                    }
+                    Rectangle {
+                        horizontal-stretch: 1;
+                    }
+                    Button {
+                        kind: ButtonKind.secondary;
+                        label: "Sair da sala";
+                        icon: Icons.log-out;
+                        icon-size: 18px;
+                        clicked => { RoomState.leave(); }
+                    }
+                }
+            }
+        }
+    }
+
+    // ---- menu do dono (por cima de tudo, a 8px abaixo do título); clicar fora fecha ----
+    if RoomState.owner-menu && !RoomState.requires-update: TouchArea {
+        clicked => { RoomState.toggle-owner-menu(false); }
+    }
+    if RoomState.owner-menu && !RoomState.requires-update: RoomMenu {
+        x: titles.absolute-position.x - root.absolute-position.x;
+        y: titles.absolute-position.y - root.absolute-position.y + titles.height + 8px;
+        rename => { RoomState.open-rename(); }
+        remove => { RoomState.open-delete(); }
+    }
+
+    // ---- diálogos ----
+    if RoomState.name-open: NameDialog {
+        z: 40;
+        create: false;
+        initial: RoomState.name-value;
+        busy: RoomState.name-busy;
+        error: RoomState.name-error;
+        limit(t) => { return RoomState.limit-room-name(t); }
+        normalize(t) => { return RoomState.normalize-room-name(t); }
+        submit(name) => { RoomState.submit-rename(name); }
+        close => { RoomState.close-dialogs(); }
+    }
+    if RoomState.delete-open: DeleteRoomDialog {
+        z: 41;
+        title: RoomState.delete-title;
+        warn: RoomState.delete-warn;
+        busy: RoomState.delete-busy;
+        error: RoomState.delete-error;
+        confirm => { RoomState.confirm-delete(); }
+        close => { RoomState.close-dialogs(); }
+    }
+    if RoomState.remove-open: RemoveDialog {
+        z: 42;
+        title: RoomState.remove-title;
+        busy: RoomState.remove-busy;
+        error: RoomState.remove-error;
+        confirm => { RoomState.confirm-remove(); }
+        close => { RoomState.close-dialogs(); }
+    }
+
+    // ---- seletor de transmissão ----
+    if RoomState.go-live-open: GoLiveModal {
+        z: 43;
+        data: RoomState.go-live;
+        audio-hint(s, native, audio, title, granted, label) => { return RoomState.audio-hint(s, native, audio, title, granted, label); }
+        foot-hint(people, res, fps) => { return RoomState.foot-hint(people, res, fps); }
+        transmit(s, res, fps, audio) => { RoomState.start-go-live(s, res, fps, audio); }
+        select(id) => { RoomState.select-source(id); }
+        surface-changed(s) => { RoomState.set-surface(s); }
+        allow-camera => { RoomState.allow-camera(); }
+        select-camera(id) => { RoomState.select-camera(id); }
+        select-audio(id) => { RoomState.select-audio(id); }
+        set-role(game) => { RoomState.set-audio-role(game); }
+        close => { RoomState.close-go-live(); }
+    }
+
+    // ---- diagnóstico (Ctrl+Shift+D) ----
+    if root.diag-open: MediaDiagnostics {
+        z: 100;
+        x: root.width - self.width - 16px;
+        y: root.height - self.height - 16px;
+        lines: RoomState.diag;
+        close => { root.diag-open = false; }
+    }
+
+    init => { fs.focus(); }
+}

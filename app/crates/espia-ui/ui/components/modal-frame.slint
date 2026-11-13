@@ -1,0 +1,55 @@
+// Moldura dos diálogos (porte do `.backdrop` + `.dialog` de DeleteRoomDialog/NameDialog.svelte): fundo
+// escurecido que cobre a janela, cartão de 480px centrado e Esc para fechar. Clicar no fundo fecha.
+// Sem a transição de fade/scale do site (150 ms): o diálogo aparece direto.
+
+import { Tokens } from "../tokens.slint";
+
+export component ModalFrame inherits Rectangle {
+    in property <length> card-width: 480px;
+    // Recuo do cartão (30px; o seletor de transmissão usa 28px).
+    in property <length> card-pad: 30px;
+    callback close();
+
+    background: Tokens.color-backdrop;
+    accessible-role: none;
+
+    // O fundo recebe o clique "fora".
+    TouchArea {
+        clicked => { root.close(); }
+    }
+
+    // Esc fecha (o evento sobe do campo ou do botão focado até aqui).
+    fs := FocusScope {
+        key-pressed(event) => {
+            if (event.text == Key.Escape) {
+                root.close();
+                return accept;
+            }
+            return reject;
+        }
+    }
+
+    // O "place-items: safe center": centrado, e nunca acima de 16px do topo.
+    card := Rectangle {
+        width: min(root.card-width, root.width - 32px);
+        height: inner.preferred-height;
+        x: (root.width - self.width) / 2;
+        y: max(16px, (root.height - self.height) / 2);
+        border-radius: Tokens.radius-stage;
+        background: Tokens.color-surface;
+        border-width: Tokens.shadow-lg-ring-width;
+        border-color: Tokens.shadow-lg-ring;
+        drop-shadow-color: Tokens.shadow-lg-color;
+        drop-shadow-offset-y: 24px;
+        drop-shadow-blur: 60px;
+
+        // Clique dentro do cartão não fecha.
+        TouchArea { }
+        inner := VerticalLayout {
+            padding: root.card-pad;
+            @children
+        }
+    }
+
+    init => { fs.focus(); }
+}

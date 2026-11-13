@@ -1,0 +1,422 @@
+// Tile de transmissão (porte de src/ui/components/StreamTile.svelte): palco, célula da grade ou miniatura.
+// Sem vídeo real: o placeholder (listras na cor da pessoa e a legenda) vale até chegar um quadro em `data.image`
+// (o Rust o atualiza por quadro com `set_stream_frame`). Estados: assistindo, parou de assistir ("Assistir"),
+// conectando e falhou. Por cima: chip com o nome, selo de mudo e a barra de controles (aparece com o mouse em cima).
+// Sem picture-in-picture nem tela cheia reais ainda (fases 4 e 5): os botões existem e o pip devolve `pip`.
+
+import { Tokens } from "../tokens.slint";
+import { Tone } from "avatar.slint";
+import { Icon, Icons } from "icon.slint";
+import { Button, ButtonKind } from "buttons.slint";
+import { LiveTag } from "live-tag.slint";
+import { Spinner } from "spinner.slint";
+import { Stripes } from "stripes.slint";
+import { VolumeSlider } from "volume-slider.slint";
+import { TileData, TileKind, TileStatus } from "room-state.slint";
+
+// .ctl: botão redondo da barra de controles.
+component Ctl inherits Rectangle {
+    in property <image> icon;
+    in property <length> c: 42px;
+    in property <bool> enabled: true;
+    in property <string> label;
+    out property <bool> hover: ta.has-hover;
+    callback clicked();
+
+    width: root.c;
+    height: root.c;
+    border-radius: root.c / 2;
+    background: root.enabled && ta.has-hover ? Tokens.color-text.with-alpha(0.24) : Tokens.color-ctl;
+    opacity: root.enabled ? 1 : 0.45;
+    accessible-role: button;
+    accessible-label: root.label;
+    Icon {
+        x: (parent.width - self.width) / 2;
+        y: (parent.height - self.height) / 2;
+        source: root.icon;
+        size: 18px;
+        tint: Tokens.color-text;
+    }
+    ta := TouchArea {
+        enabled: root.enabled;
+        mouse-cursor: root.enabled ? MouseCursor.pointer : MouseCursor.not-allowed;
+        clicked => { root.clicked(); }
+    }
+}
+
+export component StreamTile inherits Rectangle {
+    in property <TileData> data;
+    in property <TileKind> kind: TileKind.stage;
+    // Anel de 3px (a transmissão em foco).
+    in property <bool> focused: false;
+    // Raio vindo do pai (palco 32, foco 24); negativo = o do tamanho.
+    in property <length> radius: -1px;
+    // Clique no tile (focar na grade, trocar na faixa).
+    in property <bool> clickable: false;
+    // Falso = tile decorativo, sem controles (a prévia da barra lateral).
+    in property <bool> controls: true;
+    // Chip de nome sempre visível.
+    in property <bool> always-name: false;
+    callback select();
+    callback toggle-mute();
+    callback volume(float);
+    callback retry();
+    callback watch(bool);
+    callback pip(bool);
+    callback fullscreen();
+
+    property <bool> thumb: root.kind == TileKind.thumb;
+    property <bool> grid: root.kind == TileKind.grid;
+    property <bool> watching: root.data.you || root.data.watching;
+    property <bool> has-controls: root.controls && root.watching && root.data.status == TileStatus.ok && !root.thumb;
+    property <bool> bar-hot: bar-ta.has-hover || mute.hover || vol.hover || off.hover || pipb.hover || full.hover;
+    property <bool> active: tile-ta.has-hover || root.bar-hot;
+    property <bool> show-name: root.always-name || root.kind != TileKind.stage || root.active;
+    property <length> c: root.grid ? 36px : 42px;
+    property <length> bar-pad-x: root.grid ? 14px : 20px;
+    property <length> bar-pad-top: root.grid ? 28px : 40px;
+    property <length> bar-pad-bottom: root.grid ? 14px : 20px;
+    property <float> level: root.data.muted ? 0 : root.data.volume;
+    // As listras do site usam tons soltos (#3a2416...); aqui é a cor da pessoa misturada ao palco, que dá quase o mesmo tom.
+    property <color> a: root.data.tone == Tone.accent ? Tokens.color-accent.mix(Tokens.color-stage, 0.22)
+        : root.data.tone == Tone.sage ? Tokens.color-accent-2.mix(Tokens.color-stage, 0.19)
+        : root.data.tone == Tone.sand ? Tokens.color-neutral-300.mix(Tokens.color-stage, 0.14)
+        : Tokens.color-accent.mix(Tokens.color-stage, 0.27);
+    property <color> b: root.data.tone == Tone.accent ? Tokens.color-accent.mix(Tokens.color-stage, 0.17)
+        : root.data.tone == Tone.sage ? Tokens.color-accent-2.mix(Tokens.color-stage, 0.14)
+        : root.data.tone == Tone.sand ? Tokens.color-neutral-300.mix(Tokens.color-stage, 0.11)
+        : Tokens.color-accent.mix(Tokens.color-stage, 0.2);
+    // O fundo dos estados "conectando" e "falhou" (#171512 no site): o palco com um fio de texto.
+    property <color> dim: Tokens.color-text.mix(Tokens.color-stage, 0.022);
+    property <length> r: root.radius >= 0px ? root.radius
+        : root.thumb ? Tokens.radius-tile-sm
+        : root.grid ? Tokens.radius-tile
+        : Tokens.radius-card;
+
+    border-radius: root.r;
+    background: Tokens.color-stage;
+    clip: true;
+    accessible-role: none;
+    accessible-label: "Transmissão de " + root.data.label;
+
+    tile-ta := TouchArea {
+        mouse-cursor: root.clickable && root.watching ? MouseCursor.pointer : MouseCursor.default;
+        clicked => {
+            if (!root.watching) {
+                return;
+            }
+            if (root.data.status == TileStatus.failed && root.thumb) {
+                root.retry();
+            } else if (root.clickable) {
+                root.select();
+            }
+        }
+    }
+
+    // ---- o que aparece no lugar do vídeo ----
+    // Parou de assistir (ou ainda não escolheu): o cartão "Assistir"; nem tela nem som chegam.
+    if !root.watching: Stripes {
+        a: root.a;
+        b: root.b;
+        VerticalLayout {
+            alignment: center;
+            spacing: 10px;
+            padding-top: root.thumb ? 28px : 60px;
+            padding-left: root.thumb ? 8px : 20px;
+            padding-right: root.thumb ? 8px : 20px;
+            padding-bottom: root.thumb ? 8px : 20px;
+            if root.thumb: HorizontalLayout {
+                alignment: center;
+                Rectangle {
+                    width: 40px;
+                    height: 40px;
+                    border-radius: 20px;
+                    background: eye-ta.has-hover ? Tokens.color-text.with-alpha(0.24) : Tokens.color-ctl;
+                    accessible-role: button;
+                    accessible-label: "Assistir " + root.data.label;
+                    Icon {
+                        x: (parent.width - self.width) / 2;
+                        y: (parent.height - self.height) / 2;
+                        source: Icons.eye;
+                        size: 18px;
+                        tint: Tokens.color-text;
+                    }
+                    eye-ta := TouchArea {
+                        mouse-cursor: pointer;
+                        clicked => { root.watch(true); }
+                    }
+                }
+            }
+            if !root.thumb: Text {
+                text: root.data.stopped ? "Você parou de assistir " + root.data.label : "Transmissão de " + root.data.label;
+                font-family: Tokens.font-heading;
+                font-size: root.grid ? 18px : 22px;
+                color: Tokens.color-text;
+                horizontal-alignment: center;
+                wrap: word-wrap;
+            }
+            if !root.thumb: HorizontalLayout {
+                alignment: center;
+                Text {
+                    max-width: 320px;
+                    text: "Nem a tela nem o som chegam até você clicar.";
+                    font-family: Tokens.font-body;
+                    font-size: 14px;
+                    color: Tokens.color-text.with-alpha(0.65);
+                    horizontal-alignment: center;
+                    wrap: word-wrap;
+                }
+            }
+            if !root.thumb: HorizontalLayout {
+                alignment: center;
+                padding-top: 6px;
+                Button {
+                    kind: ButtonKind.primary;
+                    label: "Assistir";
+                    icon: Icons.eye;
+                    pad-v: 10px;
+                    pad-h: 18px;
+                    clicked => { root.watch(true); }
+                }
+            }
+        }
+    }
+    if root.watching && root.data.status == TileStatus.ok && root.data.image.width > 0: Image {
+        width: root.width;
+        height: root.height;
+        source: root.data.image;
+        image-fit: contain;
+    }
+    if root.watching && root.data.status == TileStatus.ok && root.data.image.width <= 0: Stripes {
+        a: root.a;
+        b: root.b;
+        Text {
+            text: root.data.caption;
+            font-family: Tokens.font-mono;
+            font-size: root.thumb ? 11px : 14px;
+            letter-spacing: root.thumb ? 0.44px : 0.56px;
+            color: Tokens.color-text.with-alpha(0.5);
+            horizontal-alignment: center;
+            vertical-alignment: center;
+        }
+    }
+    if root.watching && root.data.status != TileStatus.ok: Rectangle {
+        background: root.dim;
+    }
+    if root.watching && root.data.status == TileStatus.loading: VerticalLayout {
+        alignment: center;
+        spacing: root.thumb ? 8px : 14px;
+        padding: root.thumb ? 8px : 20px;
+        HorizontalLayout {
+            alignment: center;
+            Spinner {
+                size: root.thumb ? 22px : 40px;
+            }
+        }
+        if !root.thumb: Text {
+            text: "Conectando à transmissão de " + root.data.name + "…";
+            font-family: Tokens.font-body;
+            font-size: 14px;
+            color: Tokens.color-text.with-alpha(0.7);
+            horizontal-alignment: center;
+            wrap: word-wrap;
+        }
+    }
+    if root.watching && root.data.status == TileStatus.failed: VerticalLayout {
+        alignment: center;
+        spacing: root.thumb ? 8px : 12px;
+        padding: root.thumb ? 8px : 20px;
+        HorizontalLayout {
+            alignment: center;
+            Rectangle {
+                width: root.thumb ? 36px : 56px;
+                height: self.width;
+                border-radius: self.width / 2;
+                background: Tokens.color-accent.with-alpha(0.18);
+                Icon {
+                    x: (parent.width - self.width) / 2;
+                    y: (parent.height - self.height) / 2;
+                    source: Icons.wifi-off;
+                    size: 22px;
+                    tint: Tokens.color-accent-400;
+                }
+            }
+        }
+        if root.thumb: Text {
+            text: "Falhou · tocar p/ tentar";
+            font-family: Tokens.font-body;
+            font-size: 12px;
+            font-weight: 600;
+            color: Tokens.color-text.with-alpha(0.75);
+            horizontal-alignment: center;
+            wrap: word-wrap;
+        }
+        if !root.thumb: Text {
+            text: "Não deu pra conectar com " + root.data.name;
+            font-family: Tokens.font-heading;
+            font-size: 22px;
+            color: Tokens.color-text;
+            horizontal-alignment: center;
+            wrap: word-wrap;
+        }
+        if !root.thumb: HorizontalLayout {
+            alignment: center;
+            Text {
+                max-width: 340px;
+                text: "Não deu para conectar diretamente. Esta versão está sem retransmissão; algumas redes podem não conectar.";
+                font-family: Tokens.font-body;
+                font-size: 14px;
+                color: Tokens.color-text.with-alpha(0.65);
+                horizontal-alignment: center;
+                wrap: word-wrap;
+            }
+        }
+        if !root.thumb: HorizontalLayout {
+            alignment: center;
+            padding-top: 6px;
+            Button {
+                kind: ButtonKind.primary;
+                label: "Tentar de novo";
+                icon: Icons.refresh-cw;
+                pad-v: 10px;
+                pad-h: 18px;
+                clicked => { root.retry(); }
+            }
+        }
+    }
+
+    // ---- chip com o nome: .name-chip ----
+    Rectangle {
+        x: root.thumb ? 8px : 16px;
+        y: root.thumb ? 8px : 16px;
+        width: min(chip.preferred-width, root.thumb ? root.width - 16px : root.width - 80px);
+        height: chip.preferred-height;
+        border-radius: self.height / 2;
+        background: Tokens.color-overlay;
+        opacity: root.show-name ? 1 : 0;
+        animate opacity { duration: 150ms; easing: ease-out; }
+        chip := HorizontalLayout {
+            padding-left: 5px;
+            padding-right: 12px;
+            padding-top: 5px;
+            padding-bottom: 5px;
+            spacing: 8px;
+            VerticalLayout {
+                alignment: center;
+                LiveTag { }
+            }
+            Text {
+                text: root.data.label;
+                font-family: Tokens.font-body;
+                font-size: root.thumb ? 12px : 14px;
+                font-weight: 600;
+                color: Tokens.color-text;
+                vertical-alignment: center;
+            }
+            if root.data.what != "": Text {
+                text: "· " + root.data.what;
+                font-family: Tokens.font-body;
+                font-size: root.thumb ? 12px : 14px;
+                font-weight: 400;
+                color: Tokens.color-text.with-alpha(0.72);
+                vertical-alignment: center;
+                overflow: elide;
+            }
+        }
+    }
+
+    // ---- selo de mudo ----
+    if root.data.muted && root.data.status == TileStatus.ok && !root.data.you && root.watching: Rectangle {
+        x: root.width - self.width - (root.thumb ? 8px : 16px);
+        y: root.thumb ? 8px : 16px;
+        width: 30px;
+        height: 30px;
+        border-radius: 15px;
+        background: Tokens.color-overlay;
+        opacity: root.has-controls && root.active ? 0 : 1;
+        animate opacity { duration: 150ms; easing: ease-out; }
+        accessible-role: none;
+        accessible-label: "Sem som";
+        Icon {
+            x: (parent.width - self.width) / 2;
+            y: (parent.height - self.height) / 2;
+            source: Icons.volume-x;
+            size: 15px;
+            tint: Tokens.color-text;
+        }
+    }
+
+    // ---- barra de controles (sempre existe, para o `active` poder somar o mouse sobre os botões) ----
+    Rectangle {
+        visible: root.has-controls;
+        x: 0px;
+        y: root.height - self.height;
+        width: root.width;
+        height: root.bar-pad-top + root.c + root.bar-pad-bottom;
+        background: @linear-gradient(0deg, Tokens.color-stage.with-alpha(0.9) 0%, Tokens.color-stage.with-alpha(0) 100%);
+        opacity: root.active ? 1 : 0;
+        animate opacity { duration: 150ms; easing: ease-out; }
+        // Clicar na barra não clica no tile.
+        bar-ta := TouchArea { }
+        HorizontalLayout {
+            padding-left: root.bar-pad-x;
+            padding-right: root.bar-pad-x;
+            padding-top: root.bar-pad-top;
+            padding-bottom: root.bar-pad-bottom;
+            spacing: 10px;
+            mute := Ctl {
+                visible: !root.data.you;
+                width: root.data.you ? 0px : root.c;
+                c: root.c;
+                icon: root.data.muted ? Icons.volume-x : Icons.volume-2;
+                label: root.data.muted ? "Ativar som" : "Silenciar";
+                clicked => { root.toggle-mute(); }
+            }
+            VerticalLayout {
+                alignment: center;
+                vol := VolumeSlider {
+                    visible: !root.data.you;
+                    width: root.data.you ? 0px : (root.grid ? 72px : 120px);
+                    value: root.level;
+                    changed(v) => { root.volume(v); }
+                }
+            }
+            Rectangle {
+                horizontal-stretch: 1;
+            }
+            off := Ctl {
+                visible: !root.data.you;
+                width: root.data.you ? 0px : root.c;
+                c: root.c;
+                icon: Icons.eye-off;
+                label: "Parar de assistir";
+                clicked => { root.watch(false); }
+            }
+            pipb := Ctl {
+                c: root.c;
+                icon: Icons.picture-in-picture-2;
+                label: "Picture-in-picture";
+                enabled: root.data.has-video;
+                clicked => { root.pip(true); }
+            }
+            full := Ctl {
+                c: root.c;
+                icon: Icons.maximize;
+                label: "Tela cheia";
+                clicked => { root.fullscreen(); }
+            }
+        }
+    }
+
+    // ---- anéis: o de dentro (1px) e o do foco (3px) ----
+    Rectangle {
+        border-radius: root.r;
+        border-width: 1px;
+        border-color: Tokens.color-text.with-alpha(0.06);
+    }
+    if root.focused: Rectangle {
+        border-radius: root.r;
+        border-width: 3px;
+        border-color: Tokens.color-accent;
+    }
+}

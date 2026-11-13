@@ -1,0 +1,97 @@
+// Menu "⋯" do cabeçalho da sala do dono (variante `room` de src/ui/components/RoomMenu.svelte): Renomear sala, Apagar sala e a
+// nota "Só aparece pra você". Largura 230, raio 22, fundo `raised` com anel e sombra. Quem o usa o posiciona
+// (abaixo do título, a 8px) e fecha com Esc ou clique fora.
+
+import { Tokens } from "../tokens.slint";
+import { Icon, Icons } from "icon.slint";
+
+component Item inherits Rectangle {
+    in property <string> label;
+    in property <image> icon;
+    in property <bool> danger: false;
+    callback clicked();
+
+    property <color> fg: root.danger ? Tokens.color-accent-300 : Tokens.color-text;
+
+    min-height: 44px;
+    max-height: 44px;
+    border-radius: self.height / 2;
+    background: ta.has-hover ? (root.danger ? Tokens.color-accent.with-alpha(0.14) : Tokens.color-text.with-alpha(0.08)) : transparent;
+    accessible-role: button;
+    accessible-label: root.label;
+
+    HorizontalLayout {
+        padding-left: 14px;
+        padding-right: 14px;
+        spacing: 10px;
+        VerticalLayout {
+            alignment: center;
+            Icon {
+                source: root.icon;
+                size: 16px;
+                tint: root.fg;
+            }
+        }
+        Text {
+            text: root.label;
+            font-family: Tokens.font-body;
+            font-size: 14px;
+            font-weight: 600;
+            color: root.fg;
+            vertical-alignment: center;
+        }
+    }
+    ta := TouchArea {
+        mouse-cursor: pointer;
+        clicked => { root.clicked(); }
+    }
+}
+
+export component RoomMenu inherits Rectangle {
+    callback rename();
+    callback remove();
+
+    width: 230px;
+    height: col.preferred-height;
+    border-radius: 22px;
+    background: Tokens.color-raised;
+    border-width: Tokens.shadow-lg-ring-width;
+    border-color: Tokens.shadow-lg-ring;
+    drop-shadow-color: Tokens.shadow-lg-color;
+    drop-shadow-offset-y: Tokens.shadow-lg-offset-y;
+    drop-shadow-blur: Tokens.shadow-lg-blur;
+    accessible-role: none;
+
+    // Come o clique para não fechar o menu por baixo.
+    TouchArea { }
+
+    col := VerticalLayout {
+        padding: 8px;
+        spacing: 2px;
+        Item {
+            label: "Renomear sala";
+            icon: Icons.pencil;
+            clicked => { root.rename(); }
+        }
+        Item {
+            label: "Apagar sala";
+            icon: Icons.trash;
+            danger: true;
+            clicked => { root.remove(); }
+        }
+        // .note: padding 4px 14px 6px
+        HorizontalLayout {
+            padding-left: 14px;
+            padding-right: 14px;
+            padding-top: 4px;
+            padding-bottom: 6px;
+            Text {
+                text: "Só aparece pra você — a sala foi criada neste aparelho.";
+                font-family: Tokens.font-body;
+                font-size: 12px;
+                color: Tokens.color-text.with-alpha(0.55);
+                wrap: word-wrap;
+            }
+        }
+    }
+}

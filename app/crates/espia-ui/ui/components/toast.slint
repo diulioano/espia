@@ -1,0 +1,96 @@
+// Aviso (toast). Porte de src/ui/components/Toast.svelte: pílula `raised` com ícone redondo de 34px,
+// texto de 14px e, se houver, um botão de ação. Sombra --shadow-lg.
+
+import { Tokens } from "../tokens.slint";
+import { Icon, Icons } from "icon.slint";
+
+export enum ToastKind { join, leave, live, copied, error }
+
+export struct ToastData {
+    id: string,
+    kind: ToastKind,
+    text: string,
+    // Vazio = sem botão de ação.
+    action: string,
+}
+
+export component Toast inherits Rectangle {
+    in property <ToastKind> kind: ToastKind.join;
+    in property <string> text;
+    // Rótulo do botão de ação; vazio = sem botão.
+    in property <string> action;
+    callback action-clicked();
+
+    property <bool> has-action: root.action != "";
+    property <image> icon: root.kind == ToastKind.join ? Icons.user-plus
+        : root.kind == ToastKind.leave ? Icons.user-minus
+        : root.kind == ToastKind.live ? Icons.radio
+        : root.kind == ToastKind.copied ? Icons.check
+        : Icons.triangle-alert;
+    property <color> icon-bg: root.kind == ToastKind.join || root.kind == ToastKind.copied ? Tokens.color-accent-2-300
+        : root.kind == ToastKind.leave ? Tokens.color-text.with-alpha(0.14)
+        : root.kind == ToastKind.live ? Tokens.color-accent
+        : Tokens.color-accent-300;
+    property <color> icon-fg: root.kind == ToastKind.join || root.kind == ToastKind.copied ? Tokens.color-accent-2-900
+        : root.kind == ToastKind.leave ? Tokens.color-text
+        : Tokens.color-accent-900;
+
+    border-radius: self.height / 2;
+    background: Tokens.color-raised;
+    drop-shadow-color: Tokens.shadow-lg-color;
+    drop-shadow-offset-y: Tokens.shadow-lg-offset-y;
+    drop-shadow-blur: Tokens.shadow-lg-blur;
+    border-width: Tokens.shadow-lg-ring-width;
+    border-color: Tokens.shadow-lg-ring;
+    preferred-width: row.preferred-width;
+    preferred-height: row.preferred-height;
+    accessible-role: none;
+    accessible-label: root.text;
+
+    row := HorizontalLayout {
+        padding: 8px;
+        padding-right: root.has-action ? 8px : 20px;
+        spacing: 12px;
+        Rectangle {
+            width: 34px;
+            height: 34px;
+            border-radius: 17px;
+            background: root.icon-bg;
+            Icon {
+                x: (parent.width - self.width) / 2;
+                y: (parent.height - self.height) / 2;
+                source: root.icon;
+                size: 17px;
+                tint: root.icon-fg;
+            }
+        }
+        Text {
+            text: root.text;
+            font-family: Tokens.font-body;
+            font-size: 14px;
+            color: Tokens.color-text;
+            vertical-alignment: center;
+            overflow: elide;
+        }
+        if root.has-action: Rectangle {
+            property <bool> hover: act.has-hover;
+            width: label.preferred-width + 28px;
+            height: 34px;
+            border-radius: 17px;
+            background: Tokens.color-text.with-alpha(self.hover ? 0.2 : 0.12);
+            animate background { duration: 120ms; }
+            label := Text {
+                text: root.action;
+                font-family: Tokens.font-heading;
+                font-size: 13px;
+                color: Tokens.color-text;
+                horizontal-alignment: center;
+                vertical-alignment: center;
+            }
+            act := TouchArea {
+                mouse-cursor: pointer;
+                clicked => { root.action-clicked(); }
+            }
+        }
+    }
+}

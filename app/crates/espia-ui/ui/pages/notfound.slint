@@ -1,0 +1,151 @@
+// Sala não encontrada. Porte de src/ui/pages/NotFoundPage.svelte (desktop): blob de destaque no canto,
+// logo, e um cartão de 560px com o castor, o título e duas ações. Os textos já chegam prontos do Rust
+// (bind/notfound.rs); a tela só desenha e devolve a ação.
+
+import { Tokens } from "../tokens.slint";
+import { Scroll } from "../components/scroll.slint";
+import { Logo } from "../components/logo.slint";
+import { Heading } from "../components/heading.slint";
+import { Mascot, MascotMood } from "../components/mascot.slint";
+import { Button, ButtonKind } from "../components/buttons.slint";
+
+export global NotFoundState {
+    // Nome conhecido neste aparelho; vazio = não mostra (sala rápida).
+    in property <string> name: "";
+    in property <string> title: "";
+    in property <string> body: "";
+    in property <MascotMood> mood: MascotMood.sad;
+    // Está em Suas salas: a ação secundária vira "Tirar de Suas salas".
+    in property <bool> saved: false;
+    callback go-home();
+    callback create-room();
+    callback paste-other-link();
+    callback forget();
+}
+
+export component NotFoundPage inherits Rectangle {
+    background: Tokens.color-bg;
+    clip: true;
+
+    Scroll {
+        page := Rectangle {
+            min-height: max(root.height, col.preferred-height);
+            preferred-height: col.preferred-height;
+
+            // .blob: right -180, top -180, 640 x 640, accent a 10%.
+            Rectangle {
+                x: root.width - 640px + 180px;
+                y: -180px;
+                width: 640px;
+                height: 640px;
+                border-radius: 320px;
+                background: Tokens.color-accent.with-alpha(0.10);
+            }
+
+            col := VerticalLayout {
+                alignment: start;
+                // .top: padding 36px 72px.
+                HorizontalLayout {
+                    padding-left: 72px;
+                    padding-right: 72px;
+                    padding-top: 36px;
+                    padding-bottom: 36px;
+                    alignment: start;
+                    Logo {
+                        size: 36px;
+                        home => { NotFoundState.go-home(); }
+                    }
+                }
+                // .card: margem 60px 0 72px 72px, largura 560 (no máximo a janela menos 144), padding 44, raio 36.
+                HorizontalLayout {
+                    padding-left: 72px;
+                    padding-top: 60px;
+                    padding-bottom: 72px;
+                    alignment: start;
+                    Rectangle {
+                        width: min(560px, root.width - 144px);
+                        preferred-height: card.preferred-height;
+                        border-radius: 36px;
+                        background: Tokens.color-surface;
+
+                        card := VerticalLayout {
+                            padding: 44px;
+                            spacing: 24px;
+                            alignment: start;
+                            HorizontalLayout {
+                                alignment: start;
+                                Rectangle {
+                                    width: 96px;
+                                    height: 96px * 1.12;
+                                    Mascot {
+                                        mood: NotFoundState.mood;
+                                        size: 96px;
+                                    }
+                                }
+                            }
+                            VerticalLayout {
+                                spacing: 10px;
+                                if NotFoundState.name != "": Text {
+                                    text: NotFoundState.name;
+                                    font-family: Tokens.font-body;
+                                    font-size: 15px;
+                                    font-weight: 600;
+                                    color: Tokens.color-text.with-alpha(0.6);
+                                    wrap: word-wrap;
+                                }
+                                Heading {
+                                    text: NotFoundState.title;
+                                    size: 40px;
+                                    line: 1.05;
+                                    tracking: -0.6px;
+                                }
+                                Text {
+                                    text: NotFoundState.body;
+                                    font-family: Tokens.font-body;
+                                    font-size: 17px;
+                                    color: Tokens.color-text.with-alpha(0.68);
+                                    wrap: word-wrap;
+                                }
+                            }
+                            // .actions: flex-wrap, gap 10.
+                            HorizontalLayout {
+                                spacing: 10px;
+                                alignment: start;
+                                Button {
+                                    kind: ButtonKind.primary;
+                                    label: "Criar uma sala nova";
+                                    font-size: 17px;
+                                    pad-h: 24px;
+                                    min-height: 52px;
+                                    max-height: 52px;
+                                    pad-v: 0px;
+                                    clicked => { NotFoundState.create-room(); }
+                                }
+                                if NotFoundState.saved: Button {
+                                    kind: ButtonKind.secondary;
+                                    label: "Tirar de Suas salas";
+                                    font-size: 16px;
+                                    pad-h: 22px;
+                                    min-height: 52px;
+                                    max-height: 52px;
+                                    pad-v: 0px;
+                                    clicked => { NotFoundState.forget(); }
+                                }
+                                if !NotFoundState.saved: Button {
+                                    kind: ButtonKind.secondary;
+                                    label: "Colar outro link";
+                                    font-size: 16px;
+                                    pad-h: 22px;
+                                    min-height: 52px;
+                                    max-height: 52px;
+                                    pad-v: 0px;
+                                    clicked => { NotFoundState.paste-other-link(); }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}

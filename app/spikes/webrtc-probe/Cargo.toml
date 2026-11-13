@@ -1,0 +1,25 @@
+[package]
+name = "webrtc-probe"
+version = "0.1.0"
+edition = "2021"
+publish = false
+description = "Sonda G1 (019 T009): prova que a libwebrtc da LiveKit serve para o app nativo do Espia"
+
+# Crate isolada: NAO entra no workspace de app/. O [workspace] vazio abaixo evita que o Cargo
+# procure o workspace do diretório pai.
+[workspace]
+
+[dependencies]
+libwebrtc = "=0.4.0"
+tokio = { version = "1", features = ["rt-multi-thread", "macros", "time", "sync", "io-std", "io-util", "signal"] }
+tokio-tungstenite = { version = "0.24", features = ["connect", "native-tls"] }
+futures-util = "0.3"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+uuid = { version = "1", features = ["v4"] }
+
+[target.'cfg(windows)'.dependencies]
+windows-sys = { version = "0.52", features = ["Win32_System_ProcessStatus", "Win32_System_Threading", "Win32_Foundation"] }
+
+[profile.release]
+opt-level = 3

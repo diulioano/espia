@@ -1,0 +1,127 @@
+// Cartão "Você está ao vivo" da barra lateral (a parte `.me-live` de src/ui/pages/RoomPage.svelte): bolinha pulsando,
+// título, prévia parada da sua tela (clicar a põe grande no palco, ao vivo) e a linha de estatísticas.
+// Lê o estado direto de `RoomState`. O anel de 2px é o `--ring-live` (por dentro, na cor de destaque).
+
+import { Tokens } from "../tokens.slint";
+import { StreamTile } from "stream-tile.slint";
+import { TileKind, RoomState } from "room-state.slint";
+
+export component MeLive inherits Rectangle {
+    height: col.preferred-height;
+    border-radius: Tokens.radius-card;
+    background: Tokens.color-surface;
+    accessible-role: none;
+    accessible-label: "Você está ao vivo";
+
+    col := VerticalLayout {
+        padding: 14px;
+        spacing: 12px;
+
+        // .me-live-head: padding 2px 4px 0, gap 8
+        HorizontalLayout {
+            padding-left: 4px;
+            padding-right: 4px;
+            padding-top: 2px;
+            spacing: 8px;
+            VerticalLayout {
+                alignment: center;
+                Rectangle {
+                    width: 10px;
+                    height: 10px;
+                    // box-shadow: 0 0 0 4px accent a 30%
+                    Rectangle {
+                        x: -4px;
+                        y: -4px;
+                        width: 18px;
+                        height: 18px;
+                        border-radius: 9px;
+                        background: Tokens.color-accent.with-alpha(0.3);
+                    }
+                    Rectangle {
+                        border-radius: 5px;
+                        background: Tokens.color-accent;
+                    }
+                }
+            }
+            Text {
+                text: "Você está ao vivo";
+                font-family: Tokens.font-heading;
+                font-size: 17px;
+                color: Tokens.color-text;
+                vertical-alignment: center;
+            }
+        }
+
+        // .me-live-preview: 142px de altura. Clicar põe a sua tela grande no palco.
+        Rectangle {
+            height: 142px;
+            accessible-role: button;
+            accessible-label: RoomState.on-stage ? "Tirar a sua tela do palco" : "Ver a sua tela grande, ao vivo";
+            // box-shadow: 0 0 0 3px accent quando está no palco
+            if RoomState.on-stage: Rectangle {
+                x: -3px;
+                y: -3px;
+                width: parent.width + 6px;
+                height: parent.height + 6px;
+                border-radius: Tokens.radius-tile-sm + 3px;
+                background: Tokens.color-accent;
+            }
+            StreamTile {
+                width: parent.width;
+                height: parent.height;
+                data: RoomState.preview;
+                kind: TileKind.thumb;
+                controls: false;
+            }
+            pv-ta := TouchArea {
+                mouse-cursor: pointer;
+                clicked => { RoomState.toggle-self-stage(); }
+            }
+            // .me-live-hint: canto de baixo à direita, aparece com o mouse ou quando está no palco.
+            Rectangle {
+                x: parent.width - self.width - 8px;
+                y: parent.height - self.height - 8px;
+                width: hint.preferred-width;
+                height: hint.preferred-height;
+                border-radius: self.height / 2;
+                background: Tokens.color-overlay;
+                opacity: pv-ta.has-hover || RoomState.on-stage ? 1 : 0;
+                animate opacity { duration: 150ms; easing: ease-out; }
+                hint := HorizontalLayout {
+                    padding-left: 10px;
+                    padding-right: 10px;
+                    padding-top: 4px;
+                    padding-bottom: 4px;
+                    Text {
+                        text: RoomState.on-stage ? "Tirar do palco" : "Ver grande";
+                        font-family: Tokens.font-body;
+                        font-size: 12px;
+                        font-weight: 600;
+                        color: Tokens.color-text;
+                        vertical-alignment: center;
+                    }
+                }
+            }
+        }
+
+        // .me-live-stats: 12px, padding 0 4px, 65% do texto
+        HorizontalLayout {
+            padding-left: 4px;
+            padding-right: 4px;
+            Text {
+                text: RoomState.stats;
+                font-family: Tokens.font-body;
+                font-size: 12px;
+                color: Tokens.color-text.with-alpha(0.65);
+                wrap: word-wrap;
+            }
+        }
+    }
+
+    // --ring-live: inset 2px accent
+    Rectangle {
+        border-radius: Tokens.radius-card;
+        border-width: Tokens.ring-live-width;
+        border-color: Tokens.ring-live-color;
+    }
+}

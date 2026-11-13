@@ -1,0 +1,65 @@
+// Barra de volume do tile (porte do `.slider` de StreamTile.svelte): trilho de 6px com a parte cheia em accent-400,
+// bolinha de 14px. 0 a 1. Arrastar muda o valor na hora e devolve `changed`; o valor de verdade vem de `value`.
+
+import { Tokens } from "../tokens.slint";
+
+export component VolumeSlider inherits Rectangle {
+    in property <float> value: 0;
+    out property <bool> hover: ta.has-hover || ta.pressed;
+    callback changed(float);
+
+    property <bool> dragging: false;
+    property <float> drag-value: 0;
+    property <float> shown: root.dragging ? root.drag-value : root.value;
+
+    width: 120px;
+    height: 14px;
+    accessible-role: slider;
+    accessible-label: "Volume";
+    accessible-value: round(root.shown * 100) + "%";
+
+    // trilho
+    Rectangle {
+        x: 0px;
+        y: 4px;
+        width: root.width;
+        height: 6px;
+        border-radius: 3px;
+        background: Tokens.color-text.with-alpha(0.22);
+        Rectangle {
+            x: 0px;
+            width: parent.width * root.shown;
+            border-radius: 3px;
+            background: Tokens.color-accent-400;
+        }
+    }
+    // bolinha
+    Rectangle {
+        x: (root.width - 14px) * root.shown;
+        y: 0px;
+        width: 14px;
+        height: 14px;
+        border-radius: 7px;
+        background: Tokens.color-text;
+    }
+    ta := TouchArea {
+        mouse-cursor: pointer;
+        pointer-event(e) => {
+            if (e.kind == PointerEventKind.down) {
+                root.dragging = true;
+                root.pick();
+            } else if (e.kind == PointerEventKind.up || e.kind == PointerEventKind.cancel) {
+                root.dragging = false;
+            }
+        }
+        moved => {
+            if (root.dragging) {
+                root.pick();
+            }
+        }
+    }
+    function pick() {
+        root.drag-value = max(0, min(1, (ta.mouse-x - 7px) / (root.width - 14px)));
+        root.changed(root.drag-value);
+    }
+}

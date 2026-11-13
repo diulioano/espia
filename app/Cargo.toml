@@ -1,0 +1,21 @@
+# App nativo do Espia para Windows (specs/019-app-rust-convite, R1).
+[workspace]
+resolver = "3"
+members = ["crates/*"]
+# Provas dos gates: crates próprias, fora do workspace de produção.
+exclude = ["spikes"]
+
+[workspace.package]
+version = "0.2.0"
+edition = "2024"
+rust-version = "1.90"
+publish = false
+
+# Só as dependências entre crates de R1. A tela (espia-ui) enxerga apenas espia-core.
+[workspace.dependencies]
+espia-core = { path = "crates/espia-core" }
+espia-net = { path = "crates/espia-net" }
+espia-media = { path = "crates/espia-media" }
+espia-capture = { path = "crates/espia-capture" }
+espia-shell = { path = "crates/espia-shell" }
+espia-ui = { path = "crates/espia-ui" }

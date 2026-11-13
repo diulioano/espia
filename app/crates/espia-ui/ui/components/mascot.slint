@@ -1,0 +1,178 @@
+// Castor. Porte de src/ui/components/Mascot.svelte: formas em % de uma caixa size x size*1.12.
+// Cores do olho, nariz e dentes são as do próprio Mascot.svelte (não são tokens).
+// Não portado: orelhas que se mexem e o "respirar" (escala). O piscar, o pulinho e o olhar de
+// "loading" estão aqui, movidos por Timer (a tela só acorda quando o castor se mexe).
+
+import { Tokens } from "../tokens.slint";
+
+export enum MascotMood { happy, peek, live, sleepy, loading, sad }
+// off = parado; blink = só pisca (o logo); full = tudo (castor grande das telas vazias).
+export enum MascotAnimate { off, blink, full }
+
+export component Mascot inherits Rectangle {
+    in property <MascotMood> mood: MascotMood.happy;
+    in property <length> size: 140px;
+    in property <bool> tail: false;
+    in property <MascotAnimate> animate: MascotAnimate.full;
+
+    // Parâmetros do humor (MOODS do Mascot.svelte). dx e dy em % da caixa, eh e dentes em % da altura.
+    property <float> dx: root.mood == MascotMood.peek ? 5 : 0;
+    property <float> dy: root.mood == MascotMood.peek ? -2
+        : root.mood == MascotMood.live ? -1
+        : root.mood == MascotMood.sleepy ? 4
+        : root.mood == MascotMood.loading ? -4
+        : root.mood == MascotMood.sad ? 4 : 0;
+    property <float> eh: root.mood == MascotMood.live ? 12
+        : root.mood == MascotMood.sleepy ? 2.5
+        : root.mood == MascotMood.sad ? 7 : 10;
+    property <float> teeth: root.mood == MascotMood.live ? 6
+        : root.mood == MascotMood.sleepy ? 8
+        : root.mood == MascotMood.loading ? 8
+        : root.mood == MascotMood.sad ? 7 : 10;
+    property <bool> open-mouth: root.mood == MascotMood.live;
+    property <bool> look: root.mood == MascotMood.loading;
+    property <bool> no-ears: root.mood == MascotMood.sad;
+    property <bool> no-blink: root.mood == MascotMood.sleepy;
+
+    // Movimento do corpo: sobe e desce (castor-bob/hop). Sono e tristeza ficam quietos aqui.
+    property <float> amp: root.mood == MascotMood.live ? 0.09
+        : (root.mood == MascotMood.sleepy || root.mood == MascotMood.sad) ? 0 : 0.04;
+    property <duration> meio-periodo: root.mood == MascotMood.live ? 450ms
+        : root.mood == MascotMood.peek ? 1300ms
+        : root.mood == MascotMood.loading ? 800ms : 1600ms;
+    property <bool> up: false;
+    property <bool> olhando: false;
+    property <bool> piscando: false;
+
+    property <color> escuro: #201e1d;
+    property <color> dente: #fdf6ec;
+
+    width: root.size;
+    height: root.size * 1.12;
+
+    Timer {
+        interval: root.meio-periodo;
+        running: root.animate == MascotAnimate.full && root.amp > 0;
+        triggered => { root.up = !root.up; }
+    }
+    Timer {
+        interval: 800ms;
+        running: root.animate == MascotAnimate.full && root.look;
+        triggered => { root.olhando = !root.olhando; }
+    }
+    Timer {
+        interval: 4200ms;
+        running: root.animate != MascotAnimate.off && !root.no-blink;
+        triggered => { root.piscando = true; }
+    }
+    Timer {
+        interval: 150ms;
+        running: root.piscando;
+        triggered => { root.piscando = false; }
+    }
+
+    body := Rectangle {
+        width: root.width;
+        height: root.height;
+        y: root.up ? -root.height * root.amp : 0px;
+        animate y { duration: root.meio-periodo; easing: ease-in-out; }
+
+        // rabo: elipse 30% x 38%, girada 32 graus (só dá com Path)
+        if root.tail: Path {
+            x: 0px;
+            y: 0px;
+            width: body.width;
+            height: body.height;
+            viewbox-width: 100;
+            viewbox-height: 112;
+            commands: "M 86.28 78.29 A 15 21.28 32 1 0 111.72 94.19 A 15 21.28 32 1 0 86.28 78.29 Z";
+            fill: Tokens.color-accent-900;
+        }
+        // orelhas
+        if !root.no-ears: Rectangle {
+            x: root.width * 0.08;
+            y: root.height * 0.06;
+            width: root.width * 0.24;
+            height: root.height * 0.22;
+            border-radius: self.height / 2;
+            background: Tokens.color-accent-700;
+        }
+        if !root.no-ears: Rectangle {
+            x: root.width * 0.68;
+            y: root.height * 0.06;
+            width: root.width * 0.24;
+            height: root.height * 0.22;
+            border-radius: self.height / 2;
+            background: Tokens.color-accent-700;
+        }
+        // cabeça: border-radius 50% 50% 46% 46% / 58% 58% 42% 42% (cantos elípticos, só dá com Path)
+        Path {
+            x: 0px;
+            y: root.height * 0.13;
+            width: root.width;
+            height: root.height * 0.87;
+            viewbox-width: 100;
+            viewbox-height: 87;
+            commands: "M 50 0 A 50 50.46 0 0 1 100 50.46 A 46 36.54 0 0 1 54 87 L 46 87 A 46 36.54 0 0 1 0 50.46 A 50 50.46 0 0 1 50 0 Z";
+            fill: Tokens.color-accent-700;
+        }
+        // olhos: o piscar encolhe a altura para 10% em volta do centro
+        for left in [26, 63]: Rectangle {
+            property <length> cheio: root.height * root.eh / 100;
+            property <length> alto: root.piscando ? max(1px, self.cheio * 0.1) : self.cheio;
+            width: root.width * 0.11;
+            height: self.alto;
+            x: root.width * left / 100
+                + (root.look ? (root.olhando ? 0.35 : -0.35) * self.width : root.width * root.dx / 100);
+            y: root.height * (41 + root.dy) / 100 + (self.cheio - self.alto) / 2;
+            border-radius: self.width / 2;
+            background: root.escuro;
+            animate height { duration: 70ms; }
+            animate x { duration: 800ms; easing: ease-in-out; }
+        }
+        // nariz
+        Rectangle {
+            x: root.width * 0.42;
+            y: root.height * 0.57;
+            width: root.width * 0.16;
+            height: root.height * 0.08;
+            border-radius: self.height / 2;
+            background: root.escuro;
+        }
+        // boca (só no humor "live")
+        if root.open-mouth: Rectangle {
+            x: root.width * 0.41;
+            y: root.height * 0.66;
+            width: root.width * 0.18;
+            height: root.height * 0.13;
+            border-top-left-radius: self.width * 0.2;
+            border-top-right-radius: self.width * 0.2;
+            border-bottom-left-radius: self.height / 2;
+            border-bottom-right-radius: self.height / 2;
+            background: root.escuro;
+        }
+        // dentes: dois, juntos, cantos de baixo redondos
+        dentes := Rectangle {
+            property <length> vao: max(1px, root.size * 0.012);
+            property <length> largura: (root.width * 0.13 - self.vao) / 2;
+            x: root.width * 0.435;
+            y: root.height * 0.66;
+            width: root.width * 0.13;
+            height: root.height * root.teeth / 100;
+            Rectangle {
+                x: 0px;
+                width: dentes.largura;
+                border-bottom-left-radius: self.width / 2;
+                border-bottom-right-radius: self.width / 2;
+                background: root.dente;
+            }
+            Rectangle {
+                x: dentes.largura + dentes.vao;
+                width: dentes.largura;
+                border-bottom-left-radius: self.width / 2;
+                border-bottom-right-radius: self.width / 2;
+                background: root.dente;
+            }
+        }
+    }
+}

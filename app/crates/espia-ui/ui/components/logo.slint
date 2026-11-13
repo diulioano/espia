@@ -1,0 +1,39 @@
+// Logo. Porte de src/ui/components/Logo.svelte: castor + palavra em Caprasimo, gap 10.
+// size = largura do castor; a palavra acompanha: 36 (home) -> 28px, 32 (sala) -> 26px, 29 (celular) -> 24px.
+
+import { Tokens } from "../tokens.slint";
+import { Mascot, MascotAnimate, MascotMood } from "mascot.slint";
+
+export component Logo inherits Rectangle {
+    in property <length> size: 32px;
+    // Clicar leva para o início (specs/013): a tela decide como.
+    callback home();
+
+    property <length> palavra: root.size >= 36px ? 28px : root.size <= 30px ? 24px : 26px;
+
+    preferred-width: row.preferred-width;
+    preferred-height: row.preferred-height;
+    accessible-role: button;
+    accessible-label: "Espia — início";
+
+    row := HorizontalLayout {
+        spacing: 10px;
+        alignment: start;
+        Mascot {
+            mood: MascotMood.happy;
+            size: root.size;
+            animate: MascotAnimate.blink;
+        }
+        Text {
+            text: "Espia";
+            font-family: Tokens.font-heading;
+            font-size: root.palavra;
+            color: Tokens.color-text;
+            vertical-alignment: center;
+        }
+    }
+    TouchArea {
+        mouse-cursor: pointer;
+        clicked => { root.home(); }
+    }
+}

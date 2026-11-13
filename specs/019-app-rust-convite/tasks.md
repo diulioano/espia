@@ -49,33 +49,33 @@ description: "Task list for 019 — App nativo em Rust e convite no endereço of
 
 **Independent Test**: `cargo check` em `app/` passa com as sete crates vazias; `specs/019-app-rust-convite/relatorio.md` tem a linha de base G0.
 
-- [ ] T001 Criar o workspace do app nativo (sonnet)
+- [X] T001 Criar o workspace do app nativo (sonnet)
   - Arquivos: `app/Cargo.toml` (workspace, `resolver = "3"`, edição 2024, Rust 1.90), `app/crates/{espia-core,espia-net,espia-media,espia-capture,espia-shell,espia-ui,espia}/Cargo.toml` e `src/lib.rs` vazio (a crate `espia` tem `src/main.rs` com `fn main() {}`), `app/README.md` (o que é cada crate e como rodar), `.gitignore` (acrescentar `app/target`).
   - Regras: dependências entre crates só as de R1: `espia-ui` depende só de `espia-core`; `espia-net`, `espia-media`, `espia-capture` e `espia-shell` dependem de `espia-core`; `espia` depende de todas. Nenhuma dependência externa nesta tarefa. Não tocar em `src-tauri/`.
   - Conferir: `cargo check --workspace` em `app/` passa; `git check-ignore app/target` confirma o ignore.
-- [ ] T002 [P] Acrescentar o job do app nativo no CI (sonnet)
+- [X] T002 [P] Acrescentar o job do app nativo no CI (sonnet)
   - Arquivos: `.github/workflows/ci.yml`.
   - Regras: novo job `app` em `windows-latest`, com `actions/checkout@v4`, `dtolnay/rust-toolchain@stable`, `Swatinem/rust-cache@v2` com `workspaces: app`, e os passos `cargo check --workspace` e `cargo test --workspace` com `working-directory: app`. Não mudar os jobs `web` e `desktop`.
   - Conferir: o YAML continua válido (ler o arquivo inteiro); os três jobs aparecem.
-- [ ] T003 [P] Acrescentar os scripts do app em `package.json` (haiku)
+- [X] T003 [P] Acrescentar os scripts do app em `package.json` (haiku)
   - Arquivos: `package.json`.
   - Regras: quatro scripts novos, sem mexer nos existentes: `app:dev` = `cargo run -p espia --manifest-path app/Cargo.toml`, `app:check` = `cargo check --workspace --manifest-path app/Cargo.toml`, `app:test` = `cargo test --workspace --manifest-path app/Cargo.toml`, `app:mock` = `cargo run -p espia --manifest-path app/Cargo.toml -- --mock` (aceita `-- <tela> --scene <cena>` depois, como `npm run app:mock -- home --scene default`).
   - Conferir: o JSON continua válido; `npm run app:check` roda depois do T001.
-- [ ] T004 [P] Explicar o uso das fixtures do protocolo (haiku)
+- [X] T004 [P] Explicar o uso das fixtures do protocolo (haiku)
   - Arquivos: `app/fixtures/protocol/README.md`.
   - Regras: explicar em até 25 linhas que os JSON desta pasta são lidos pelo teste Vitest `test/shared/protocol-fixtures.test.ts` (T016) e por `cargo test` em `espia-core` (T015); nome do arquivo = `client-<t>.json` ou `server-<t>.json`, onde `<t>` é o campo `t` da mensagem; mudar o protocolo exige mudar os dois lados; o Worker e `src/shared/protocol.ts` não mudam nesta feature.
   - Conferir: o texto cita os dois testes e a regra dos nomes.
-- [ ] T005 [P] Escrever o ADR do app nativo e a nota no ADR 0001 (sonnet)
+- [X] T005 [P] Escrever o ADR do app nativo e a nota no ADR 0001 (sonnet)
   - Arquivos: criar `docs/adr/0002-app-nativo-em-rust.md`; editar `docs/adr/0001-conexao-direta-e-franquia-de-midia.md` (só uma nota).
   - Origem: o formato de `docs/adr/0001-conexao-direta-e-franquia-de-midia.md`; as decisões R1 a R3 e "Contexto que mudou" do `research.md`.
   - Regras: o ADR 0002 registra a decisão de 2026-11-11 (app inteiro nativo em Rust, sem motor de página; site e servidor ficam), o motivo, as alternativas (só o envio nativo; app, site e servidor em Rust) e que ele substitui a frase "A migração ampla do motor para Rust foi adiada" do ADR 0001. No ADR 0001, acrescentar no fim uma nota de uma linha "Atualizado em 2026-11-11: ver ADR 0002 sobre a migração para Rust"; o resto continua valendo (conexão direta, sem SFU, sem TURN pago, atraso de até 500 ms, duas transmissões com até sete espectadores). Não editar `docs/design/transmissao-motor-transporte.md` aqui.
   - Conferir: os dois arquivos se citam; datas em AAAA-MM-DD.
-- [ ] T006 [P] Dar a `scripts/memoria.ps1` o modo de um processo só (sonnet)
+- [X] T006 [P] Dar a `scripts/memoria.ps1` o modo de um processo só (sonnet)
   - Arquivos: `scripts/memoria.ps1`.
   - Origem: o próprio script (parâmetros `-Watch`, `-Interval`, `-Name`; função `Get-Tree`, que soma a árvore de processos de `Espia.exe`).
   - Regras: novo parâmetro `-Nativo` (switch). Com ele, medir só o processo `Espia.exe` (sem descer para filhos), pela mesma coluna "Memória" (conjunto de trabalho privado) e imprimir uma linha `Espia (nativo): <MB> MB`. Também aceitar `-Processo <nome>` (padrão `Espia`, sem `.exe`), de modo que `-Processo Espia -Nativo` funcione. Sem `-Nativo`, o comportamento de hoje não muda.
   - Conferir: `powershell -File scripts/memoria.ps1` sem parâmetros continua igual; com `-Processo Espia -Nativo` e sem o app aberto, avisa que não achou o processo, sem erro de script.
-- [ ] T007 Conferir a licença da Slint e da crate `libwebrtc` e registrar (principal)
+- [X] T007 Conferir a licença da Slint e da crate `libwebrtc` e registrar (principal)
   - Arquivos: `specs/019-app-rust-convite/research.md` (seções R2 e R3, parágrafo "Licença").
   - Regras: ler a licença atual de `slint` 1.17 (gratuita com atribuição e GPLv3, termos não conferidos até hoje) e de `libwebrtc` 0.4.x e do código do WebRTC que ela embrulha; registrar o que o projeto precisa cumprir (atribuição na tela "Sobre"? arquivo de licenças no instalador?) e se algum termo impede distribuir `Espia.exe` ao grupo. Não inventar: o que não conseguir confirmar fica como "não confirmado". Se algum termo impedir, parar e replanejar R3 (plano B `iced`) ou R2.
   - Conferir: R2 e R3 têm o parágrafo de licença com data e fonte.
@@ -97,7 +97,7 @@ description: "Task list for 019 — App nativo em Rust e convite no endereço of
 
 ### Gates
 
-- [ ] T009 Prova G1 em `app/spikes/webrtc-probe/` (sonnet, com revisão do principal)
+- [X] T009 Prova G1 em `app/spikes/webrtc-probe/` (sonnet, com revisão do principal)
   - Arquivos: criar `app/spikes/webrtc-probe/` (crate própria, fora do workspace de produção, com `Cargo.toml` e `src/main.rs`) e `app/spikes/webrtc-probe/LEIA-ME.md` com os comandos.
   - Origem: `src/lib/peer.ts` e `src/lib/mesh.ts` (negociação perfeita, canal `ctl`, `ViewMessage` versão 2 com `encodeView`/`decodeView`), `src/lib/quality.ts` (`sendParams`), `src/shared/protocol.ts` (mensagens), `src/lib/signaling.ts` (WebSocket, `PING`).
   - Regras: usar `libwebrtc` 0.4.x. Entrar numa sala do site local (`npm run dev:worker`) com `Origin` igual ao do site local e `mediaProtocol: 2`; enviar vídeo gerado (padrão de teste, nunca captura real) 1080p60 H.264 e som; receber vídeo e som do Chrome; abrir o canal `ctl` e trocar `ViewMessage`; mudar por ligação bitrate, fps, `scaleResolutionDownBy` e `active`; imprimir qual codificador foi usado, uso de processador e memória privada do processo; medir a diferença entre som e imagem a cada minuto por 10 minutos (log). Só STUN, descartar candidatos `typ relay`. Nada de `--use-fake-ui-for-media-stream`.
@@ -108,7 +108,7 @@ description: "Task list for 019 — App nativo em Rust e convite no endereço of
   - Critérios de passe (todos): (a) compila no Windows com `cargo build --release`; (b) entra numa sala do site local e o Chrome recebe vídeo 1080p60 H.264 e som; (c) recebe vídeo e som do Chrome; (d) troca `ViewMessage` com o site pelo canal `ctl`; (e) muda parâmetros por ligação (bitrate, fps, redução de resolução, ativo) e lê `qualityLimitationReason` nas estatísticas de envio; (f) usa a placa de vídeo para codificar, ou o processador do processo fica em até metade do G0 (T008); (g) som e imagem não se afastam mais de 80 ms em 10 minutos; (h) Safari no iPhone recebe; (i) memória do processo e tamanho do executável anotados; (j) anotado se o Windows mostra aviso de firewall.
   - O que registrar: um número ou "sim/não" por item (a) a (j), versão da crate, máquina e data. Prova SC-004, SC-005, SC-009 (antecipado) e FR-017.
   - Se não passar: parar, registrar e replanejar com o plano B de R2 (versão modificada com codificador do Windows; plano C `str0m`, que exige replanejar as fases de mídia).
-- [ ] T011 [P] Prova G2 em `app/spikes/ui-probe/` (sonnet)
+- [X] T011 [P] Prova G2 em `app/spikes/ui-probe/` (sonnet)
   - Arquivos: criar `app/spikes/ui-probe/` (crate própria com Slint 1.17) e `LEIA-ME.md`.
   - Origem: `src/ui/pages/RoomPage.svelte`, `src/ui/components/Stage.svelte`, `StreamTile.svelte`, `src/ui/tokens.css`, `src/ui/base.css`, cenas de `src/mocks/room.ts`.
   - Regras: tela da sala com dados falsos (sem rede e sem captura), fontes Caprasimo e Figtree, cores de `tokens.css`; um vídeo 1080p60 de teste (padrão gerado) no palco e duas miniaturas, com imagem RGBA por quadro (R3). Imprimir a memória privada do processo.
@@ -119,12 +119,12 @@ description: "Task list for 019 — App nativo em Rust e convite no endereço of
   - Critérios de passe (todos): a tela da sala com dados falsos fica igual ao site na comparação lado a lado; mostra um vídeo 1080p60 e duas miniaturas sem engasgar; a memória privada do processo, com o motor do G1 carregado, fica em até 150 MB.
   - O que registrar: capturas das duas telas, FPS percebido, memória em MB, data. Prova a base de SC-006 e SC-010.
   - Se não passar: parar, registrar e replanejar com o plano B de R3 (`iced`).
-- [ ] T013 [P] Prova G3 em `app/spikes/webview-data/` (sonnet)
+- [X] T013 [P] Prova G3 em `app/spikes/webview-data/` (sonnet)
   - Arquivos: criar `app/spikes/webview-data/` (crate própria com `rusty-leveldb`) e `LEIA-ME.md`.
   - Origem: R10 do `research.md`; chaves `espia:*` de `src/lib/prefs.ts` e `src/lib/saved-rooms.ts` (`espia:nickname`, `espia:golive`, `espia:volume:<apelido>`, `espia:owner:<código>`, `espia:rooms`, `espia:session:<código>`, `espia:appinvite`).
   - Regras: receber por argumento o caminho de uma cópia da pasta `%LOCALAPPDATA%\dev.espia.app\EBWebView\Default\Local Storage\leveldb`; ler sempre da cópia, nunca da pasta viva; listar as chaves das origens `https://espia.espia.workers.dev` e `https://espia.diuliano.com` e imprimir `espia:rooms`, as chaves de dono (só o código e se tem 64 hex, nunca o valor) e `espia:nickname`. O formato das chaves do Chromium é "não confirmado": documentar o que descobrir no `LEIA-ME.md`.
   - Conferir: compila; roda numa cópia de teste e imprime as chaves ou diz claramente por que não leu.
-- [ ] T014 Rodar o G3 com uma cópia do perfil real e registrar; decidir R10 (pessoa e principal)
+- [X] T014 Rodar o G3 com uma cópia do perfil real e registrar; decidir R10 (pessoa e principal)
   - Arquivos: `specs/019-app-rust-convite/relatorio.md` (seção "G3"), `research.md` (R10).
   - O que fazer: com o app de antes fechado, a pessoa copia a pasta `leveldb` do perfil real para um lugar de teste, roda a sonda do T013 nela e anota o resultado; o principal decide R10.
   - Critério de passe: lê salas fixas, chaves de dono e apelido de uma cópia do perfil real do app instalado.
@@ -133,37 +133,37 @@ description: "Task list for 019 — App nativo em Rust e convite no endereço of
 
 ### Núcleo puro (`espia-core`)
 
-- [ ] T015 [P] Protocolo e política de mídia em `espia-core`, com as fixtures (sonnet)
+- [X] T015 [P] Protocolo e política de mídia em `espia-core`, com as fixtures (sonnet)
   - Arquivos: `app/crates/espia-core/src/protocol.rs`, `app/crates/espia-core/src/media_policy.rs`, `app/crates/espia-core/src/lib.rs` (declarar módulos), `app/fixtures/protocol/client-<t>.json` (6 arquivos) e `server-<t>.json` (15 arquivos), um por tipo de mensagem.
   - Origem: `src/shared/protocol.ts` (mensagens do cliente `join`, `resume`, `signal`, `live`, `unlive`, `turn-refresh`; do servidor `welcome`, `live-ack`, `room-not-found`, `room-full`, `resume-failed`, `peer-joined`, `peer-left`, `peer-live`, `signal`, `ice-servers`, `error`, `room-renamed`, `room-deleted`, `removed`, `pong`; `CLOSE`, `PING`, `NICKNAME_MAX`, `LIVE_LABEL_MAX`, `SAVED_ROOMS_MAX`) e `src/shared/media.ts` (`MEDIA_PROTOCOL = 2`, `directIceServers`, `nextBroadcastOrder`, `isRequestId`, `isSafeSequence`, `sameTransmission`).
   - Regras: tipos `serde` que espelham o TypeScript (campo `t` como tag). `PING` é exatamente `{"t":"ping"}`. Código de fechamento `update` é 4426. `nickname` até 24, rótulo ao vivo até 60, no máximo 5 salas guardadas. `directIceServers` mantém só URLs que começam com `stun:` ou `stuns:`. `nextBroadcastOrder` com as mesmas regras de `src/shared/media.ts`. Escrever os testes primeiro: portar `test/lib/media-policy.test.ts` e `test/worker/media-protocol.test.ts` para `cargo test`, e um teste que lê cada fixture, decodifica e recodifica sem perder campo.
   - Conferir: `cargo test -p espia-core` passa; existem 21 fixtures com os nomes `client-<t>.json`/`server-<t>.json`.
-- [ ] T016 [P] Teste Vitest das fixtures do protocolo (sonnet)
+- [X] T016 [P] Teste Vitest das fixtures do protocolo (sonnet)
   - Arquivos: criar `test/shared/protocol-fixtures.test.ts` (a pasta `test/shared/` ainda não existe; `vitest.config.ts` já inclui `test/**/*.test.ts`).
   - Origem: `src/worker/validate.ts` (`parseClientMessage` na linha 54), `src/shared/protocol.ts`; fixtures do T015.
   - Regras: ler `app/fixtures/protocol/client-*.json` e passar cada uma, como texto, por `parseClientMessage`; todas devem ser aceitas (não nulas) e devolver o mesmo `t`. Para `server-*.json` não há validador no Worker: o teste confere que o `t` é um dos 15 tipos de `ServerMessage` e que os campos obrigatórios do tipo `ServerMessage` em `src/shared/protocol.ts` existem (a lista de campos de cada tipo vem desse tipo e fica escrita no próprio teste). Falhar se faltar fixture de algum tipo. Não alterar `src/worker/validate.ts` nem `src/shared/protocol.ts`.
   - Conferir: `npm test -- test/shared/protocol-fixtures.test.ts` verde depois do T015; `npm run check` verde.
-- [ ] T017 [P] Código, nome da sala e rota em `espia-core`, com testes (sonnet)
+- [X] T017 [P] Código, nome da sala e rota em `espia-core`, com testes (sonnet)
   - Arquivos: `app/crates/espia-core/src/room_id.rs`, `room_name.rs`, `route.rs`.
   - Origem: `src/lib/room-id.ts` (`ROOM_ID_ALPHABET`, `ROOM_ID_RE`, `generateRoomId`, `parseRoomId`, `roomPath`), `src/shared/room-name.ts` (`normalizeRoomName`), `src/lib/route.ts` (`parseRoute`, `sameRoute`); testes de `test/lib/room-id.test.ts`, `test/lib/room-name.test.ts`.
   - Regras: alfabeto `abcdefghjkmnpqrstuvwxyz23456789`, código `xxx-xxx`; `parseRoomId` aceita código solto e links (como a TS); nome de sala até 40, mesma normalização. Portar os testes primeiro.
   - Conferir: `cargo test -p espia-core` passa com os mesmos casos dos testes TS.
-- [ ] T018 [P] Tipos de view-model em `espia-core` (sonnet)
+- [X] T018 [P] Tipos de view-model em `espia-core` (sonnet)
   - Arquivos: `app/crates/espia-core/src/view_model.rs`.
   - Origem: `src/lib/types.ts` (`RoomView` na linha 152, `RoomActions` na linha 338 e os tipos que eles usam: pessoas, transmissões, `link`, avisos, `fullscreenId`).
   - Regras: structs e enums puros, `Clone`, `PartialEq`, sem referência a rede, mídia ou tela. Campo que só existe para mock do site (`mockViewer`) fica de fora; cenas de celular não entram (R17). Campo que não tiver equivalente claro: registrar em comentário.
   - Conferir: `cargo check -p espia-core`; um teste simples constrói um `RoomView` de exemplo.
-- [ ] T019 [P] Dados do aparelho: `device.rs` com junção e corte, e testes (sonnet)
+- [X] T019 [P] Dados do aparelho: `device.rs` com junção e corte, e testes (sonnet)
   - Arquivos: `app/crates/espia-core/src/device.rs`.
   - Origem: `data-model.md` (modelo do `device.json`), R9 e R12 do `research.md`, `src/lib/prefs.ts` e `src/lib/saved-rooms.ts` (`loadSavedRooms`, `rememberRoom`, `SAVED_ROOMS_MAX`).
   - Regras: modelo `{ version: 1, nickname, golive, volumes, rooms, owners, sessions, importedFromWebview }`. `rooms` no máximo 5, ordenada por `lastUsed` do mais recente. `owners` nunca é cortada. `sessions` vale 24 h. `volumes` entre 0 e 1. Validação: código `xxx-xxx`, chave de dono com 64 hex, nome de sala até 40, apelido até 24. Junção só acrescenta, nunca troca valor existente; `rooms` por união por código, e no mesmo código fica a entrada de maior `lastUsed`, com o nome dela; item inválido é ignorado em silêncio; junção idempotente. Escrever os testes primeiro (junção, corte em 5 com dono fora da lista, idempotência, inválidos).
   - Conferir: `cargo test -p espia-core device` passa.
-- [ ] T020 Regras de qualidade, processador, assistir e afins em `espia-core`, com testes portados (sonnet)
+- [X] T020 Regras de qualidade, processador, assistir e afins em `espia-core`, com testes portados (sonnet)
   - Arquivos: `app/crates/espia-core/src/{quality.rs,cpu_governor.rs,watch_state.rs,live_label.rs,audio_source.rs,devices.rs,join_view.rs}`.
   - Origem: `src/lib/quality.ts` (`effectiveQuality`, `sendParams`, `stepDown`, `stepUp`, `isAdjusted`, `countFullViewers`, `ViewMode`, `wantsVideo`, `wantsSound`), `src/lib/cpu-governor.ts` (`CpuGovernor`, `DOWN_AFTER = 10`, `UP_AFTER = 60`, `MAX_STEPS = 2`), `src/lib/watch-state.ts` (`chooseWatch`, `pruneWatching`), `src/lib/live-label.ts` (`liveLabel`), `src/lib/audio-source.ts` (`decideAudio`, `audioLabelText`, `nativeAudioText`), `src/lib/devices.ts` (`isCaptureCard`, `audioRole`, `suggestAudio`, `previewIds`, `PREVIEW_LIMIT = 4`; as funções `audioConstraints` e `videoConstraints` são de navegador e não portam), `src/lib/join-view.ts` (`NICKNAME_MAX = 24`, `cleanNickname`, `whoIsThere`, `whoIsThereLong`, `liveLabel`); testes `test/lib/{quality,quality-content,cpu-governor,watch-state,live-label,audio-source,devices}.test.ts`.
   - Regras: números exatos: 1 a 4 espectadores cheios = qualidade escolhida; 5 a 6 = teto de 4 Mbps e 720p60 (se escolheu 60) ou 1080p30; 7 ou mais = 720p30; miniatura 360p, 15 fps, 500 kbps; `hidden` e `off` não enviam (`active: false`); mínimo 720p30 ao descer degrau. Portar os testes primeiro, um arquivo de teste por módulo.
   - Conferir: `cargo test -p espia-core` passa, com a mesma quantidade de casos dos testes TS portados.
-- [ ] T021 Redutor da sala em `espia-core::room` (principal desenha, sonnet escreve)
+- [X] T021 Redutor da sala em `espia-core::room` (principal desenha, sonnet escreve)
   - Arquivos: `app/crates/espia-core/src/room/{mod.rs,state.rs,event.rs,effect.rs,reduce.rs}`.
   - Origem: `src/lib/stores/room.svelte.ts` (a classe `RoomStore`, que mistura estado, rede e mídia; porta só o estado e as decisões), `src/lib/room-view.ts` (`viewModes`, `viewerStream`).
   - Regras: função pura `reduce(estado, evento) -> (estado, efeitos)`. Eventos: mensagens do servidor, eventos de ligação, ações da pessoa, relógio. Efeitos: enviar mensagem, abrir ou fechar ligação, copiar convite, guardar dado do aparelho, mostrar aviso. O principal escreve o desenho dos estados, eventos e efeitos num comentário no topo de `mod.rs` antes de o sonnet escrever; sem rede, mídia ou tela. Escrever os testes primeiro, portando os de `test/lib/room-view.test.ts` e `test/lib/view-modes.test.ts`; casos de `test/lib/peer-lifecycle.test.ts` que dependem de WebRTC ficam para o T037.
@@ -171,12 +171,12 @@ description: "Task list for 019 — App nativo em Rust e convite no endereço of
 
 ### Rede (`espia-net`)
 
-- [ ] T022 [P] API HTTP em `espia-net` (sonnet)
+- [X] T022 [P] API HTTP em `espia-net` (sonnet)
   - Arquivos: `app/crates/espia-net/src/api.rs`, `lib.rs`.
   - Origem: `src/lib/api.ts` (`createRoom`, `createFixedRoom`, `fetchStatuses`, `renameRoom`, `deleteRoom`, `removePerson`, `ownerErrorText`, `fetchPreview`; tipos `CreateResult`, `OwnerFailure`).
   - Regras: `reqwest` com `rustls`; base `https://espia.diuliano.com`. A variável de ambiente `ESPIA_SERVER` (exemplo `http://127.0.0.1:8787`) troca a base, só em build de depuração; em release a base é sempre `https://espia.diuliano.com`. Todo `POST` manda o cabeçalho `Origin` igual à origem da base em uso (o Worker exige mesmo host, `sameOrigin` em `src/worker/index.ts`). A base é parâmetro, para o teste usar um servidor local. Mesmos motivos de falha e mesmos textos de erro do site. Escrever os testes primeiro, com servidor local falso, conferindo o cabeçalho `Origin`.
   - Conferir: `cargo test -p espia-net api` passa.
-- [ ] T023 [P] Sinalização por WebSocket em `espia-net` (sonnet)
+- [X] T023 [P] Sinalização por WebSocket em `espia-net` (sonnet)
   - Arquivos: `app/crates/espia-net/src/signaling.rs`.
   - Origem: `src/lib/signaling.ts` (classe `Signaling`, `PING_EVERY_MS = 20_000`, reconexão, retomada com `peerId` e `resumeToken`, `SignalingEnd`), `src/shared/protocol.ts` (`CLOSE`).
   - Regras: `tokio` e `tokio-tungstenite`; `GET /ws/:code` com `Origin` igual à origem da base em uso (`https://espia.diuliano.com`, ou o valor de `ESPIA_SERVER` só em build de depuração; o esquema vira `ws://` ou `wss://` conforme a base); a primeira mensagem é `join` ou `resume` com `mediaProtocol: 2`; keep-alive com o `PING` exato `{"t":"ping"}` a cada 20 s; reconexão com retomada; cada código de fechamento vira o mesmo `SignalingEnd` do site (`not-found`, `full`, `replaced`, `kicked`, `deleted`, `removed`, `update` para 4426). Nunca manda `turn-refresh` (só STUN) e ignora entradas de `ice-servers` que não são STUN. Escrever os testes primeiro, com servidor WebSocket local falso.
@@ -184,7 +184,7 @@ description: "Task list for 019 — App nativo em Rust e convite no endereço of
 
 ### Arquivos do aparelho (`espia-shell`)
 
-- [ ] T024 [P] Arquivos do aparelho com escrita atômica (sonnet)
+- [X] T024 [P] Arquivos do aparelho com escrita atômica (sonnet)
   - Arquivos: `app/crates/espia-shell/src/storage.rs`.
   - Origem: `data-model.md` e R9; `src-tauri/src/tray.rs` (`parse_prefs`, `prefs_json`, campos `closeOnX` e `trayNoticeShown` de `tray.json`).
   - Regras: pasta `%APPDATA%\dev.espia.app\` (a base é parâmetro, para o teste usar pasta temporária). Ler e gravar `device.json`, `tray.json` (formato de hoje, reaproveitado), `window.json` (posição e tamanho) e `resume.json` (`{ "room": "<código>", "hidden": bool, "at": ms }`). Escrita atômica: gravar em arquivo temporário e renomear. Arquivo ausente ou inválido vira o padrão, sem erro. Nada vai ao servidor. Escrever os testes primeiro (ida e volta, arquivo corrompido, escrita interrompida não deixa arquivo pela metade).
@@ -192,47 +192,47 @@ description: "Task list for 019 — App nativo em Rust e convite no endereço of
 
 ### Interface base (`espia-ui`)
 
-- [ ] T025 `build.rs` dos tokens, fontes e ícones (sonnet)
+- [X] T025 `build.rs` dos tokens, fontes e ícones (sonnet)
   - Arquivos: `app/crates/espia-ui/build.rs`, `app/crates/espia-ui/ui/tokens.slint` (gerado pelo `build.rs` e listado no `.gitignore`), `app/crates/espia-ui/assets/` (fontes e ícones).
   - Origem: `src/ui/tokens.css` (cores, raios, sombras), `src/ui/base.css`, pacotes `@fontsource/caprasimo` e `@fontsource/figtree` já instalados em `node_modules` (pesos usados em `src/main.ts`: Caprasimo 400, Figtree 400, 600 e 700), ícones Lucide.
   - Regras: o `build.rs` lê `src/ui/tokens.css` e gera os valores para a Slint; se um token não puder ser lido, o build falha dizendo qual. Embutir as fontes nos pesos acima e os ícones Lucide usados como SVG. Cores só de tokens, nunca valor solto nas telas. Escrever primeiro um teste do leitor de tokens (em `espia-ui`, sem abrir janela).
   - Conferir: `cargo check -p espia-ui` passa; o arquivo gerado tem o mesmo número de tokens de cor que `tokens.css`.
-- [ ] T026 Componentes base em Slint (sonnet)
+- [X] T026 Componentes base em Slint (sonnet)
   - Arquivos: `app/crates/espia-ui/ui/components/{logo,mascot,avatar,avatar-stack,spinner,text-field,toast,toast-stack,buttons}.slint`.
   - Origem: `src/ui/components/{Logo,Mascot,Avatar,AvatarStack,Spinner,TextField,Toast,ToastStack}.svelte` e `src/ui/base.css` (classes `.btn`).
   - Regras: mesma aparência, mesmos tokens do T025, mesmos textos. Componentes só recebem dados por propriedades (view-models de `espia-core`), nunca chamam rede, captura ou mídia (regra IV). Cada componente tem uma cena na infra de dados falsos (T027).
   - Conferir: `cargo check -p espia-ui`; abrir o índice do mock (`npm run app:mock`) mostra os componentes sem erro.
-- [ ] T027 Infra de dados falsos: `--mock`, `--scene`, registro de cenas e índice (sonnet)
+- [X] T027 Infra de dados falsos: `--mock`, `--scene`, registro de cenas e índice (sonnet)
   - Arquivos: `app/crates/espia-ui/src/mocks/{mod.rs,registry.rs}`, `app/crates/espia-ui/ui/mock-index.slint`, `app/crates/espia-ui/ui/mock-switcher.slint`, `app/crates/espia/src/cli.rs`.
   - Origem: `src/mocks/registry.ts` (telas e cenas registradas), `src/mocks/MockIndex.svelte`, `src/mocks/MockSwitcher.svelte`, `contracts/dados-falsos.md`.
   - Regras: `Espia.exe --mock <tela> --scene <cena>`; `--mock` sozinho abre o índice. Telas: `home`, `join`, `room`, `notfound`, `offline` (a tela `mobile` e toda cena marcada `device: 'mobile'` ficam só no site). Tela ou cena que não existe abre o índice com uma linha no alto dizendo qual nome não existe, sem travar. `--mock` junto de um link de sala: vale o mock e o link é ignorado. O modo mock nunca abre rede, câmera nem captura. Escrever primeiro o teste do leitor de opções (`--mock`, `--scene`, link `espia://s/<código>` como argumento).
   - Conferir: `cargo test -p espia cli` passa; `npm run app:mock` abre o índice.
-- [ ] T028 [P] Tela inicial com dados falsos (sonnet)
+- [X] T028 [P] Tela inicial com dados falsos (sonnet)
   - Arquivos: `app/crates/espia-ui/ui/pages/home.slint`, `ui/components/{saved-rooms-panel,saved-room,delete-room-dialog}.slint`, `app/crates/espia-ui/src/mocks/home.rs`.
   - Origem: `src/ui/pages/HomePage.svelte`, `src/ui/components/{SavedRoomsPanel,SavedRoom,DeleteRoomDialog}.svelte`, `src/mocks/home.ts` (todas as cenas não marcadas `device: 'mobile'`, mesmos `id`: 13).
   - Regras: mesma disposição e mesmos textos ("Transmitir", sem "Go Live" nem "compartilhar"); Suas salas com no máximo 5 salas.
   - Conferir: `npm run app:mock -- home` abre cada cena de `src/mocks/home.ts`; `cargo check` passa.
-- [ ] T029 [P] Entrada com dados falsos (sonnet)
+- [X] T029 [P] Entrada com dados falsos (sonnet)
   - Arquivos: `app/crates/espia-ui/ui/pages/join.slint`, `ui/components/name-dialog.slint`, `app/crates/espia-ui/src/mocks/join.rs`.
   - Origem: `src/ui/pages/JoinPage.svelte`, `src/ui/components/NameDialog.svelte`, `src/mocks/join.ts` (cenas não marcadas `device: 'mobile'`: 5).
   - Regras: apelido até 24; no máximo os dois passos (apelido e entrar); mesmos textos.
   - Conferir: `npm run app:mock -- join` abre cada cena de `src/mocks/join.ts`; `cargo check` passa.
-- [ ] T030 [P] Sala não encontrada e sem conexão com dados falsos (sonnet)
+- [X] T030 [P] Sala não encontrada e sem conexão com dados falsos (sonnet)
   - Arquivos: `app/crates/espia-ui/ui/pages/notfound.slint`, `ui/pages/offline.slint`, `app/crates/espia-ui/src/mocks/notfound.rs`.
   - Origem: `src/ui/pages/NotFoundPage.svelte`, `src/mocks/notfound.ts` (cenas não marcadas `device: 'mobile'`: 4), `src-tauri/www/index.html` (tela de sem conexão, com "tentar de novo").
   - Regras: a tela de sem conexão entra como tela nova do mock, `offline`, com a cena `default` (registrada em `contracts/dados-falsos.md`).
   - Conferir: `npm run app:mock -- notfound` abre cada cena e `npm run app:mock -- offline` abre a tela de sem conexão.
-- [ ] T031 Sala com dados falsos, em dois lotes: estrutura e cenas (sonnet)
+- [X] T031 Sala com dados falsos, em dois lotes: estrutura e cenas (sonnet)
   - Arquivos: lote 1 (estrutura) `app/crates/espia-ui/ui/pages/room.slint` e `ui/components/{stage,stream-tile,participant,room-menu,live-badge,reconnect-pill,reconnect-fail,remove-dialog,media-diagnostics,permission-alert,update-required}.slint`; lote 2 (cenas) `app/crates/espia-ui/src/mocks/room.rs`.
   - Origem: `src/ui/pages/RoomPage.svelte` e `src/ui/components/{Stage,StreamTile,Participant,RoomMenu,LiveBadge,ReconnectPill,ReconnectFail,RemoveDialog,MediaDiagnostics,PermissionAlert,UpdateRequired}.svelte`; cenas de `src/mocks/room.ts` (o convite mostrado vem de `inviteUrl`, linha 308, e passa a ser `https://espia.diuliano.com/s/<código>`).
   - Regras: o lote 2 só começa depois do lote 1. Todas as cenas de `src/mocks/room.ts` entram, com os mesmos `id` (o teste do T033 confere). Tela cheia, janela flutuante e vídeo real ficam para as fases 4 e 5; aqui só os estados visuais.
   - Conferir: `npm run app:mock -- room` abre cada cena; `cargo check` passa.
-- [ ] T032 Seletor de transmissão com dados falsos (sonnet)
+- [X] T032 Seletor de transmissão com dados falsos (sonnet)
   - Arquivos: `app/crates/espia-ui/ui/components/{go-live-modal,source-card}.slint`; acrescentar as cenas do seletor em `app/crates/espia-ui/src/mocks/room.rs`.
   - Origem: `src/ui/components/{GoLiveModal,SourceCard}.svelte` e as cenas correspondentes de `src/mocks/room.ts`.
   - Regras: lista de telas e janelas com miniatura, selo "tocando", qualidade (720p ou 1080p; 30 ou 60 fps), opção de som e aviso de som indisponível, mesmos textos do site.
   - Conferir: `npm run app:mock -- room --scene <cena do seletor>` abre cada cena do seletor.
-- [ ] T033 Teste de paridade de cenas (sonnet)
+- [X] T033 Teste de paridade de cenas (sonnet)
   - Arquivos: `app/crates/espia-ui/tests/scene_parity.rs`.
   - Origem: `src/mocks/{home,join,room,notfound}.ts` (lidos como texto, a partir da raiz do repositório); `src/mocks/registry.ts`.
   - Regras: extrair todo `id` de cena desses quatro arquivos e conferir que existe no registro do app (T027); falhar listando os que faltam. O teste expande os seis ids `watch-*` gerados por `.map` em `src/mocks/room.ts` e pula toda cena marcada `device: 'mobile'` (`home`/`mobile`, `join`/`mobile`, `join`/`fixedmobile`, `notfound`/`mobile`). Conta esperada: home 13, join 5, room 47, notfound 4, total 69. Cenas só do app são permitidas (`home`/`update-available`, `home`/`update-minimum` e `offline`/`default`, T096 e T030).
@@ -240,17 +240,17 @@ description: "Task list for 019 — App nativo em Rust e convite no endereço of
 
 ### Esqueleto que anda (`espia`)
 
-- [ ] T034 Laço principal: Slint, `tokio`, estado e rotas (principal desenha, sonnet escreve)
+- [X] T034 Laço principal: Slint, `tokio`, estado e rotas (principal desenha, sonnet escreve)
   - Arquivos: `app/crates/espia/src/{main.rs,app.rs,router.rs,bind.rs}`.
   - Origem: `src/App.svelte` e `src/lib/router.svelte.ts` (rotas `home` e `room`); redutor do T021.
   - Regras: o principal define, num comentário no topo de `app.rs`, quem é dono do estado e como os efeitos do redutor viram chamadas a `espia-net`, `espia-media`, `espia-capture` e `espia-shell`. O endereço base do servidor é `https://espia.diuliano.com`; só em build de depuração a variável `ESPIA_SERVER` (exemplo `http://127.0.0.1:8787`) o troca, e o `Origin` segue a base em uso. A Slint roda na thread principal e o `tokio` em outra, ligados por canais; a tela só vê view-models de `espia-core` (nunca tipos de rede). O modo `--mock` continua sem rede.
   - Conferir: `cargo check` e `cargo test` em `app/` passam; `npm run app:dev` abre a janela com a tela inicial.
-- [ ] T035 Tela inicial real (sonnet)
+- [X] T035 Tela inicial real (sonnet)
   - Arquivos: `app/crates/espia/src/home.rs` (e o que a tela precisar em `espia-ui`, só view-models).
   - Origem: `src/routes/HomeRoute.svelte` (criação em torno da linha 185: sala fixa guarda a sala, copia o convite e usa `created: true`), `src/lib/saved-rooms.ts` (`rememberRoom`, `renameSaved`, `forgetRoom`, `buildSavedRooms`).
   - Regras: criar sala rápida e sala fixa (nome até 40); entrar por código ou link colado (`parseRoomId`); Suas salas com no máximo 5 salas e os números de pessoas e ao vivo de `fetchStatuses`; ao criar sala fixa, guardar a chave de dono em `device.json` e copiar o convite com o endereço oficial.
   - Conferir: `cargo test` passa; roteiro curto: criar sala rápida e fixa contra o site local e ver a sala no navegador.
-- [ ] T036 Entrada e sala sem mídia (sonnet)
+- [X] T036 Entrada e sala sem mídia (sonnet)
   - Arquivos: `app/crates/espia/src/room_screen.rs`.
   - Origem: `src/routes/RoomRoute.svelte` (usa `loadSavedRooms`, `forgetRoom`; sala vencida e não encontrada), `src/lib/api.ts` (`fetchPreview`), redutor do T021.
   - Regras: prévia de quem está na sala, apelido (até 24), entrar, lista de pessoas, sair, queda com volta sozinha (retomada pela sessão de `device.json`, válida por 24 h, `SESSION_MAX_AGE_MS`), sala cheia, sala não encontrada. Sem vídeo nem som ainda.
@@ -368,11 +368,11 @@ description: "Task list for 019 — App nativo em Rust e convite no endereço of
   - Origem: `src/lib/snapshot.ts` (`SNAPSHOT_MS = 5_000`, `SNAPSHOT_WIDTH = 320`, `fitWidth`, `grabSnapshot`), `test/lib/snapshot.test.ts`.
   - Regras: a cada 5 s uma imagem parada com largura 320 da própria transmissão, usada na lista de pessoas; ver a própria tela em destaque usa os quadros da captura, sem passar pela rede. Testes primeiro (porte de `fitWidth`).
   - Conferir: `cargo test` passa; no app, a própria transmissão aparece em destaque e como prévia.
-- [ ] T056 [US3] Placa de vídeo que não ajuda: transmite em qualidade menor e avisa (sonnet)
-  - Arquivos: `app/crates/espia-media/src/encoder_fallback.rs`; texto em `app/crates/espia-core/src/notices.rs`.
+- [ ] T056 [US3] Placa de vídeo que não ajuda: transmite pelo processador, sem aviso (sonnet)
+  - Arquivos: `app/crates/espia-media/src/publish.rs` (a escolha do caminho é o T033 da 020); nenhum texto novo.
   - Origem: FR-013 da `spec.md`; resultado do G1 (item f) em `relatorio.md`.
-  - Regras: se a codificação por placa não estiver disponível, transmitir pelo processador em qualidade menor (degrau definido no T053) e mostrar este aviso, com este texto exato (guardado em `notices.rs`): "Sua placa de vídeo não ajudou aqui. A transmissão vai numa qualidade menor." Nunca tela preta sem explicação.
-  - Conferir: `cargo test` passa (decisão pura testada); abrir o mock com a cena do aviso.
+  - Regras: se a compressão pela placa não estiver disponível, transmitir pelo processador na qualidade escolhida, com o ajuste automático do T053, **sem aviso e sem teto próprio** (decisão do dono em 2026-11-12; FR-014 e R18 da 020). A pessoa vê só o indicador de qualidade e a linha "Compressão" do Diagnóstico de mídia. Nunca tela preta sem explicação. O código é dos T032 e T033 da 020; aqui resta conferir.
+  - Conferir: `cargo test` passa; nenhuma tela mostra aviso sobre placa de vídeo.
 - [ ] T057 [US3] Parar, trocar de janela, transmitir de novo, sem sobra (sonnet)
   - Arquivos: `app/crates/espia/src/broadcast.rs`, `app/crates/espia-capture/src/mod.rs`.
   - Origem: trecho de `src/lib/stores/room.svelte.ts` que para e troca a captura; `src-tauri/src/capture/mod.rs`.
@@ -520,17 +520,17 @@ description: "Task list for 019 — App nativo em Rust e convite no endereço of
 
 > A parte de site (T080–T083) não depende da Phase 2 e pode sair junto com a Phase 3. A parte de app (T084–T086) depende da Phase 2 (T014, T019, T024) e do T085.
 
-- [ ] T080 [P] [US2] Teste de `origin-move` (sonnet)
+- [X] T080 [P] [US2] Teste de `origin-move` (sonnet)
   - Arquivos: criar `test/lib/origin-move.test.ts`.
   - Origem: `contracts/convite-e-endereco.md`; R12 do `research.md`; `src/lib/saved-rooms.ts` (`ROOM_ID_RE` vem de `src/lib/room-id.ts`).
   - Regras: casos de empacotar, desempacotar, juntar, validar, teto e idempotência: (a) pacote `{ "v": 1, "items": { "<chave>": "<valor cru>" } }` em base64url sem preenchimento `=`, teto de 16.384 caracteres do texto codificado; se passar, descarta nesta ordem `espia:session:*`, `espia:volume:*`, `espia:golive`, `espia:appinvite` (`espia:rooms`, `espia:owner:*` e `espia:nickname` sempre vão); se ainda passar, a ida acontece sem `#mv=` e nada é apagado no endereço antigo; (b) desempacotar pacote inválido devolve nada, sem erro; (c) junção só acrescenta, nunca troca valor existente (`espia:nickname`, `espia:golive`, `espia:volume:*`, `espia:owner:*`, `espia:session:*`, `espia:appinvite`); (d) `espia:rooms`: união por código, ordem por `lastUsed` do mais recente, corte em 5; no mesmo código dos dois lados fica a entrada de maior `lastUsed`, com o nome dela; chave de dono nunca descartada, mesmo de sala fora da lista; (e) validação: código `xxx-xxx`, chave de dono com 64 hex, nome de sala até 40, apelido até 24, volume entre 0 e 1; item inválido ignorado em silêncio; (f) repetir a junção não duplica nem apaga.
   - Conferir: o teste falha antes do T081 e fica verde depois.
-- [ ] T081 [US2] Criar `src/lib/origin-move.ts` (sonnet)
+- [X] T081 [US2] Criar `src/lib/origin-move.ts` (sonnet)
   - Arquivos: criar `src/lib/origin-move.ts`.
   - Origem: `src/lib/prefs.ts` (`KEY` das chaves `espia:*`), `src/lib/saved-rooms.ts` (`SAVED_ROOMS_MAX = 5` vem de `src/shared/protocol.ts`), `src/lib/room-id.ts` (`ROOM_ID_RE`).
   - Regras: funções puras (sem `window`): empacotar o `localStorage` num pacote `#mv=`, desempacotar e juntar, com as regras do T080. Faz o T080 passar.
   - Conferir: `npm test -- test/lib/origin-move.test.ts` verde; `npm run check` verde.
-- [ ] T082 [US2] `src/main.ts`: sair do endereço antigo e importar no oficial (sonnet)
+- [X] T082 [US2] `src/main.ts`: sair do endereço antigo e importar no oficial (sonnet)
   - Arquivos: `src/main.ts`.
   - Origem: R12; `src/main.ts` de hoje (monta `App` e chama `installDesktopHook`); `src/lib/desktop.ts` (detecção do app de antes por `'__TAURI_INTERNALS__' in window`).
   - Regras: antes de montar a aplicação: (1) no host antigo (`LEGACY_HOSTS` de `src/lib/site-origin.ts`), fora do app de antes (`'__TAURI_INTERNALS__' in window` é falso) e sem `?mock`: empacotar as chaves `espia:*` e `location.replace` para `https://espia.diuliano.com` + caminho + busca + `#mv=<base64url>`; (2) no oficial, se houver `#mv=`, desempacotar, juntar e limpar o fragmento com `history.replaceState`. Nunca navegar no app de antes (apps instalados dependem do endereço antigo, FR-006). Sem `localStorage` (janela anônima), navegar mesmo assim, sem pacote (cenário de borda). O fragmento não vai ao servidor (FR-005). O Worker não muda.

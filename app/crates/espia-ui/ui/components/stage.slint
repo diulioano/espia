@@ -1,0 +1,355 @@
+// O palco (porte de src/ui/components/Stage.svelte): conectando, ninguém ao vivo, uma transmissão, grade e foco com
+// faixa de miniaturas. Por cima: o aviso de reconexão, o "Não deu pra voltar", o alerta de permissão e os avisos
+// (canto de cima à direita). Lê o estado direto de `RoomState` e devolve as ações pelos callbacks dele.
+// O Esc (voltar da foco/da sua tela) é tratado na página, que tem o foco do teclado.
+
+import { Tokens } from "../tokens.slint";
+import { Tone } from "avatar.slint";
+import { Icons } from "icon.slint";
+import { Button, ButtonKind } from "buttons.slint";
+import { Heading } from "heading.slint";
+import { Mascot, MascotMood } from "mascot.slint";
+import { ToastStack, ToastPlacement } from "toast-stack.slint";
+import { StreamTile } from "stream-tile.slint";
+import { ReconnectPill } from "reconnect-pill.slint";
+import { ReconnectFail } from "reconnect-fail.slint";
+import { PermissionAlert } from "permission-alert.slint";
+import { LinkMode, RoomState, StageMode, TileData, TileKind } from "room-state.slint";
+
+// Borda tracejada de 2px (a Slint não tem `border-style: dashed`): traços de 6px com 6px de vão nos lados e o arco
+// cheio nos cantos. Serve ao "Clique numa tela pra focar".
+component DashedBox inherits Rectangle {
+    in property <length> radius: 22px;
+    in property <color> stroke: Tokens.color-text.with-alpha(0.12);
+
+    property <length> r: root.radius;
+    property <int> nh: floor((root.width - 2 * root.r) / 12px) + 1;
+    property <int> nv: floor((root.height - 2 * root.r) / 12px) + 1;
+
+    for i in root.nh: Rectangle {
+        x: root.r + i * 12px;
+        y: 0px;
+        width: min(6px, root.width - root.r - self.x);
+        height: 2px;
+        background: root.stroke;
+    }
+    for i in root.nh: Rectangle {
+        x: root.r + i * 12px;
+        y: root.height - 2px;
+        width: min(6px, root.width - root.r - self.x);
+        height: 2px;
+        background: root.stroke;
+    }
+    for i in root.nv: Rectangle {
+        x: 0px;
+        y: root.r + i * 12px;
+        width: 2px;
+        height: min(6px, root.height - root.r - self.y);
+        background: root.stroke;
+    }
+    for i in root.nv: Rectangle {
+        x: root.width - 2px;
+        y: root.r + i * 12px;
+        width: 2px;
+        height: min(6px, root.height - root.r - self.y);
+        background: root.stroke;
+    }
+    // cantos (arco de um quarto de volta, centrado a 1px da borda)
+    Path {
+        x: 0px;
+        y: 0px;
+        width: root.r;
+        height: root.r;
+        viewbox-width: 22;
+        viewbox-height: 22;
+        commands: "M 1 22 A 21 21 0 0 1 22 1";
+        stroke: root.stroke;
+        stroke-width: 2px;
+    }
+    Path {
+        x: root.width - root.r;
+        y: 0px;
+        width: root.r;
+        height: root.r;
+        viewbox-width: 22;
+        viewbox-height: 22;
+        commands: "M 0 1 A 21 21 0 0 1 21 22";
+        stroke: root.stroke;
+        stroke-width: 2px;
+    }
+    Path {
+        x: 0px;
+        y: root.height - root.r;
+        width: root.r;
+        height: root.r;
+        viewbox-width: 22;
+        viewbox-height: 22;
+        commands: "M 1 0 A 21 21 0 0 0 22 21";
+        stroke: root.stroke;
+        stroke-width: 2px;
+    }
+    Path {
+        x: root.width - root.r;
+        y: root.height - root.r;
+        width: root.r;
+        height: root.r;
+        viewbox-width: 22;
+        viewbox-height: 22;
+        commands: "M 0 21 A 21 21 0 0 0 21 0";
+        stroke: root.stroke;
+        stroke-width: 2px;
+    }
+}
+
+export component Stage inherits Rectangle {
+    // Largura da coluna de avisos (o alerta de permissão, quando há, é o mais largo: 480px).
+    property <length> grid-pad: 20px;
+    property <length> grid-gap: 16px;
+    property <length> cell-w: (root.width - 2 * root.grid-pad - (RoomState.cols - 1) * root.grid-gap) / RoomState.cols;
+    property <length> cell-h: (root.height - 2 * root.grid-pad - (RoomState.rows - 1) * root.grid-gap) / RoomState.rows;
+    property <int> n: RoomState.tiles.length;
+
+    border-radius: Tokens.radius-stage;
+    background: Tokens.color-stage;
+    clip: true;
+    accessible-role: none;
+    accessible-label: "Palco";
+
+    // ---- conectando ----
+    if RoomState.stage == StageMode.connecting: VerticalLayout {
+        alignment: center;
+        spacing: 18px;
+        HorizontalLayout {
+            alignment: center;
+            Rectangle {
+                width: 120px;
+                height: 120px * 1.12;
+                Mascot {
+                    mood: MascotMood.loading;
+                    size: 120px;
+                }
+            }
+        }
+        Text {
+            text: "Entrando na sala…";
+            font-family: Tokens.font-heading;
+            font-size: 26px;
+            color: Tokens.color-text;
+            horizontal-alignment: center;
+        }
+        Text {
+            text: "Conectando com quem já está lá.";
+            font-family: Tokens.font-body;
+            font-size: 15px;
+            color: Tokens.color-text-muted;
+            horizontal-alignment: center;
+        }
+    }
+
+    // ---- ninguém ao vivo (ou só você) ----
+    // .blob-a e .blob-b
+    if RoomState.stage == StageMode.empty: Rectangle {
+        x: root.width + 90px - 440px;
+        y: -120px;
+        width: 440px;
+        height: 440px;
+        border-radius: 220px;
+        background: Tokens.color-accent.with-alpha(0.1);
+    }
+    if RoomState.stage == StageMode.empty: Rectangle {
+        x: root.width - 180px - 280px;
+        y: root.height + 140px - 280px;
+        width: 280px;
+        height: 280px;
+        border-radius: 140px;
+        background: Tokens.color-accent-2.with-alpha(0.12);
+    }
+    // .castor: right 12%, bottom -70px, girado -6 graus
+    if RoomState.stage == StageMode.empty: Mascot {
+        x: root.width * 0.88 - 220px;
+        y: root.height + 70px - 220px * 1.12;
+        mood: RoomState.broadcasting ? MascotMood.live : MascotMood.sleepy;
+        size: 220px;
+        transform-rotation: -6deg;
+    }
+    if RoomState.stage == StageMode.empty: VerticalLayout {
+        alignment: center;
+        spacing: 20px;
+        padding-left: root.width * 0.09;
+        padding-right: root.width * 0.09;
+        Heading {
+            max-width: 560px;
+            text: RoomState.broadcasting ? "Sua tela está no ar." : "Ninguém ao vivo ainda.";
+            size: 52px;
+            line: 1.05;
+        }
+        Text {
+            max-width: 460px;
+            text: RoomState.broadcasting
+                ? "Ela não aparece aqui pra não virar um espelho infinito — a prévia fica na barra do lado. Clique nela pra ver grande."
+                : "Clique em Transmitir pra mostrar sua tela — ou mande o convite e espere alguém começar.";
+            font-family: Tokens.font-body;
+            font-size: 18px;
+            color: Tokens.color-text.with-alpha(0.68);
+            wrap: word-wrap;
+        }
+        if !RoomState.broadcasting && RoomState.can-share: HorizontalLayout {
+            alignment: start;
+            padding-top: 6px;
+            Button {
+                kind: ButtonKind.primary;
+                label: "Transmitir";
+                icon: Icons.monitor-up;
+                icon-size: 20px;
+                font-size: 18px;
+                pad-v: 15px;
+                pad-h: 26px;
+                clicked => { RoomState.open-go-live(); }
+            }
+        }
+    }
+
+    // ---- uma transmissão: o palco todo ----
+    if RoomState.stage == StageMode.single && RoomState.tiles.length > 0: StreamTile {
+        x: 0px;
+        y: 0px;
+        width: root.width;
+        height: root.height;
+        data: RoomState.tiles[0];
+        kind: TileKind.stage;
+        radius: Tokens.radius-stage;
+        toggle-mute => { RoomState.toggle-mute(RoomState.tiles[0].id); }
+        volume(v) => { RoomState.set-volume(RoomState.tiles[0].id, v); }
+        retry => { RoomState.retry(RoomState.tiles[0].id); }
+        watch(on) => { RoomState.watch(RoomState.tiles[0].id, on); }
+        pip(on) => { RoomState.pip(RoomState.tiles[0].id, on); }
+    }
+
+    // ---- grade ----
+    if RoomState.stage == StageMode.grid: Rectangle {
+        for t[i] in RoomState.tiles: StreamTile {
+            x: root.grid-pad + mod(i, RoomState.cols) * (root.cell-w + root.grid-gap);
+            y: root.grid-pad + floor(i / RoomState.cols) * (root.cell-h + root.grid-gap);
+            width: root.cell-w;
+            height: root.cell-h;
+            data: t;
+            kind: TileKind.grid;
+            clickable: true;
+            select => { RoomState.focus(t.id); }
+            toggle-mute => { RoomState.toggle-mute(t.id); }
+            volume(v) => { RoomState.set-volume(t.id, v); }
+            retry => { RoomState.retry(t.id); }
+            watch(on) => { RoomState.watch(t.id, on); }
+            pip(on) => { RoomState.pip(t.id, on); }
+        }
+        if RoomState.grid-hint: Rectangle {
+            x: root.grid-pad + mod(root.n, RoomState.cols) * (root.cell-w + root.grid-gap);
+            y: root.grid-pad + floor(root.n / RoomState.cols) * (root.cell-h + root.grid-gap);
+            width: root.cell-w;
+            height: root.cell-h;
+            DashedBox {
+                radius: Tokens.radius-tile;
+            }
+            VerticalLayout {
+                alignment: end;
+                spacing: 4px;
+                padding: 24px;
+                Text {
+                    text: "Clique numa tela pra focar";
+                    font-family: Tokens.font-heading;
+                    font-size: 20px;
+                    color: Tokens.color-text;
+                    wrap: word-wrap;
+                }
+                Text {
+                    text: "As outras vão pra faixa de baixo.";
+                    font-family: Tokens.font-body;
+                    font-size: 14px;
+                    color: Tokens.color-text-muted;
+                    wrap: word-wrap;
+                }
+            }
+        }
+    }
+
+    // ---- foco: a escolhida grande e as outras na faixa ----
+    if RoomState.stage == StageMode.focus: Rectangle {
+        StreamTile {
+            x: 14px;
+            y: 14px;
+            width: root.width - 28px;
+            height: root.height - 28px - 14px - 113px;
+            data: RoomState.focused-tile;
+            kind: TileKind.stage;
+            focused: true;
+            radius: 24px;
+            toggle-mute => { RoomState.toggle-mute(RoomState.focused-tile.id); }
+            volume(v) => { RoomState.set-volume(RoomState.focused-tile.id, v); }
+            retry => { RoomState.retry(RoomState.focused-tile.id); }
+            watch(on) => { RoomState.watch(RoomState.focused-tile.id, on); }
+            pip(on) => { RoomState.pip(RoomState.focused-tile.id, on); }
+        }
+        for t[i] in RoomState.strip: StreamTile {
+            x: 14px + i * (200px + 12px);
+            y: root.height - 14px - 113px;
+            width: 200px;
+            height: 113px;
+            data: t;
+            kind: TileKind.thumb;
+            clickable: true;
+            select => { RoomState.focus(t.id); }
+            retry => { RoomState.retry(t.id); }
+            watch(on) => { RoomState.watch(t.id, on); }
+            pip(on) => { RoomState.pip(t.id, on); }
+        }
+        Text {
+            x: 14px + RoomState.strip.length * (200px + 12px) + 8px;
+            y: root.height - 14px - 113px;
+            height: 113px;
+            text: "Clique pra trocar · Esc volta pra grade";
+            font-family: Tokens.font-body;
+            font-size: 13px;
+            color: Tokens.color-text.with-alpha(0.55);
+            vertical-alignment: center;
+        }
+    }
+
+    // ---- queda: o palco continua por baixo ----
+    if RoomState.link == LinkMode.reconnecting: ReconnectPill {
+        x: (root.width - self.width) / 2;
+        y: 20px;
+        z: 4;
+    }
+    if RoomState.link == LinkMode.failed: ReconnectFail {
+        x: 0px;
+        y: 0px;
+        width: root.width;
+        height: root.height;
+        z: 5;
+        retry => { RoomState.retry-connection(); }
+        leave => { RoomState.leave(); }
+    }
+
+    // ---- canto de cima à direita: o alerta em cima, os avisos embaixo ----
+    VerticalLayout {
+        x: 24px;
+        y: 24px;
+        width: root.width - 48px;
+        height: self.preferred-height;
+        z: 5;
+        spacing: RoomState.permission-denied && RoomState.toasts.length > 0 ? 10px : 0px;
+        if RoomState.permission-denied: HorizontalLayout {
+            alignment: end;
+            PermissionAlert {
+                retry => { RoomState.open-go-live(); }
+                dismiss => { RoomState.dismiss-permission(); }
+            }
+        }
+        ToastStack {
+            toasts: RoomState.toasts;
+            placement: ToastPlacement.inline;
+            action-clicked(id) => { RoomState.toast-action(id); }
+            dismissed(id) => { RoomState.dismiss-toast(id); }
+        }
+    }
+}

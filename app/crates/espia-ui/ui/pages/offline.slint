@@ -1,0 +1,64 @@
+// Sem conexão com o Espia. Porte da tela local do app (src-tauri/www/index.html + loader.css, estado "offline"):
+// castor de 120px, título de 22px, uma linha de ajuda e o botão "Tentar de novo". Tudo centrado.
+// A tela só devolve `retry`; quem decide tentar de novo é o shell.
+
+import { Tokens } from "../tokens.slint";
+import { Mascot, MascotAnimate, MascotMood } from "../components/mascot.slint";
+import { Button, ButtonKind } from "../components/buttons.slint";
+
+export global OfflineState {
+    callback retry();
+}
+
+export component OfflinePage inherits Rectangle {
+    background: Tokens.color-bg;
+
+    // main: coluna centrada, gap 12 (a Slint não tem "place-items: center" em coluna inteira, então um layout só).
+    VerticalLayout {
+        alignment: center;
+        padding: 24px;
+        spacing: 12px;
+
+        // O castor ocupa 120 x 126 no SVG original (viewBox 760 x 800); o Mascot tem caixa size x size * 1.12.
+        HorizontalLayout {
+            alignment: center;
+            Mascot {
+                mood: MascotMood.happy;
+                size: 120px;
+                animate: MascotAnimate.blink;
+            }
+        }
+        // .offline: coluna centrada, gap 4; o h1 tem margem de cima de 8px.
+        VerticalLayout {
+            spacing: 4px;
+            padding-top: 8px;
+            Text {
+                text: "Sem conexão com o Espia";
+                font-family: Tokens.font-body;
+                font-weight: 700;
+                font-size: 22px;
+                color: Tokens.color-text;
+                horizontal-alignment: center;
+            }
+            Text {
+                text: "Confere a internet e tenta de novo.";
+                font-family: Tokens.font-body;
+                font-size: 15px;
+                color: Tokens.color-text-muted;
+                horizontal-alignment: center;
+            }
+            // O botão tem margem de cima de 12px (além do gap de 4px).
+            HorizontalLayout {
+                alignment: center;
+                padding-top: 12px;
+                Button {
+                    kind: ButtonKind.primary;
+                    label: "Tentar de novo";
+                    pad-v: 10px;
+                    pad-h: 22px;
+                    clicked => { OfflineState.retry(); }
+                }
+            }
+        }
+    }
+}

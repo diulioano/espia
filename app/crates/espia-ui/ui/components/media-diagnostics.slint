@@ -1,0 +1,91 @@
+// Diagnóstico da transmissão (porte de src/ui/components/MediaDiagnostics.svelte): painel no canto de baixo à direita,
+// aberto com Ctrl+Shift+D e fechado com Esc ou "Fechar". Só para este aparelho. As linhas (`DiagLine`) vêm do shell:
+// uma linha sem valor é título/parágrafo, com valor é par rótulo/valor. Sem linhas: "Aguardando estatísticas da conexão.".
+// As cores do site (#1c1b17, #777...) são soltas; aqui usam os tokens parecidos.
+
+import { Tokens } from "../tokens.slint";
+import { Button, ButtonKind } from "buttons.slint";
+import { DiagLine } from "room-state.slint";
+
+export component MediaDiagnostics inherits Rectangle {
+    in property <[DiagLine]> lines;
+    callback close();
+
+    width: 440px;
+    height: col.preferred-height;
+    border-radius: 12px;
+    background: Tokens.color-surface;
+    border-width: 1px;
+    border-color: Tokens.color-text.with-alpha(0.45);
+    drop-shadow-color: Tokens.shadow-lg-color;
+    drop-shadow-offset-y: 8px;
+    drop-shadow-blur: 32px;
+    accessible-role: none;
+    accessible-label: "Diagnóstico da transmissão";
+
+    // Come o clique: não passa para a sala.
+    TouchArea { }
+
+    col := VerticalLayout {
+        padding: 18px;
+        spacing: 8px;
+        HorizontalLayout {
+            spacing: 12px;
+            Text {
+                horizontal-stretch: 1;
+                text: "Diagnóstico da transmissão";
+                font-family: Tokens.font-body;
+                font-size: 14px;
+                font-weight: 700;
+                color: Tokens.color-text;
+                vertical-alignment: center;
+            }
+            Button {
+                kind: ButtonKind.plain;
+                label: "Fechar";
+                clicked => { root.close(); }
+            }
+        }
+        Text {
+            text: "Somente neste aparelho · atualização a cada segundo · Ctrl+Shift+D para alternar";
+            font-family: Tokens.font-body;
+            font-size: 12px;
+            color: Tokens.color-text.with-alpha(0.7);
+            wrap: word-wrap;
+        }
+        if root.lines.length == 0: Text {
+            text: "Aguardando estatísticas da conexão.";
+            font-family: Tokens.font-body;
+            font-size: 12px;
+            color: Tokens.color-text.with-alpha(0.7);
+            wrap: word-wrap;
+        }
+        for line in root.lines: HorizontalLayout {
+            spacing: 12px;
+            Text {
+                horizontal-stretch: 1;
+                text: line.label;
+                font-family: Tokens.font-body;
+                font-size: line.value == "" ? 14px : 13px;
+                font-weight: line.value == "" ? 700 : 400;
+                color: line.value == "" ? Tokens.color-text : Tokens.color-text.with-alpha(0.7);
+                wrap: word-wrap;
+            }
+            if line.value != "": Text {
+                horizontal-stretch: 1;
+                text: line.value;
+                font-family: Tokens.font-body;
+                font-size: 13px;
+                color: Tokens.color-text;
+                wrap: word-wrap;
+            }
+        }
+        Text {
+            text: "“—” significa dado indisponível. RTT e buffer não medem o atraso ponta a ponta.";
+            font-family: Tokens.font-body;
+            font-size: 12px;
+            color: Tokens.color-text.with-alpha(0.7);
+            wrap: word-wrap;
+        }
+    }
+}

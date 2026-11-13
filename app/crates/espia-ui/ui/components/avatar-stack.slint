@@ -1,0 +1,36 @@
+// Pilha de avatares. Porte de src/ui/components/AvatarStack.svelte: cada um com um anel de 3px
+// na cor do fundo, sobrepostos em 10px.
+
+import { Avatar, AvatarData } from "avatar.slint";
+import { Tokens } from "../tokens.slint";
+
+export component AvatarStack inherits Rectangle {
+    in property <[AvatarData]> people;
+    in property <length> size: 44px;
+    // Cor do anel: a do fundo onde a pilha está (padrão: surface).
+    in property <color> ring: Tokens.color-surface;
+
+    property <length> passo: root.size - 10px;
+
+    width: root.people.length > 0 ? root.size + (root.people.length - 1) * root.passo : 0px;
+    height: root.size;
+
+    for p[i] in root.people: Rectangle {
+        x: i * root.passo;
+        width: root.size;
+        height: root.size;
+        Rectangle {
+            x: -3px;
+            y: -3px;
+            width: root.size + 6px;
+            height: root.size + 6px;
+            border-radius: self.width / 2;
+            background: root.ring;
+        }
+        Avatar {
+            letter: p.letter;
+            tone: p.tone;
+            size: root.size;
+        }
+    }
+}

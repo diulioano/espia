@@ -1,0 +1,136 @@
+// Convite para baixar o app (porte de src/ui/components/AppInvite.svelte): castor espiando, o convite ("offer") ou a dica
+// de depois de baixar ("hint"). Fica abaixo de "Tem um link?", com 480px, borda fina e fundo surface a 70%.
+
+import { Tokens } from "../tokens.slint";
+import { Mascot, MascotMood } from "mascot.slint";
+import { Button, ButtonKind, IconButton } from "buttons.slint";
+import { Icons } from "icon.slint";
+
+export enum InviteKind { none, offer, hint }
+
+export component AppInvite inherits Rectangle {
+    in property <InviteKind> kind: InviteKind.offer;
+    callback download();
+    callback dismiss();
+
+    preferred-width: 480px;
+    max-width: 480px;
+    preferred-height: row.preferred-height;
+    border-radius: Tokens.radius-tile;
+    border-width: 1px;
+    border-color: Tokens.color-divider;
+    background: Tokens.color-surface.with-alpha(0.7);
+    accessible-role: none;
+    accessible-label: "App do Espia para Windows";
+
+    row := HorizontalLayout {
+        padding-left: 16px;
+        padding-right: root.kind == InviteKind.hint ? 46px : 16px;
+        padding-top: 14px;
+        padding-bottom: 14px;
+        spacing: 14px;
+        VerticalLayout {
+            alignment: start;
+            padding-top: 2px;
+            Rectangle {
+                width: 44px;
+                height: 44px * 1.12;
+                Mascot {
+                    mood: MascotMood.peek;
+                    size: 44px;
+                }
+            }
+        }
+        if root.kind == InviteKind.offer: VerticalLayout {
+            spacing: 4px;
+            alignment: start;
+            Text {
+                text: "Tem Windows? Baixe o app do Espia";
+                font-family: Tokens.font-body;
+                font-size: 15px;
+                font-weight: 700;
+                color: Tokens.color-text;
+                wrap: word-wrap;
+            }
+            Text {
+                text: "Escolha a janela numa grade com prévias, som sem vazar o Discord e feche sem sair da sala.";
+                font-family: Tokens.font-body;
+                font-size: 13px;
+                color: Tokens.color-text-muted;
+                wrap: word-wrap;
+            }
+            HorizontalLayout {
+                padding-top: 8px;
+                spacing: 6px;
+                alignment: start;
+                Button {
+                    kind: ButtonKind.secondary;
+                    label: "Baixar o app";
+                    icon: Icons.download;
+                    font-size: 14px;
+                    pad-h: 16px;
+                    min-height: 36px;
+                    max-height: 36px;
+                    pad-v: 0px;
+                    clicked => { root.download(); }
+                }
+                Button {
+                    kind: ButtonKind.ghost;
+                    label: "Agora não";
+                    font-size: 14px;
+                    pad-h: 14px;
+                    min-height: 36px;
+                    max-height: 36px;
+                    pad-v: 0px;
+                    clicked => { root.dismiss(); }
+                }
+            }
+        }
+        if root.kind == InviteKind.hint: VerticalLayout {
+            spacing: 4px;
+            alignment: start;
+            Text {
+                text: "Baixando…";
+                font-family: Tokens.font-body;
+                font-size: 15px;
+                font-weight: 700;
+                color: Tokens.color-text;
+            }
+            StyledText {
+                text: @markdown("Se o Windows avisar que protegeu o computador, clique em **Mais informações** → **Executar assim mesmo**.");
+                default-font-family: Tokens.font-body;
+                default-font-size: 13px;
+                default-color: Tokens.color-text-muted;
+            }
+            HorizontalLayout {
+                padding-top: 4px;
+                alignment: start;
+                Rectangle {
+                    preferred-width: again.preferred-width;
+                    preferred-height: again.preferred-height;
+                    again := Text {
+                        text: "Não baixou? Tente de novo";
+                        font-family: Tokens.font-body;
+                        font-size: 13px;
+                        color: Tokens.color-accent-400;
+                    }
+                    TouchArea {
+                        mouse-cursor: pointer;
+                        clicked => { root.download(); }
+                    }
+                }
+            }
+        }
+    }
+
+    // Só na dica: o "X" de fechar no canto de cima à direita (28 x 28, a 10px das bordas).
+    if root.kind == InviteKind.hint: IconButton {
+        x: root.width - 10px - self.width;
+        y: 10px;
+        icon: Icons.x;
+        icon-size: 16px;
+        size: 28px;
+        label: "Fechar";
+        clicked => { root.dismiss(); }
+    }
+}

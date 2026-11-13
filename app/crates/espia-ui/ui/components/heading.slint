@@ -1,0 +1,33 @@
+// Título em Caprasimo com a altura de linha do site. O CSS usa `line-height: 1` (ou 1.05) nos títulos; a Slint não
+// tem line-height e usa a altura natural da fonte (1,147 do corpo: (1880 + 469) / 2048 no Caprasimo). Este
+// componente tira da altura do bloco a folga de cima e de baixo, para o título ocupar o mesmo espaço que no site.
+// O espaço entre linhas de um título que quebra continua o da fonte (as linhas ficam um pouco mais afastadas).
+
+import { Tokens } from "../tokens.slint";
+
+export component Heading inherits Rectangle {
+    in property <string> text;
+    in property <length> size: 40px;
+    // Altura de linha do CSS (1 ou 1.05).
+    in property <float> line: 1;
+    // letter-spacing do CSS já em px (-0.015em = -0.015 * size).
+    in property <length> tracking: 0px;
+    in property <color> fg: Tokens.color-text;
+
+    property <length> trim: max(0px, (1.147 - root.line) * root.size);
+
+    preferred-height: t.preferred-height - root.trim;
+    min-height: t.preferred-height - root.trim;
+
+    t := Text {
+        x: 0px;
+        y: -root.trim / 2;
+        width: root.width;
+        text: root.text;
+        font-family: Tokens.font-heading;
+        font-size: root.size;
+        letter-spacing: root.tracking;
+        color: root.fg;
+        wrap: word-wrap;
+    }
+}

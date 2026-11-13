@@ -1,0 +1,242 @@
+// Peças pequenas da sala: ícone, selo AO VIVO, avatar, botões, castor e logo.
+// Cada uma espelha o componente Svelte de mesmo nome em src/ui/components/.
+
+import { Tokens } from "tokens.slint";
+
+// Fontes embutidas (TTF convertido de @fontsource, ver LEIA-ME.md). Importar registra a fonte na Slint.
+import "../assets/fonts/Caprasimo-Regular.ttf";
+import "../assets/fonts/Figtree-Regular.ttf";
+import "../assets/fonts/Figtree-SemiBold.ttf";
+import "../assets/fonts/Figtree-Bold.ttf";
+
+// Ícone Lucide (SVG, traço 2.75 como no site) pintado numa cor só.
+export component Icon inherits Rectangle {
+    in property <image> source;
+    in property <length> size: 16px;
+    in property <color> tint: Tokens.color-text;
+    width: size;
+    min-height: size;
+    Image {
+        source: root.source;
+        colorize: root.tint;
+        width: root.size;
+        height: root.size;
+        y: (parent.height - self.height) / 2;
+        image-fit: contain;
+    }
+}
+
+// Bolinha centrada na altura da linha (a Slint não centra item de altura fixa sozinha).
+component Dot inherits Rectangle {
+    in property <length> d: 6px;
+    in property <color> c: Tokens.color-accent-900;
+    width: d;
+    Rectangle {
+        width: root.d;
+        height: root.d;
+        y: (parent.height - root.d) / 2;
+        background: root.c;
+        border-radius: root.d / 2;
+    }
+}
+
+// LiveBadge.svelte (tamanho sm): 10px/700, espaço de letras 0.08em, padding 3 8, bolinha 6.
+// A casca é uma coluna que centra a pílula na altura e a impede de esticar dentro de outras linhas.
+export component LiveBadge inherits VerticalLayout {
+    alignment: center;
+    horizontal-stretch: 0;
+    min-width: pill.width;
+    max-width: pill.width;
+    pill := Rectangle {
+        background: Tokens.color-accent;
+        border-radius: self.height / 2;
+        width: inner.preferred-width;
+        height: inner.preferred-height;
+        inner := HorizontalLayout {
+            padding-left: 8px;
+            padding-right: 8px;
+            padding-top: 3px;
+            padding-bottom: 3px;
+            spacing: 5px;
+            Dot { }
+            Text {
+                text: "AO VIVO";
+                font-size: 10px;
+                font-weight: 700;
+                letter-spacing: 0.8px;
+                color: Tokens.color-accent-900;
+                vertical-alignment: center;
+            }
+        }
+    }
+}
+
+// Avatar.svelte: círculo com a inicial em Caprasimo; "live" põe o anel (0 0 0 2px bg, 0 0 0 4px accent).
+export component Avatar inherits Rectangle {
+    in property <string> letter;
+    in property <color> bg;
+    in property <color> fg;
+    in property <bool> live;
+    in property <length> size: 38px;
+    width: size;
+    height: size;
+    if root.live: Rectangle {
+        x: -4px;
+        y: -4px;
+        width: root.size + 8px;
+        height: root.size + 8px;
+        border-radius: self.width / 2;
+        background: Tokens.color-accent;
+    }
+    if root.live: Rectangle {
+        x: -2px;
+        y: -2px;
+        width: root.size + 4px;
+        height: root.size + 4px;
+        border-radius: self.width / 2;
+        background: Tokens.color-bg;
+    }
+    Rectangle {
+        width: root.size;
+        height: root.size;
+        border-radius: root.size / 2;
+        background: root.bg;
+        Text {
+            text: root.letter;
+            font-family: Tokens.font-heading;
+            font-size: root.size * 0.45;
+            color: root.fg;
+            horizontal-alignment: center;
+            vertical-alignment: center;
+        }
+    }
+}
+
+// Botão em pílula (.btn do base.css): Caprasimo, ícone opcional, cor e borda por quem usa.
+export component Btn inherits Rectangle {
+    in property <string> label;
+    in property <image> icon;
+    in property <length> icon-size: 16px;
+    in property <color> fg: Tokens.color-text;
+    in property <length> font-size: 15px;
+    in property <length> pad-v: 12px;
+    in property <length> pad-h: 20px;
+    border-radius: self.height / 2;
+    border-width: 1px;
+    border-color: transparent;
+    preferred-width: inner.preferred-width;
+    preferred-height: inner.preferred-height;
+    inner := HorizontalLayout {
+        padding-left: root.pad-h;
+        padding-right: root.pad-h;
+        padding-top: root.pad-v;
+        padding-bottom: root.pad-v;
+        spacing: 8px;
+        alignment: center;
+        Icon {
+            source: root.icon;
+            size: root.icon-size;
+            tint: root.fg;
+        }
+        Text {
+            text: root.label;
+            font-family: Tokens.font-heading;
+            font-size: root.font-size;
+            color: root.fg;
+            vertical-alignment: center;
+        }
+    }
+}
+
+// Mascot.svelte (humor "happy", sem o balanço): formas em % de uma caixa size x size*1.12.
+// Cores do olho, nariz e dentes vêm do próprio Mascot.svelte (não são tokens).
+export component Mascot inherits Rectangle {
+    in property <length> size: 32px;
+    in property <bool> eyes-open: true;
+    width: size;
+    height: size * 1.12;
+    // orelhas
+    Rectangle {
+        x: root.width * 0.08;
+        y: root.height * 0.06;
+        width: root.width * 0.24;
+        height: root.height * 0.22;
+        border-radius: self.height / 2;
+        background: Tokens.color-accent-700;
+    }
+    Rectangle {
+        x: root.width * 0.68;
+        y: root.height * 0.06;
+        width: root.width * 0.24;
+        height: root.height * 0.22;
+        border-radius: self.height / 2;
+        background: Tokens.color-accent-700;
+    }
+    // cabeça: border-radius 50% 50% 46% 46% / 58% 58% 42% 42% (cantos elípticos, só dá com Path)
+    Path {
+        x: 0px;
+        y: root.height * 0.13;
+        width: root.width;
+        height: root.height * 0.87;
+        viewbox-width: 100;
+        viewbox-height: 87;
+        commands: "M 50 0 A 50 50.46 0 0 1 100 50.46 A 46 36.54 0 0 1 54 87 L 46 87 A 46 36.54 0 0 1 0 50.46 A 50 50.46 0 0 1 50 0 Z";
+        fill: Tokens.color-accent-700;
+    }
+    // olhos
+    for left in [26, 63]: Rectangle {
+        x: root.width * left / 100;
+        y: root.height * 0.41 + (root.height * 0.10 - self.height) / 2;
+        width: root.width * 0.11;
+        height: root.eyes-open ? root.height * 0.10 : 1px;
+        border-radius: self.width / 2;
+        background: #201e1d;
+        animate height { duration: 70ms; }
+    }
+    // nariz
+    Rectangle {
+        x: root.width * 0.42;
+        y: root.height * 0.57;
+        width: root.width * 0.16;
+        height: root.height * 0.08;
+        border-radius: self.height / 2;
+        background: #201e1d;
+    }
+    // dentes: dois, juntos, cantos de baixo redondos
+    Rectangle {
+        x: root.width * 0.435;
+        y: root.height * 0.66;
+        width: root.width * 0.065 - 0.5px;
+        height: root.height * 0.10;
+        border-bottom-left-radius: self.width / 2;
+        border-bottom-right-radius: self.width / 2;
+        background: #fdf6ec;
+    }
+    Rectangle {
+        x: root.width * 0.435 + root.width * 0.065 + 0.5px;
+        y: root.height * 0.66;
+        width: root.width * 0.065 - 0.5px;
+        height: root.height * 0.10;
+        border-bottom-left-radius: self.width / 2;
+        border-bottom-right-radius: self.width / 2;
+        background: #fdf6ec;
+    }
+}
+
+// Logo.svelte (size 32): castor + palavra em Caprasimo 26px, gap 10.
+export component Logo inherits HorizontalLayout {
+    in property <bool> eyes-open: true;
+    spacing: 10px;
+    alignment: start;
+    Mascot {
+        size: 32px;
+        eyes-open: root.eyes-open;
+    }
+    Text {
+        text: "Espia";
+        font-family: Tokens.font-heading;
+        font-size: 26px;
+        color: Tokens.color-text;
+        vertical-alignment: center;
+    }
+}

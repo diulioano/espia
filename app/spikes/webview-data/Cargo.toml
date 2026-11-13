@@ -1,0 +1,11 @@
+[package]
+name = "espia-webview-data-probe"
+version = "0.0.0"
+edition = "2021"
+publish = false
+
+[dependencies]
+rusty-leveldb = "3"
+
+# Crate isolada: não entra no workspace de app/.
+[workspace]

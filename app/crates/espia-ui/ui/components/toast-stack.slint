@@ -1,0 +1,50 @@
+// Pilha de avisos. Porte de src/ui/components/ToastStack.svelte: no máximo 3, os mais recentes,
+// com 10px entre eles. Clicar num aviso de erro o dispensa.
+// Como no site, a pilha ocupa o espaço do pai: `top-right` gruda no canto de cima à direita (24px);
+// `bottom-center` e `inline` só alinham os avisos (centro e direita) e não têm margem.
+// Posição manual (todo aviso tem 50px de altura), por isso os 3 mais recentes sobem sem buracos.
+
+import { Tokens } from "../tokens.slint";
+import { Toast, ToastData, ToastKind } from "toast.slint";
+
+export enum ToastPlacement { top-right, bottom-center, inline }
+
+export component ToastStack inherits Rectangle {
+    in property <[ToastData]> toasts;
+    in property <ToastPlacement> placement: ToastPlacement.top-right;
+    callback action-clicked(string);
+    callback dismissed(string);
+
+    property <length> row-h: 50px;
+    property <length> gap: 10px;
+    // Índice do primeiro aviso visível.
+    property <int> first: max(0, root.toasts.length - 3);
+    property <int> shown: min(3, root.toasts.length);
+    property <length> pad-top: root.placement == ToastPlacement.top-right ? 24px : 0px;
+    property <length> pad-right: root.placement == ToastPlacement.top-right ? 24px : 0px;
+
+    preferred-height: root.shown > 0 ? root.pad-top + root.shown * root.row-h + (root.shown - 1) * root.gap : 0px;
+    preferred-width: 0px;
+
+    for t[i] in root.toasts: Rectangle {
+        visible: i >= root.first;
+        y: root.pad-top + (i - root.first) * (root.row-h + root.gap);
+        width: toast.preferred-width;
+        height: root.row-h;
+        x: root.placement == ToastPlacement.bottom-center ? (root.width - self.width) / 2
+            : root.width - root.pad-right - self.width;
+
+        // Por baixo do botão de ação (que está dentro do Toast): clicar no aviso de erro o dispensa.
+        if t.kind == ToastKind.error: TouchArea {
+            clicked => { root.dismissed(t.id); }
+        }
+        toast := Toast {
+            width: self.preferred-width;
+            height: root.row-h;
+            kind: t.kind;
+            text: t.text;
+            action: t.action;
+            action-clicked => { root.action-clicked(t.id); }
+        }
+    }
+}

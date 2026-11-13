@@ -16,3 +16,6 @@ build/
 Thumbs.db
 *.tmp
 *.swp
+app/target
+app/spikes/*/target
+app/crates/espia-ui/ui/tokens.slint

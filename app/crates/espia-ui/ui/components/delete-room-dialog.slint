@@ -1,0 +1,128 @@
+// Confirmar "Apagar sala" (porte de src/ui/components/DeleteRoomDialog.svelte): selo com lixeira, título,
+// aviso de quem está na sala e as duas ações. Os textos (com o plural) chegam prontos do Rust.
+
+import { Tokens } from "../tokens.slint";
+import { Icon, Icons } from "icon.slint";
+import { Button, ButtonKind } from "buttons.slint";
+import { ModalFrame } from "modal-frame.slint";
+
+export component DeleteRoomDialog inherits ModalFrame {
+    in property <string> title;
+    // Aviso "Tem N pessoas aqui agora…"; vazio = sem aviso.
+    in property <string> warn;
+    in property <string> error;
+    in property <bool> busy: false;
+    callback confirm();
+
+    VerticalLayout {
+        spacing: 20px;
+        // .badge: 52px, accent-300, ícone de 22px.
+        HorizontalLayout {
+            alignment: start;
+            Rectangle {
+                width: 52px;
+                height: 52px;
+                border-radius: 26px;
+                background: Tokens.color-accent-300;
+                Icon {
+                    x: (parent.width - self.width) / 2;
+                    y: (parent.height - self.height) / 2;
+                    source: Icons.trash;
+                    size: 22px;
+                    tint: Tokens.color-accent-900;
+                }
+            }
+        }
+        VerticalLayout {
+            spacing: 8px;
+            Text {
+                text: root.title;
+                font-family: Tokens.font-heading;
+                font-size: 26px;
+                color: Tokens.color-text;
+                wrap: word-wrap;
+            }
+            Text {
+                text: "O link para de funcionar para todo mundo. Não tem como desfazer.";
+                font-family: Tokens.font-body;
+                font-size: 15px;
+                color: Tokens.color-text.with-alpha(0.72);
+                wrap: word-wrap;
+            }
+        }
+        if root.warn != "": Rectangle {
+            border-radius: 18px;
+            background: Tokens.color-accent.with-alpha(0.12);
+            preferred-height: warn-row.preferred-height;
+            warn-row := HorizontalLayout {
+                padding-left: 14px;
+                padding-right: 14px;
+                padding-top: 12px;
+                padding-bottom: 12px;
+                spacing: 10px;
+                VerticalLayout {
+                    alignment: start;
+                    padding-top: 2px;
+                    Icon {
+                        source: Icons.users;
+                        size: 16px;
+                        tint: Tokens.color-accent-200;
+                    }
+                }
+                Text {
+                    text: root.warn;
+                    font-family: Tokens.font-body;
+                    font-size: 14px;
+                    color: Tokens.color-accent-200;
+                    wrap: word-wrap;
+                }
+            }
+        }
+        if root.error != "": Text {
+            text: root.error;
+            font-family: Tokens.font-body;
+            font-size: 13px;
+            color: Tokens.color-accent-300;
+            wrap: word-wrap;
+        }
+        HorizontalLayout {
+            spacing: 10px;
+            alignment: end;
+            Button {
+                kind: ButtonKind.secondary;
+                label: "Cancelar";
+                clicked => { root.close(); }
+            }
+            // .btn-delete: accent-300 com texto accent-900 (hover accent-200).
+            Rectangle {
+                property <bool> on: !root.busy;
+                border-radius: self.height / 2;
+                background: !self.on ? Tokens.color-accent-300 : del-ta.has-hover ? Tokens.color-accent-200 : Tokens.color-accent-300;
+                opacity: self.on ? 1 : 0.45;
+                preferred-width: del-row.preferred-width;
+                preferred-height: del-row.preferred-height;
+                accessible-role: button;
+                accessible-label: "Apagar sala";
+                animate background { duration: 120ms; easing: ease-out; }
+                del-row := HorizontalLayout {
+                    padding-left: 23px;
+                    padding-right: 23px;
+                    padding-top: 13px;
+                    padding-bottom: 13px;
+                    Text {
+                        text: "Apagar sala";
+                        font-family: Tokens.font-heading;
+                        font-size: 15px;
+                        color: Tokens.color-accent-900;
+                        vertical-alignment: center;
+                    }
+                }
+                del-ta := TouchArea {
+                    enabled: parent.on;
+                    mouse-cursor: parent.on ? MouseCursor.pointer : MouseCursor.not-allowed;
+                    clicked => { root.confirm(); }
+                }
+            }
+        }
+    }
+}

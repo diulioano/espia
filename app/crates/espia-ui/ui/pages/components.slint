@@ -1,0 +1,178 @@
+// Vitrine dos componentes base (T026): uma cena do mock por componente, só para conferir o visual.
+// Tela de desenvolvimento (`--mock components`); não existe no site e não vai para o usuário.
+
+import { Tokens } from "../tokens.slint";
+import { Scroll } from "../components/scroll.slint";
+import { Logo } from "../components/logo.slint";
+import { Mascot, MascotAnimate, MascotMood } from "../components/mascot.slint";
+import { Avatar, Tone, AvatarData } from "../components/avatar.slint";
+import { AvatarStack } from "../components/avatar-stack.slint";
+import { Spinner } from "../components/spinner.slint";
+import { TextField } from "../components/text-field.slint";
+import { Toast, ToastData, ToastKind } from "../components/toast.slint";
+import { ToastStack, ToastPlacement } from "../components/toast-stack.slint";
+import { Button, ButtonKind, IconButton } from "../components/buttons.slint";
+import { Icons } from "../components/icon.slint";
+
+export global ComponentsState {
+    // all | logo | mascot | buttons | avatars | spinner | fields | toasts
+    in property <string> scene: "all";
+    in-out property <string> field-text: "";
+    in property <string> last-click: "";
+    callback clicked(string);
+}
+
+component Grupo inherits Rectangle {
+    in property <string> titulo;
+    background: Tokens.color-surface;
+    border-radius: Tokens.radius-card;
+    preferred-height: col.preferred-height;
+    col := VerticalLayout {
+        padding: 24px;
+        spacing: 16px;
+        Text {
+            text: root.titulo;
+            font-family: Tokens.font-heading;
+            font-size: 18px;
+            color: Tokens.color-text;
+        }
+        @children
+    }
+}
+
+export component ComponentsPage inherits Rectangle {
+    background: Tokens.color-bg;
+    property <string> s: ComponentsState.scene;
+
+    Scroll {
+        HorizontalLayout {
+            alignment: center;
+            padding-left: 16px;
+            padding-right: 16px;
+            VerticalLayout {
+                max-width: 760px;
+                preferred-width: 760px;
+                horizontal-stretch: 1;
+                padding-top: 32px;
+                padding-bottom: 48px;
+                spacing: 16px;
+
+                if root.s == "all" || root.s == "logo": Grupo {
+                    titulo: "Logo (36, 32 e 29)";
+                    HorizontalLayout {
+                        spacing: 32px;
+                        alignment: start;
+                        Logo { size: 36px; }
+                        Logo { size: 32px; }
+                        Logo { size: 29px; }
+                    }
+                }
+                if root.s == "all" || root.s == "mascot": Grupo {
+                    titulo: "Castor: happy, peek, live, sleepy, loading, sad (e com rabo)";
+                    HorizontalLayout {
+                        spacing: 24px;
+                        alignment: start;
+                        Mascot { mood: MascotMood.happy; size: 72px; }
+                        Mascot { mood: MascotMood.peek; size: 72px; }
+                        Mascot { mood: MascotMood.live; size: 72px; }
+                        Mascot { mood: MascotMood.sleepy; size: 72px; }
+                        Mascot { mood: MascotMood.loading; size: 72px; }
+                        Mascot { mood: MascotMood.sad; size: 72px; }
+                        Mascot { mood: MascotMood.happy; size: 72px; tail: true; animate: MascotAnimate.off; }
+                    }
+                }
+                if root.s == "all" || root.s == "buttons": Grupo {
+                    titulo: "Botões";
+                    VerticalLayout {
+                        spacing: 12px;
+                        HorizontalLayout {
+                            spacing: 12px;
+                            alignment: start;
+                            Button { kind: ButtonKind.primary; label: "Transmitir"; icon: Icons.monitor-up; clicked => { ComponentsState.clicked("primary"); } }
+                            Button { kind: ButtonKind.secondary; label: "Assistir"; clicked => { ComponentsState.clicked("secondary"); } }
+                            Button { kind: ButtonKind.stop; label: "Parar câmera"; clicked => { ComponentsState.clicked("stop"); } }
+                            Button { kind: ButtonKind.ghost; label: "Baixar o app"; icon: Icons.download; }
+                        }
+                        HorizontalLayout {
+                            spacing: 12px;
+                            alignment: start;
+                            Button { kind: ButtonKind.invite; label: "Copiar convite"; icon: Icons.link; }
+                            Button { kind: ButtonKind.invite; copied: true; label: "Convite copiado"; icon: Icons.check; }
+                            Button { kind: ButtonKind.primary; label: "Transmitir"; enabled: false; }
+                            Button { label: "Sem variante"; }
+                        }
+                        HorizontalLayout {
+                            spacing: 12px;
+                            alignment: start;
+                            IconButton { icon: Icons.x; label: "Fechar"; }
+                            IconButton { icon: Icons.ellipsis; label: "Mais"; }
+                            IconButton { icon: Icons.maximize; label: "Tela cheia"; }
+                            IconButton { icon: Icons.volume-x; label: "Sem som"; enabled: false; }
+                        }
+                    }
+                }
+                if root.s == "all" || root.s == "avatars": Grupo {
+                    titulo: "Avatares (quatro tons, o último ao vivo) e pilha";
+                    VerticalLayout {
+                        spacing: 16px;
+                        HorizontalLayout {
+                            spacing: 20px;
+                            alignment: start;
+                            Avatar { letter: "B"; tone: Tone.accent; }
+                            Avatar { letter: "L"; tone: Tone.sage; }
+                            Avatar { letter: "T"; tone: Tone.sand; }
+                            Avatar { letter: "R"; tone: Tone.deep; live: true; ring-gap: Tokens.color-surface; }
+                        }
+                        AvatarStack {
+                            people: [
+                                { letter: "B", tone: Tone.accent },
+                                { letter: "L", tone: Tone.sage },
+                                { letter: "T", tone: Tone.sand },
+                                { letter: "R", tone: Tone.deep },
+                            ];
+                        }
+                    }
+                }
+                if root.s == "all" || root.s == "spinner": Grupo {
+                    titulo: "Spinner (40 e 24)";
+                    HorizontalLayout {
+                        spacing: 24px;
+                        alignment: start;
+                        Spinner { }
+                        Spinner { size: 24px; }
+                    }
+                }
+                if root.s == "all" || root.s == "fields": Grupo {
+                    titulo: "Campo de texto: normal, com dica e com erro";
+                    VerticalLayout {
+                        spacing: 16px;
+                        TextField {
+                            label: "Seu apelido";
+                            placeholder: "Como a galera te chama?";
+                            text <=> ComponentsState.field-text;
+                            hint: "Lembramos da última vez. Fica só neste computador.";
+                        }
+                        TextField {
+                            label: "Link da sala";
+                            text: "k7f-q2x-";
+                            error: "Esse link não parece de uma sala.";
+                        }
+                    }
+                }
+                if root.s == "all" || root.s == "toasts": Grupo {
+                    titulo: "Avisos (a pilha mostra só os 3 mais recentes)";
+                    ToastStack {
+                        placement: ToastPlacement.inline;
+                        toasts: [
+                            { id: "0", kind: ToastKind.copied, text: "Link copiado — é só mandar pra galera", action: "" },
+                            { id: "1", kind: ToastKind.join, text: "Bia entrou na sala", action: "" },
+                            { id: "2", kind: ToastKind.leave, text: "Caio saiu da sala", action: "" },
+                            { id: "3", kind: ToastKind.live, text: "Tomás começou a transmitir", action: "Assistir" },
+                            { id: "4", kind: ToastKind.error, text: "Não deu pra conectar. Clique pra dispensar.", action: "" },
+                        ];
+                    }
+                }
+            }
+        }
+    }
+}

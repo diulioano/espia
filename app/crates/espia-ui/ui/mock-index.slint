@@ -1,0 +1,204 @@
+// Índice das telas de dados falsos. Porte de src/mocks/MockIndex.svelte.
+// Quando o nome pedido na linha de comando não existe, uma linha no alto diz qual.
+
+import { Tokens } from "tokens.slint";
+import { Scroll } from "components/scroll.slint";
+import { Logo } from "components/logo.slint";
+import { Icon, Icons } from "components/icon.slint";
+
+export struct MockSceneData {
+    id: string,
+    code: string,
+    label: string,
+}
+
+export struct MockScreenData {
+    id: string,
+    label: string,
+    scenes: [MockSceneData],
+}
+
+component SceneRow inherits Rectangle {
+    in property <string> code;
+    in property <string> label;
+    in property <string> scene-id;
+    callback clicked();
+
+    height: 41px;
+    border-radius: self.height / 2;
+    background: ta.has-hover ? Tokens.color-text.with-alpha(0.07) : transparent;
+    accessible-role: button;
+    accessible-label: root.label;
+
+    HorizontalLayout {
+        padding-left: 14px;
+        padding-right: 14px;
+        spacing: 12px;
+        alignment: stretch;
+        Rectangle {
+            width: max(44px, chip.preferred-width + 16px);
+            height: 22px;
+            y: (root.height - self.height) / 2;
+            border-radius: self.height / 2;
+            background: Tokens.color-accent;
+            chip := Text {
+                text: root.code;
+                font-family: Tokens.font-body;
+                font-size: 11px;
+                font-weight: 700;
+                letter-spacing: 0.66px;
+                color: Tokens.color-accent-900;
+                horizontal-alignment: center;
+                vertical-alignment: center;
+            }
+        }
+        Text {
+            text: root.label;
+            font-family: Tokens.font-body;
+            font-size: 15px;
+            color: Tokens.color-text;
+            vertical-alignment: center;
+            overflow: elide;
+            horizontal-stretch: 1;
+        }
+        Text {
+            text: root.scene-id;
+            font-family: Tokens.font-mono;
+            font-size: 13px;
+            color: Tokens.color-accent-400;
+            vertical-alignment: center;
+            horizontal-stretch: 0;
+        }
+    }
+    ta := TouchArea {
+        mouse-cursor: pointer;
+        clicked => { root.clicked(); }
+    }
+}
+
+export component MockIndex inherits Rectangle {
+    in property <[MockScreenData]> screens;
+    // Linha de aviso no alto (nome que não existe); vazio = sem aviso.
+    in property <string> error;
+    callback open(string, string);
+
+    background: Tokens.color-bg;
+
+    Scroll {
+        HorizontalLayout {
+            alignment: center;
+            padding-left: 16px;
+            padding-right: 16px;
+            VerticalLayout {
+                max-width: 720px;
+                preferred-width: 720px;
+                horizontal-stretch: 1;
+                padding-top: 48px;
+                padding-bottom: 48px;
+                spacing: 16px;
+
+                if root.error != "": Rectangle {
+                    height: 44px;
+                    border-radius: self.height / 2;
+                    background: Tokens.color-raised;
+                    HorizontalLayout {
+                        padding-left: 8px;
+                        padding-right: 20px;
+                        spacing: 12px;
+                        alignment: start;
+                        Rectangle {
+                            width: 28px;
+                            height: 28px;
+                            y: 8px;
+                            border-radius: 14px;
+                            background: Tokens.color-accent-300;
+                            Icon {
+                                x: (parent.width - self.width) / 2;
+                                y: (parent.height - self.height) / 2;
+                                source: Icons.triangle-alert;
+                                size: 15px;
+                                tint: Tokens.color-accent-900;
+                            }
+                        }
+                        Text {
+                            text: root.error;
+                            font-family: Tokens.font-body;
+                            font-size: 14px;
+                            color: Tokens.color-text;
+                            vertical-alignment: center;
+                            overflow: elide;
+                        }
+                    }
+                }
+                Logo {
+                    size: 36px;
+                    height: 45px;
+                }
+                Text {
+                    text: "Telas mockadas";
+                    font-family: Tokens.font-heading;
+                    font-size: 40px;
+                    color: Tokens.color-text;
+                }
+                HorizontalLayout {
+                    spacing: 0px;
+                    alignment: start;
+                    Text {
+                        text: "Dados falsos, sem servidor. Use ";
+                        font-family: Tokens.font-body;
+                        font-size: 15px;
+                        color: Tokens.color-text-muted;
+                    }
+                    Text {
+                        text: "--mock <tela> --scene <cena>";
+                        font-family: Tokens.font-mono;
+                        font-size: 13px;
+                        color: Tokens.color-accent-400;
+                        vertical-alignment: center;
+                    }
+                    Text {
+                        text: ".";
+                        font-family: Tokens.font-body;
+                        font-size: 15px;
+                        color: Tokens.color-text-muted;
+                    }
+                }
+
+                for screen in root.screens: Rectangle {
+                    background: Tokens.color-surface;
+                    border-radius: Tokens.radius-card;
+                    preferred-height: sec.preferred-height;
+                    sec := VerticalLayout {
+                        padding: 20px;
+                        spacing: 4px;
+                        HorizontalLayout {
+                            spacing: 8px;
+                            alignment: start;
+                            padding-bottom: 6px;
+                            Text {
+                                text: screen.label;
+                                font-family: Tokens.font-heading;
+                                font-size: 22px;
+                                color: Tokens.color-text;
+                                vertical-alignment: center;
+                            }
+                            Text {
+                                text: "--mock " + screen.id;
+                                font-family: Tokens.font-mono;
+                                font-size: 13px;
+                                color: Tokens.color-accent-400;
+                                vertical-alignment: center;
+                            }
+                        }
+                        for s in screen.scenes: SceneRow {
+                            code: s.code;
+                            label: s.label;
+                            scene-id: s.id;
+                            clicked => { root.open(screen.id, s.id); }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}

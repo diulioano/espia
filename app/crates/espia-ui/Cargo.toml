@@ -1,0 +1,15 @@
+[package]
+name = "espia-ui"
+description = "Telas do Espia em Slint. Depende só de espia-core."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+publish.workspace = true
+
+[dependencies]
+espia-core.workspace = true
+# Travada na 1.17.0 (R3): "1.17" sozinho sobe para a 1.18.1.
+slint = "=1.17.0"
+
+[build-dependencies]
+slint-build = "=1.17.0"

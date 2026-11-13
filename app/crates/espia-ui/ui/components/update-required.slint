@@ -1,0 +1,54 @@
+// "Atualize o Espia para continuar" (porte de src/ui/components/UpdateRequired.svelte): a sala usa uma versão mais nova
+// da transmissão. Coluna centrada na janela inteira: título (h1 do navegador: 30px, negrito, margem de 20px),
+// frase e o botão "Atualizar". Os respiros são os do navegador (margens do h1 e do p dentro de um flex com gap de 16px).
+
+import { Tokens } from "../tokens.slint";
+import { Button, ButtonKind } from "buttons.slint";
+
+export component UpdateRequired inherits Rectangle {
+    callback reload();
+
+    background: Tokens.color-bg;
+    accessible-role: none;
+
+    VerticalLayout {
+        alignment: center;
+        spacing: 16px;
+        padding: 24px;
+        HorizontalLayout {
+            alignment: center;
+            padding-top: 20px;
+            padding-bottom: 20px;
+            Text {
+                text: "Atualize o Espia para continuar";
+                font-family: Tokens.font-body;
+                font-size: 30px;
+                font-weight: 700;
+                color: Tokens.color-text;
+                horizontal-alignment: center;
+                wrap: word-wrap;
+            }
+        }
+        HorizontalLayout {
+            alignment: center;
+            padding-top: 15px;
+            padding-bottom: 15px;
+            Text {
+                text: "Esta sala usa uma versão nova da transmissão.";
+                font-family: Tokens.font-body;
+                font-size: 16px;
+                color: Tokens.color-text;
+                horizontal-alignment: center;
+                wrap: word-wrap;
+            }
+        }
+        HorizontalLayout {
+            alignment: center;
+            Button {
+                kind: ButtonKind.primary;
+                label: "Atualizar";
+                clicked => { root.reload(); }
+            }
+        }
+    }
+}

@@ -1,0 +1,75 @@
+// Tile decorativo da tela inicial (as duas "janelas" inclinadas ao lado do texto). Porte do uso de
+// StreamTile.svelte com `alwaysName` e `controls={false}`: fundo de palco, listras de 26px a 135 graus
+// (a cor das listras é o destaque ou o sálvia sobre o palco, no lugar dos tons soltos do site),
+// legenda em fonte mono e o chip com "AO VIVO" e o nome. Sem controles e sem vídeo: é só ilustração.
+// As listras são degradês de paradas duras (a Slint não tem repeating-linear-gradient), calculados
+// para os dois tamanhos usados: 520 x 292 (principal) e 230 x 130 (miniatura).
+
+import { Tokens } from "../tokens.slint";
+import { LiveTag } from "live-tag.slint";
+
+export component DecoTile inherits Rectangle {
+    // false = principal (520 x 292, raio 28); true = miniatura (230 x 130, raio 16).
+    in property <bool> thumb: false;
+    in property <string> name;
+    in property <string> caption;
+
+    width: root.thumb ? 230px : 520px;
+    height: root.thumb ? 130px : 292px;
+    border-radius: root.thumb ? Tokens.radius-tile-sm : Tokens.radius-card;
+    background: Tokens.color-stage;
+    clip: true;
+    drop-shadow-color: Tokens.shadow-lg-color.with-alpha(0.5);
+    drop-shadow-offset-y: root.thumb ? 20px : 30px;
+    drop-shadow-blur: root.thumb ? 50px : 70px;
+
+    property <brush> stripes-main: @linear-gradient(135deg, Tokens.color-accent.with-alpha(0.22) 0.00%, Tokens.color-accent.with-alpha(0.22) 4.53%, Tokens.color-accent.with-alpha(0.17) 4.53%, Tokens.color-accent.with-alpha(0.17) 9.06%, Tokens.color-accent.with-alpha(0.22) 9.06%, Tokens.color-accent.with-alpha(0.22) 13.58%, Tokens.color-accent.with-alpha(0.17) 13.58%, Tokens.color-accent.with-alpha(0.17) 18.11%, Tokens.color-accent.with-alpha(0.22) 18.11%, Tokens.color-accent.with-alpha(0.22) 22.64%, Tokens.color-accent.with-alpha(0.17) 22.64%, Tokens.color-accent.with-alpha(0.17) 27.17%, Tokens.color-accent.with-alpha(0.22) 27.17%, Tokens.color-accent.with-alpha(0.22) 31.70%, Tokens.color-accent.with-alpha(0.17) 31.70%, Tokens.color-accent.with-alpha(0.17) 36.23%, Tokens.color-accent.with-alpha(0.22) 36.23%, Tokens.color-accent.with-alpha(0.22) 40.75%, Tokens.color-accent.with-alpha(0.17) 40.75%, Tokens.color-accent.with-alpha(0.17) 45.28%, Tokens.color-accent.with-alpha(0.22) 45.28%, Tokens.color-accent.with-alpha(0.22) 49.81%, Tokens.color-accent.with-alpha(0.17) 49.81%, Tokens.color-accent.with-alpha(0.17) 54.34%, Tokens.color-accent.with-alpha(0.22) 54.34%, Tokens.color-accent.with-alpha(0.22) 58.87%, Tokens.color-accent.with-alpha(0.17) 58.87%, Tokens.color-accent.with-alpha(0.17) 63.40%, Tokens.color-accent.with-alpha(0.22) 63.40%, Tokens.color-accent.with-alpha(0.22) 67.92%, Tokens.color-accent.with-alpha(0.17) 67.92%, Tokens.color-accent.with-alpha(0.17) 72.45%, Tokens.color-accent.with-alpha(0.22) 72.45%, Tokens.color-accent.with-alpha(0.22) 76.98%, Tokens.color-accent.with-alpha(0.17) 76.98%, Tokens.color-accent.with-alpha(0.17) 81.51%, Tokens.color-accent.with-alpha(0.22) 81.51%, Tokens.color-accent.with-alpha(0.22) 86.04%, Tokens.color-accent.with-alpha(0.17) 86.04%, Tokens.color-accent.with-alpha(0.17) 90.57%, Tokens.color-accent.with-alpha(0.22) 90.57%, Tokens.color-accent.with-alpha(0.22) 95.09%, Tokens.color-accent.with-alpha(0.17) 95.09%, Tokens.color-accent.with-alpha(0.17) 99.62%, Tokens.color-accent.with-alpha(0.22) 99.62%, Tokens.color-accent.with-alpha(0.22) 100.00%);
+    property <brush> stripes-thumb: @linear-gradient(135deg, Tokens.color-accent-2.with-alpha(0.20) 0.00%, Tokens.color-accent-2.with-alpha(0.20) 10.21%, Tokens.color-accent-2.with-alpha(0.15) 10.21%, Tokens.color-accent-2.with-alpha(0.15) 20.43%, Tokens.color-accent-2.with-alpha(0.20) 20.43%, Tokens.color-accent-2.with-alpha(0.20) 30.64%, Tokens.color-accent-2.with-alpha(0.15) 30.64%, Tokens.color-accent-2.with-alpha(0.15) 40.86%, Tokens.color-accent-2.with-alpha(0.20) 40.86%, Tokens.color-accent-2.with-alpha(0.20) 51.07%, Tokens.color-accent-2.with-alpha(0.15) 51.07%, Tokens.color-accent-2.with-alpha(0.15) 61.28%, Tokens.color-accent-2.with-alpha(0.20) 61.28%, Tokens.color-accent-2.with-alpha(0.20) 71.50%, Tokens.color-accent-2.with-alpha(0.15) 71.50%, Tokens.color-accent-2.with-alpha(0.15) 81.71%, Tokens.color-accent-2.with-alpha(0.20) 81.71%, Tokens.color-accent-2.with-alpha(0.20) 91.92%, Tokens.color-accent-2.with-alpha(0.15) 91.92%, Tokens.color-accent-2.with-alpha(0.15) 100.00%);
+
+    Rectangle {
+        background: root.thumb ? root.stripes-thumb : root.stripes-main;
+    }
+    Text {
+        text: root.caption;
+        font-family: Tokens.font-mono;
+        font-size: root.thumb ? 11px : 14px;
+        letter-spacing: root.thumb ? 0.44px : 0.56px;
+        color: Tokens.color-text.with-alpha(0.5);
+        horizontal-alignment: center;
+        vertical-alignment: center;
+    }
+    // .name-chip: top/left 16 (8 na miniatura), padding 5 12 5 5, fundo overlay.
+    Rectangle {
+        x: root.thumb ? 8px : 16px;
+        y: root.thumb ? 8px : 16px;
+        width: chip.preferred-width;
+        height: chip.preferred-height;
+        border-radius: self.height / 2;
+        background: Tokens.color-overlay;
+        chip := HorizontalLayout {
+            padding-left: 5px;
+            padding-right: 12px;
+            padding-top: 5px;
+            padding-bottom: 5px;
+            spacing: 8px;
+            VerticalLayout {
+                alignment: center;
+                LiveTag { }
+            }
+            Text {
+                text: root.name;
+                font-family: Tokens.font-body;
+                font-size: root.thumb ? 12px : 14px;
+                font-weight: 600;
+                color: Tokens.color-text;
+                vertical-alignment: center;
+            }
+        }
+    }
+    // box-shadow: inset 0 0 0 1px (anel de dentro).
+    Rectangle {
+        border-radius: root.border-radius;
+        border-width: 1px;
+        border-color: Tokens.color-text.with-alpha(0.06);
+    }
+}

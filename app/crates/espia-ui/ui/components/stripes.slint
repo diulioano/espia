@@ -1,0 +1,33 @@
+// Listras na diagonal (porte do `repeating-linear-gradient(135deg, a 0 26px, b 26px 52px)` dos placeholders do site).
+// A Slint não tem gradiente repetido: o fundo é a cor `a` e cada faixa `b` é um retângulo girado 45 graus, no mesmo
+// lugar em que o gradiente de 135 graus a poria (o eixo vai do canto de cima à esquerda ao de baixo à direita).
+// As cores têm que ser opacas (use `cor.mix(fundo, fator)` para chegar a um tom parecido com o do site).
+
+import { Tokens } from "../tokens.slint";
+
+export component Stripes inherits Rectangle {
+    in property <color> a: Tokens.color-stage;
+    in property <color> b: Tokens.color-stage;
+    // Largura de cada faixa (26px nos tiles, 22px no cartão do seletor, 18px nas miniaturas).
+    in property <length> band: 26px;
+
+    // Comprimento do eixo do gradiente: |W sen| + |H cos| de 135 graus.
+    property <length> axis: (root.width + root.height) * 0.70710678;
+    // Quantas faixas `b` cabem (uma a cada duas larguras).
+    property <int> count: ceil(root.axis / (2 * root.band));
+
+    clip: true;
+    background: root.a;
+
+    for i in root.count: Rectangle {
+        // Centro da faixa `b` i, medido a partir do centro da caixa, ao longo do eixo.
+        property <length> off: -root.axis / 2 + root.band * 1.5 + i * 2 * root.band;
+        property <length> len: root.width + root.height;
+        width: root.band;
+        height: self.len;
+        x: root.width / 2 + self.off * 0.70710678 - self.width / 2;
+        y: root.height / 2 + self.off * 0.70710678 - self.height / 2;
+        transform-rotation: 45deg;
+        background: root.b;
+    }
+}

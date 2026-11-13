@@ -1,0 +1,234 @@
+// Dados da sala que o Rust preenche (RoomView) e eventos que a tela devolve (RoomAction). Fica num arquivo à parte
+// (e não em pages/room.slint) para os componentes da sala poderem ler o estado sem importar a página (que importa
+// os componentes). A página reexporta `RoomState`, que é o nome que o app.slint conhece.
+// Os textos derivados (subtítulo, estatísticas, avisos do seletor) chegam prontos: as regras moram no espia-core.
+
+import { Tone } from "avatar.slint";
+import { ToastData } from "toast.slint";
+
+export enum TileStatus { ok, loading, failed }
+// Tamanho do tile: palco (`stage`), célula da grade (`grid`) ou miniatura da faixa e da barra (`thumb`).
+export enum TileKind { stage, grid, thumb }
+export enum StageMode { connecting, empty, single, grid, focus }
+export enum LinkMode { ok, reconnecting, failed }
+// As três abas do seletor.
+export enum SurfaceTab { window, monitor, camera }
+export enum SourceKind { window, monitor, camera }
+export enum CamPermission { unknown, prompt, granted, denied }
+export enum CamError { none, busy, not-found, other }
+
+// Uma linha de "Na sala".
+export struct PersonData {
+    id: string,
+    name: string,
+    // Inicial já em maiúscula (a Slint não tem "primeira letra").
+    letter: string,
+    tone: Tone,
+    you: bool,
+    live: bool,
+    // Linha de baixo: "você está assistindo", a descrição da transmissão ou vazio.
+    sub: string,
+    watching: bool,
+    // O dono pode tirar essa pessoa da sala.
+    removable: bool,
+}
+
+// Um tile de transmissão (palco, grade, faixa) ou a prévia "Você está ao vivo".
+export struct TileData {
+    id: string,
+    // Nome da pessoa (textos de "conectando" e "falhou").
+    name: string,
+    // Como o tile se chama: "Você", "câmera de Lu" ou o nome.
+    label: string,
+    // Descrição da transmissão no chip ("Hollow Knight"); vazio = sem.
+    what: string,
+    tone: Tone,
+    // Texto do placeholder (sem vídeo).
+    caption: string,
+    status: TileStatus,
+    muted: bool,
+    volume: float,
+    // A sua própria tela: sem som e sem controles de som.
+    you: bool,
+    // Falso = parou de assistir: o cartão "Assistir" no lugar do vídeo.
+    watching: bool,
+    // `watchState == stopped`: "Você parou de assistir X" em vez de "Transmissão de X".
+    stopped: bool,
+    // Há fluxo de vídeo (habilita o picture-in-picture).
+    has-video: bool,
+    // Último quadro (RGBA) entregue por `set_stream_frame`; sem largura = ainda sem quadro.
+    image: image,
+}
+
+export struct AudioOption {
+    id: string,
+    label: string,
+}
+
+// Um cartão do seletor: janela, tela inteira ou câmera.
+export struct SourceData {
+    id: string,
+    kind: SourceKind,
+    title: string,
+    app: string,
+    // Letra da pastilha ao lado do nome (a do ícone, ou a do fallback).
+    letter: string,
+    // O programa tem ícone (pastilha colorida); senão a pastilha é a do fallback.
+    has-icon: bool,
+    icon-tone: Tone,
+    // Miniatura de mentira (listras com o rótulo) ou prévia de câmera de mentira; vazio = sem.
+    thumb-label: string,
+    thumb-tone: Tone,
+    // Miniatura/prévia de verdade (RGBA).
+    thumb: image,
+    playing: bool,
+    busy: bool,
+    selected: bool,
+}
+
+// Tudo que o seletor "Escolha o que compartilhar" precisa.
+export struct GoLiveData {
+    surface: SurfaceTab,
+    resolution: int,
+    fps: int,
+    audio: bool,
+    // Só câmeras (sem captura de tela): esconde as abas Janelas e Telas inteiras.
+    cameras-only: bool,
+    // Modo do app (grade com miniaturas) ou do navegador (cartão explicando o próximo passo).
+    native: bool,
+    loading: bool,
+    windows: [SourceData],
+    monitors: [SourceData],
+    // Título da fonte escolhida em cada aba (vazio = nenhuma escolhida nessa aba).
+    selected-window: string,
+    selected-monitor: string,
+    has-selected-window: bool,
+    has-selected-monitor: bool,
+    cam-permission: CamPermission,
+    cams: [SourceData],
+    cam-audios: [AudioOption],
+    // Câmera escolhida, entrada de som escolhida ("" = sem som) e o nome dela.
+    has-cam-video: bool,
+    cam-audio-id: string,
+    cam-audio-label: string,
+    cam-role-game: bool,
+    cam-error: CamError,
+    // Pessoas na sala (mais de 5 avisa que a qualidade pode baixar).
+    people: int,
+}
+
+// Uma linha do diagnóstico da transmissão (Ctrl+Shift+D): por enquanto o shell não entrega dados.
+export struct DiagLine {
+    label: string,
+    value: string,
+}
+
+export global RoomState {
+    // ---- sala ----
+    in property <bool> requires-update: false;
+    in property <bool> connecting: false;
+    in property <LinkMode> link: LinkMode.ok;
+    // Caiu: a lista esmaece e transmitir espera a volta.
+    out property <bool> down: root.link != LinkMode.ok;
+    in property <string> title;
+    in property <string> subtitle;
+    // Convite sem "https://".
+    in property <string> invite-label;
+    in property <bool> copied: false;
+
+    // ---- barra lateral ----
+    in property <[PersonData]> people;
+    in property <string> people-count;
+    // Altura da lista inteira (as linhas têm 54px, ou 59px com a linha de baixo, e 4px entre elas).
+    in property <length> people-height: 0px;
+    // Sua transmissão: prévia, estatísticas e tempo.
+    in property <bool> broadcasting: false;
+    in property <TileData> preview;
+    in property <bool> on-stage: false;
+    in property <string> stats;
+    in property <string> elapsed;
+
+    // ---- cabeçalho (dono) ----
+    in property <bool> owner-button: false;
+    in property <bool> owner-menu: false;
+
+    // ---- palco ----
+    in property <StageMode> stage: StageMode.empty;
+    // Single e grade: as transmissões, na ordem do palco.
+    in property <[TileData]> tiles;
+    // Foco: a transmissão grande e as outras na faixa de baixo.
+    in property <TileData> focused-tile;
+    in property <[TileData]> strip;
+    in property <int> cols: 2;
+    in property <int> rows: 1;
+    // Falta transmissão pra preencher a grade: mostra "Clique numa tela pra focar".
+    in property <bool> grid-hint: false;
+    in property <bool> can-share: true;
+    in property <bool> permission-denied: false;
+    in property <[ToastData]> toasts;
+    in property <[DiagLine]> diag;
+
+    // ---- diálogos ----
+    in property <bool> name-open: false;
+    in property <string> name-value;
+    in property <bool> name-busy: false;
+    in property <string> name-error;
+    in property <bool> delete-open: false;
+    in property <string> delete-title;
+    in property <string> delete-warn;
+    in property <bool> delete-busy: false;
+    in property <string> delete-error;
+    in property <bool> remove-open: false;
+    in property <string> remove-title;
+    in property <bool> remove-busy: false;
+    in property <string> remove-error;
+
+    // ---- seletor ----
+    in property <bool> go-live-open: false;
+    in property <GoLiveData> go-live;
+
+    // Regras de texto do espia-core: nome da sala (corte em 40, nome válido) e as frases do seletor.
+    pure callback limit-room-name(string) -> string;
+    pure callback normalize-room-name(string) -> string;
+    // (aba, modo do app, som ligado, título da fonte escolhida nessa aba, câmeras liberadas, nome da entrada de som)
+    pure callback audio-hint(SurfaceTab, bool, bool, string, bool, string) -> string;
+    // (pessoas na sala, resolução, fps)
+    pure callback foot-hint(int, int, int) -> string;
+
+    callback go-home();
+    callback copy-invite();
+    callback toggle-owner-menu(bool);
+    callback open-rename();
+    callback submit-rename(string);
+    callback open-delete();
+    callback confirm-delete();
+    callback close-dialogs();
+    callback ask-remove(string);
+    callback confirm-remove();
+    callback toggle-self-stage();
+    // Foco numa transmissão; texto vazio tira o foco (volta pra grade).
+    callback focus(string);
+    callback watch(string, bool);
+    callback toggle-mute(string);
+    callback set-volume(string, float);
+    callback retry(string);
+    callback pip(string, bool);
+    callback toast-action(string);
+    callback dismiss-toast(string);
+    callback retry-connection();
+    callback open-go-live();
+    callback close-go-live();
+    callback start-go-live(SurfaceTab, int, int, bool);
+    callback select-source(string);
+    callback allow-camera();
+    callback select-camera(string);
+    // Entrada de som da câmera; texto vazio = sem som.
+    callback select-audio(string);
+    callback set-audio-role(bool);
+    callback set-surface(SurfaceTab);
+    callback dismiss-permission();
+    callback stop-go-live();
+    callback leave();
+    // "Atualizar" da tela "Atualize o Espia": o view-model ainda não tem ação para isso.
+    callback reload();
+}

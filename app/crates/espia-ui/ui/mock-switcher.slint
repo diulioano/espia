@@ -1,0 +1,189 @@
+// Seletor de cena no canto, por cima de qualquer tela do mock. Porte de src/mocks/MockSwitcher.svelte:
+// barra "MOCK · tela · cena" que abre e fecha, as telas, as cenas da tela atual em 2 colunas
+// e o atalho "todas as telas". O estado aberto/fechado não é lembrado entre execuções.
+
+import { Tokens } from "tokens.slint";
+import { Icon, Icons } from "components/icon.slint";
+import { MockScreenData, MockSceneData } from "mock-index.slint";
+
+component Pilula inherits Rectangle {
+    in property <bool> atual: false;
+    in property <string> texto;
+    in property <string> destaque;
+    callback clicked();
+
+    height: 30px;
+    border-radius: self.height / 2;
+    border-width: 1px;
+    border-color: root.atual ? Tokens.color-accent : Tokens.color-divider;
+    background: root.atual ? Tokens.color-accent : ta.has-hover ? Tokens.color-text.with-alpha(0.07) : transparent;
+    accessible-role: button;
+    accessible-label: root.texto;
+
+    HorizontalLayout {
+        padding-left: 10px;
+        padding-right: 10px;
+        spacing: 4px;
+        alignment: start;
+        if root.destaque != "": Text {
+            text: root.destaque;
+            font-family: Tokens.font-body;
+            font-size: 12px;
+            font-weight: 700;
+            color: root.atual ? Tokens.color-bg : Tokens.color-text;
+            opacity: 0.7;
+            vertical-alignment: center;
+        }
+        Text {
+            text: root.texto;
+            font-family: Tokens.font-body;
+            font-size: 12px;
+            color: root.atual ? Tokens.color-bg : Tokens.color-text;
+            vertical-alignment: center;
+            overflow: elide;
+        }
+    }
+    ta := TouchArea {
+        mouse-cursor: pointer;
+        clicked => { root.clicked(); }
+    }
+}
+
+export component MockSwitcher inherits Rectangle {
+    in property <[MockScreenData]> screens;
+    // Cenas da tela atual.
+    in property <[MockSceneData]> scenes;
+    in property <string> screen-id;
+    in property <string> scene-id;
+    // "Página inicial · Primeira visita" (rótulo da tela e da cena atuais).
+    in property <string> current-label;
+    callback open(string, string);
+    callback index();
+
+    // Começa recolhida quando pedido (o site começa aberta).
+    in property <bool> recolhida: false;
+    property <bool> aberto: !root.recolhida;
+    property <length> gap: 4px;
+    property <length> coluna: (276px - root.gap) / 2;
+    property <int> linhas-telas: ceil(root.screens.length / 2);
+    property <int> linhas-cenas: ceil(root.scenes.length / 2);
+    property <length> grade-cenas-h: max(0px, root.linhas-cenas * 30px + (root.linhas-cenas - 1) * root.gap);
+    property <length> grade-telas-h: root.screens.length > 1 ? root.linhas-telas * 30px + (root.linhas-telas - 1) * root.gap : 0px;
+    // telas + cenas + atalho, com 8px entre os blocos e 12px embaixo
+    property <length> corpo-h: (root.grade-telas-h > 0px ? root.grade-telas-h + 8px : 0px) + min(root.grade-cenas-h, 220px) + 8px + 18px + 12px;
+
+    width: root.aberto ? 300px : bar.preferred-width;
+    height: root.aberto ? 40px + root.corpo-h : 40px;
+    border-radius: 18px;
+    background: Tokens.color-stage.with-alpha(0.92);
+    drop-shadow-color: Tokens.shadow-lg-color;
+    drop-shadow-offset-y: Tokens.shadow-lg-offset-y;
+    drop-shadow-blur: Tokens.shadow-lg-blur;
+    border-width: Tokens.shadow-lg-ring-width;
+    border-color: Tokens.shadow-lg-ring;
+
+    // engole cliques para não vazarem para a tela
+    TouchArea { }
+
+    bar := HorizontalLayout {
+        y: 0px;
+        height: 40px;
+        padding-left: 12px;
+        padding-right: 12px;
+        spacing: 8px;
+        Rectangle {
+            width: tag.preferred-width + 14px;
+            height: 18px;
+            y: 11px;
+            border-radius: self.height / 2;
+            background: Tokens.color-accent-2-400;
+            tag := Text {
+                text: "MOCK";
+                font-family: Tokens.font-body;
+                font-size: 10px;
+                font-weight: 700;
+                letter-spacing: 0.8px;
+                color: Tokens.color-accent-2-900;
+                horizontal-alignment: center;
+                vertical-alignment: center;
+            }
+        }
+        Text {
+            text: root.current-label;
+            font-family: Tokens.font-body;
+            font-size: 12px;
+            color: Tokens.color-text;
+            vertical-alignment: center;
+            overflow: elide;
+            horizontal-stretch: 1;
+            min-width: 0px;
+            max-width: 190px;
+        }
+        Icon {
+            source: root.aberto ? Icons.chevron-down : Icons.chevron-up;
+            size: 16px;
+            tint: Tokens.color-text;
+        }
+    }
+    TouchArea {
+        x: 0px;
+        y: 0px;
+        width: parent.width;
+        height: 40px;
+        mouse-cursor: pointer;
+        clicked => { root.aberto = !root.aberto; }
+    }
+
+    if root.aberto: VerticalLayout {
+        x: 12px;
+        y: 40px;
+        width: 276px;
+        spacing: 8px;
+        if root.screens.length > 1: Rectangle {
+            height: root.grade-telas-h;
+            for s[i] in root.screens: Pilula {
+                x: mod(i, 2) * (root.coluna + root.gap);
+                y: floor(i / 2) * (30px + root.gap);
+                width: root.coluna;
+                texto: s.label;
+                atual: s.id == root.screen-id;
+                clicked => { root.open(s.id, ""); }
+            }
+        }
+        Rectangle {
+            height: min(root.grade-cenas-h, 220px);
+            clip: true;
+            Flickable {
+                width: parent.width;
+                height: parent.height;
+                viewport-height: root.grade-cenas-h;
+                for s[i] in root.scenes: Pilula {
+                    x: mod(i, 2) * (root.coluna + root.gap);
+                    y: floor(i / 2) * (30px + root.gap);
+                    width: root.coluna;
+                    destaque: s.code;
+                    texto: s.id;
+                    atual: s.id == root.scene-id;
+                    clicked => { root.open(root.screen-id, s.id); }
+                }
+            }
+        }
+        Rectangle {
+            height: 18px;
+            Text {
+                x: 0px;
+                width: parent.width;
+                text: "todas as telas";
+                font-family: Tokens.font-body;
+                font-size: 12px;
+                color: Tokens.color-accent-400;
+                horizontal-alignment: right;
+                vertical-alignment: center;
+            }
+            TouchArea {
+                mouse-cursor: pointer;
+                clicked => { root.index(); }
+            }
+        }
+    }
+}

@@ -1,4 +1,4 @@
-# Verificação de todo push e PR: site/Worker (tipos, testes, build) e app desktop (cargo test).
+# Verificação de todo push e PR: site/Worker (tipos, testes, build), app de antes (cargo test) e app nativo (cargo check e test).
 name: CI
 
 on:
@@ -34,3 +34,16 @@ jobs:
           workspaces: src-tauri
       - run: cargo test
         working-directory: src-tauri
+
+  app:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: app
+      - run: cargo check --workspace
+        working-directory: app
+      - run: cargo test --workspace
+        working-directory: app

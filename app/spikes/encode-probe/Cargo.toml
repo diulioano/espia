@@ -1,0 +1,39 @@
+[package]
+name = "encode-probe"
+version = "0.1.0"
+edition = "2021"
+publish = false
+description = "Sonda 020 (G4, G5): prova a compressão pela placa de vídeo (Media Foundation) e o envio do vídeo já comprimido"
+
+# Crate isolada: NAO entra no workspace de app/. O [workspace] vazio abaixo evita que o Cargo
+# procure o workspace do diretório pai.
+[workspace]
+
+[dependencies]
+libwebrtc = "=0.4.0"
+tokio = { version = "1", features = ["rt-multi-thread", "macros", "time", "sync", "io-std", "io-util", "signal"] }
+tokio-tungstenite = { version = "0.24", features = ["connect", "native-tls"] }
+futures-util = "0.3"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+uuid = { version = "1", features = ["v4"] }
+
+[target.'cfg(windows)'.dependencies]
+windows-sys = { version = "0.52", features = ["Win32_System_ProcessStatus", "Win32_System_Threading", "Win32_Foundation"] }
+# Media Foundation (codificador de H.264 da placa) e Direct3D 11 (T010). Versão exata para o Cargo.lock
+# não mudar de uma máquina para outra.
+windows = { version = "0.62", features = [
+    "Win32_Foundation",
+    "Win32_Media_MediaFoundation",
+    "Win32_Graphics_Direct3D",
+    "Win32_Graphics_Direct3D11",
+    "Win32_Graphics_Dxgi",
+    "Win32_Graphics_Dxgi_Common",
+    "Win32_System_Com",
+    # Fora da lista do T009, pedidas pelo compilador: ICodecAPI::SetValue só existe com Ole e Variant.
+    "Win32_System_Ole",
+    "Win32_System_Variant",
+] }
+
+[profile.release]
+opt-level = 3

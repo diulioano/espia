@@ -1,0 +1,10 @@
+[package]
+name = "espia-media"
+description = "Ligação de vídeo do Espia: par, malha, envio, recepção e som."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+publish.workspace = true
+
+[dependencies]
+espia-core.workspace = true

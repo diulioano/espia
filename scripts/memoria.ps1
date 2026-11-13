@@ -5,11 +5,55 @@
 #
 #   powershell -File scripts/memoria.ps1           # total + detalhe por tipo
 #   powershell -File scripts/memoria.ps1 -Watch    # uma linha a cada 5 s (Ctrl+C para sair)
+#
+# App nativo (specs/019-app-rust-convite, R19): um processo so, sem motor de pagina. Com -Nativo mede
+# so o processo, sem descer para os filhos, pela mesma coluna.
+#   powershell -File scripts/memoria.ps1 -Nativo                    # Espia (nativo): <MB> MB
+#   powershell -File scripts/memoria.ps1 -Processo Espia -Nativo    # o mesmo, com o nome do processo
+#   powershell -File scripts/memoria.ps1 -Nativo -Watch             # uma linha a cada 5 s
 param(
   [switch]$Watch,
   [int]$Interval = 5,
-  [string]$Name = 'Espia.exe'
+  [string]$Name = 'Espia.exe',
+  [switch]$Nativo,
+  # Nome do processo sem ".exe". Informado, vale no lugar de -Name.
+  [string]$Processo
 )
+
+if ($Processo) { $Name = ($Processo -replace '\.exe$', '') + '.exe' }
+$Rotulo = $Name -replace '\.exe$', ''
+
+# So os processos com esse nome, sem os filhos. Mais de um aberto: soma.
+function Measure-Nativo {
+  $procs = @(Get-CimInstance Win32_Process | Where-Object { $_.Name -eq $Name })
+  if (-not $procs) { return $null }
+  $ids = @{}
+  foreach ($p in $procs) { $ids[[int]$p.ProcessId] = $true }
+  $perf = Get-CimInstance Win32_PerfFormattedData_PerfProc_Process | Where-Object { $ids.ContainsKey([int]$_.IDProcess) }
+  $sum = 0.0
+  foreach ($x in $perf) { $sum += [double]$x.WorkingSetPrivate }
+  return [math]::Round($sum / 1MB, 1)
+}
+
+if ($Nativo) {
+  if ($Watch) {
+    Write-Host "$Rotulo (nativo): memoria a cada $Interval s (Ctrl+C para sair)"
+    while ($true) {
+      $mb = Measure-Nativo
+      $t = Get-Date -Format 'HH:mm:ss'
+      if ($null -ne $mb) { Write-Host ("{0}  {1,7:N1} MB" -f $t, $mb) }
+      else { Write-Host "$t  $Rotulo nao esta rodando" }
+      Start-Sleep -Seconds $Interval
+    }
+  }
+  $mb = Measure-Nativo
+  if ($null -eq $mb) {
+    Write-Host "$Rotulo nao esta rodando ($Name nao encontrado)."
+    exit 1
+  }
+  Write-Host ("{0} (nativo): {1:N1} MB" -f $Rotulo, $mb)
+  exit 0
+}
 
 function Get-Tree {
   $all = Get-CimInstance Win32_Process

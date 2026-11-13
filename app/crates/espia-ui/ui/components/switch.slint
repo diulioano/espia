@@ -1,0 +1,55 @@
+// Interruptor (porte do `.switch` do seletor): trilho de 46x28, bolinha de 20px; ligado = accent com a bolinha escura.
+
+import { Tokens } from "../tokens.slint";
+
+export component Switch inherits Rectangle {
+    in property <bool> checked: false;
+    in property <bool> enabled: true;
+    in property <string> label;
+    callback toggled(bool);
+
+    width: 46px;
+    height: 28px;
+    border-radius: 14px;
+    background: root.checked ? Tokens.color-accent : Tokens.color-text.with-alpha(0.18);
+    opacity: root.enabled ? 1 : 0.55;
+    accessible-role: switch;
+    accessible-label: root.label;
+    accessible-checked: root.checked;
+    animate background { duration: 150ms; easing: ease-out; }
+
+    Rectangle {
+        x: root.checked ? 22px : 4px;
+        y: 4px;
+        width: 20px;
+        height: 20px;
+        border-radius: 10px;
+        background: root.checked ? Tokens.color-bg : Tokens.color-text;
+        animate x { duration: 150ms; easing: ease-out; }
+        animate background { duration: 150ms; easing: ease-out; }
+    }
+    ta := TouchArea {
+        enabled: root.enabled;
+        mouse-cursor: root.enabled ? MouseCursor.pointer : MouseCursor.default;
+        clicked => { root.toggled(!root.checked); }
+    }
+    fs := FocusScope {
+        enabled: root.enabled;
+        key-pressed(event) => {
+            if (event.text == " " || event.text == Key.Return) {
+                root.toggled(!root.checked);
+                return accept;
+            }
+            return reject;
+        }
+    }
+    if fs.has-focus: Rectangle {
+        x: -3px;
+        y: -3px;
+        width: root.width + 6px;
+        height: root.height + 6px;
+        border-radius: self.height / 2;
+        border-width: Tokens.ring-focus-width;
+        border-color: Tokens.ring-focus-color;
+    }
+}

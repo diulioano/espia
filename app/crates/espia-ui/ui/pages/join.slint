@@ -1,0 +1,318 @@
+// Entrada por link. Porte de src/ui/pages/JoinPage.svelte (desktop): cartão de 560px com a pilha de
+// avatares de quem já está na sala, o título, o campo de apelido e "Entrar". Sala cheia troca o
+// conteúdo por castor triste e as duas ações. Os textos derivados (quem está lá, "N ao vivo") vêm
+// prontos do Rust (bind/join.rs, a partir de espia-core::join_view); a tela só desenha e devolve a ação.
+
+import { Tokens } from "../tokens.slint";
+import { Scroll } from "../components/scroll.slint";
+import { Logo } from "../components/logo.slint";
+import { Heading } from "../components/heading.slint";
+import { Mascot, MascotMood } from "../components/mascot.slint";
+import { AvatarData } from "../components/avatar.slint";
+import { AvatarStack } from "../components/avatar-stack.slint";
+import { Button, ButtonKind } from "../components/buttons.slint";
+import { Icon, Icons } from "../components/icon.slint";
+import { InputPill } from "../components/input-pill.slint";
+import { LiveTag } from "../components/live-tag.slint";
+
+export global JoinState {
+    // Sala cheia: tela de "problema" (castor triste, "Entrar" desligado).
+    in property <bool> full: false;
+    in property <[AvatarData]> people;
+    // Texto do selo ("LU AO VIVO"); vazio = sem selo.
+    in property <string> badge: "";
+    // Sala fixa: selo "Sala fixa" e o nome no título; vazio = sala rápida.
+    in property <string> fixed-name: "";
+    in property <string> title: "Te chamaram pra uma sala.";
+    in property <string> subtitle: "";
+    in property <string> full-body: "";
+    in property <bool> replaced: false;
+    // false = só assiste (o botão vira "Entrar pra assistir").
+    in property <bool> can-share: true;
+    // Ajuda embaixo do campo; vazio = sem ajuda.
+    in property <string> hint: "";
+    in-out property <string> nickname: "";
+    // Quanto o Rust enxerga do apelido: cortado em 24 ao digitar; limpo (sem espaços nas pontas) ao enviar.
+    pure callback limit-nickname(string) -> string;
+    pure callback clean-nickname(string) -> string;
+    callback go-home();
+    callback join(string);
+    callback create-room();
+}
+
+export component JoinPage inherits Rectangle {
+    background: Tokens.color-bg;
+    clip: true;
+
+    property <image> no-icon;
+    property <bool> problem: JoinState.full;
+    property <bool> can-join: JoinState.clean-nickname(JoinState.nickname) != "";
+
+    function submit() {
+        if (root.can-join) {
+            JoinState.join(JoinState.clean-nickname(JoinState.nickname));
+        }
+    }
+
+    Scroll {
+        page := Rectangle {
+            min-height: max(root.height, col.preferred-height);
+            preferred-height: col.preferred-height;
+
+            // .blob: sala normal = canto de baixo à direita (sálvia); problema = canto de cima (destaque).
+            Rectangle {
+                x: root.problem ? root.width - 640px + 180px : root.width - 760px + 200px;
+                y: root.problem ? -180px : page.height - 760px + 260px;
+                width: root.problem ? 640px : 760px;
+                height: root.problem ? 640px : 760px;
+                border-radius: self.width / 2;
+                background: root.problem ? Tokens.color-accent.with-alpha(0.10) : Tokens.color-accent-2.with-alpha(0.16);
+            }
+
+            // O castor espia por trás do cartão (vem antes dele): left 470, top 84, girado 5 graus.
+            if !root.problem: Rectangle {
+                x: 470px;
+                y: 84px;
+                width: 110px;
+                height: 110px * 1.12;
+                transform-rotation: 5deg;
+                Mascot {
+                    mood: MascotMood.happy;
+                    size: 110px;
+                }
+            }
+
+            col := VerticalLayout {
+                alignment: start;
+                // .top: padding 36px 72px.
+                HorizontalLayout {
+                    padding-left: 72px;
+                    padding-right: 72px;
+                    padding-top: 36px;
+                    padding-bottom: 36px;
+                    alignment: start;
+                    Logo {
+                        size: 36px;
+                        home => { JoinState.go-home(); }
+                    }
+                }
+                // .card: margem 60px 0 72px 72px, largura 560, padding 44, raio 36.
+                HorizontalLayout {
+                    padding-left: 72px;
+                    padding-top: 60px;
+                    padding-bottom: 72px;
+                    alignment: start;
+                    Rectangle {
+                        width: min(560px, root.width - 144px);
+                        preferred-height: card.preferred-height;
+                        border-radius: 36px;
+                        background: Tokens.color-surface;
+
+                        card := VerticalLayout {
+                            padding: 44px;
+                            spacing: root.problem ? 24px : 26px;
+                            alignment: start;
+
+                            if !root.problem && JoinState.people.length > 0: HorizontalLayout {
+                                spacing: 14px;
+                                alignment: start;
+                                AvatarStack {
+                                    people: JoinState.people;
+                                    size: 44px;
+                                }
+                                if JoinState.badge != "": VerticalLayout {
+                                    alignment: center;
+                                    LiveTag {
+                                        label: JoinState.badge;
+                                        pad-h: 9px;
+                                    }
+                                }
+                            }
+
+                            if !root.problem: VerticalLayout {
+                                spacing: 8px;
+                                if JoinState.fixed-name != "": HorizontalLayout {
+                                    alignment: start;
+                                    Rectangle {
+                                        border-radius: self.height / 2;
+                                        background: Tokens.color-accent-2-400.with-alpha(0.16);
+                                        preferred-width: pill-row.preferred-width;
+                                        preferred-height: pill-row.preferred-height;
+                                        pill-row := HorizontalLayout {
+                                            padding-left: 10px;
+                                            padding-right: 12px;
+                                            padding-top: 4px;
+                                            padding-bottom: 4px;
+                                            spacing: 6px;
+                                            Icon {
+                                                source: Icons.pin;
+                                                size: 14px;
+                                                tint: Tokens.color-accent-2-300;
+                                            }
+                                            Text {
+                                                text: "Sala fixa";
+                                                font-family: Tokens.font-body;
+                                                font-size: 13px;
+                                                font-weight: 600;
+                                                color: Tokens.color-accent-2-300;
+                                                vertical-alignment: center;
+                                            }
+                                        }
+                                    }
+                                }
+                                Heading {
+                                    text: JoinState.fixed-name != "" ? JoinState.fixed-name : JoinState.title;
+                                    size: JoinState.fixed-name != "" ? 52px : 40px;
+                                    line: JoinState.fixed-name != "" ? 1 : 1.05;
+                                    tracking: JoinState.fixed-name != "" ? -0.78px : -0.6px;
+                                }
+                                Text {
+                                    text: JoinState.subtitle;
+                                    font-family: Tokens.font-body;
+                                    font-size: 17px;
+                                    color: Tokens.color-text.with-alpha(0.68);
+                                    wrap: word-wrap;
+                                }
+                            }
+
+                            if !root.problem && JoinState.replaced: Rectangle {
+                                border-radius: 18px;
+                                background: Tokens.color-accent-2-400.with-alpha(0.12);
+                                preferred-height: rep.preferred-height;
+                                rep := VerticalLayout {
+                                    padding-left: 16px;
+                                    padding-right: 16px;
+                                    padding-top: 12px;
+                                    padding-bottom: 12px;
+                                    Text {
+                                        text: "Você abriu esta sala em outra aba, então ela continua por lá. Entre de novo pra usar esta.";
+                                        font-family: Tokens.font-body;
+                                        font-size: 14px;
+                                        color: Tokens.color-accent-2-200;
+                                        wrap: word-wrap;
+                                    }
+                                }
+                            }
+
+                            // .form: gap 26 (o aviso de "Suas salas" sobe 16px, ficando a 10px do botão).
+                            if !root.problem: VerticalLayout {
+                                spacing: 26px;
+                                VerticalLayout {
+                                    spacing: 8px;
+                                    Text {
+                                        text: "Seu apelido";
+                                        font-family: Tokens.font-body;
+                                        font-size: 14px;
+                                        font-weight: 600;
+                                        color: Tokens.color-text;
+                                        opacity: 0.8;
+                                    }
+                                    nick := InputPill {
+                                        placeholder: "Como a galera te chama?";
+                                        fill: Tokens.color-bg;
+                                        text <=> JoinState.nickname;
+                                        edited(t) => {
+                                            JoinState.nickname = JoinState.limit-nickname(t);
+                                        }
+                                        accepted => { root.submit(); }
+                                    }
+                                    if JoinState.hint != "": Text {
+                                        text: JoinState.hint;
+                                        font-family: Tokens.font-body;
+                                        font-size: 13px;
+                                        color: Tokens.color-text.with-alpha(0.55);
+                                        wrap: word-wrap;
+                                    }
+                                }
+                                VerticalLayout {
+                                    spacing: 10px;
+                                    Button {
+                                        kind: ButtonKind.primary;
+                                        label: JoinState.can-share ? "Entrar" : "Entrar pra assistir";
+                                        icon: JoinState.can-share ? Icons.arrow-right : root.no-icon;
+                                        font-size: 19px;
+                                        icon-size: 20px;
+                                        pad-h: 20px;
+                                        min-height: 58px;
+                                        max-height: 58px;
+                                        pad-v: 0px;
+                                        enabled: root.can-join;
+                                        clicked => { root.submit(); }
+                                    }
+                                    if JoinState.fixed-name != "": Text {
+                                        text: "Ao entrar, ela fica em Suas salas neste aparelho.";
+                                        font-family: Tokens.font-body;
+                                        font-size: 13px;
+                                        color: Tokens.color-text.with-alpha(0.55);
+                                        wrap: word-wrap;
+                                    }
+                                    if !JoinState.can-share: Text {
+                                        text: "No celular dá pra assistir. Transmitir só no computador.";
+                                        font-family: Tokens.font-body;
+                                        font-size: 13px;
+                                        color: Tokens.color-text.with-alpha(0.55);
+                                        horizontal-alignment: center;
+                                        wrap: word-wrap;
+                                    }
+                                }
+                            }
+
+                            // Sala cheia.
+                            if root.problem: HorizontalLayout {
+                                alignment: start;
+                                Rectangle {
+                                    width: 96px;
+                                    height: 96px * 1.12;
+                                    Mascot {
+                                        mood: MascotMood.sad;
+                                        size: 96px;
+                                    }
+                                }
+                            }
+                            if root.problem: VerticalLayout {
+                                spacing: 10px;
+                                Heading {
+                                    text: JoinState.title;
+                                    size: 40px;
+                                    line: 1.05;
+                                    tracking: -0.6px;
+                                }
+                                Text {
+                                    text: JoinState.full-body;
+                                    font-family: Tokens.font-body;
+                                    font-size: 17px;
+                                    color: Tokens.color-text.with-alpha(0.68);
+                                    wrap: word-wrap;
+                                }
+                            }
+                            if root.problem: HorizontalLayout {
+                                spacing: 10px;
+                                alignment: start;
+                                Button {
+                                    kind: ButtonKind.primary;
+                                    label: "Entrar";
+                                    font-size: 17px;
+                                    pad-h: 24px;
+                                    min-height: 52px;
+                                    max-height: 52px;
+                                    pad-v: 0px;
+                                    enabled: false;
+                                }
+                                Button {
+                                    kind: ButtonKind.secondary;
+                                    label: "Criar uma sala nova";
+                                    font-size: 16px;
+                                    pad-h: 22px;
+                                    min-height: 52px;
+                                    max-height: 52px;
+                                    pad-v: 0px;
+                                    clicked => { JoinState.create-room(); }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}

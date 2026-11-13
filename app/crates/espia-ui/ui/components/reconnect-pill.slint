@@ -1,0 +1,52 @@
+// Aviso discreto sobre o palco enquanto reconecta (porte de src/ui/components/ReconnectPill.svelte, specs/011 Q1):
+// castor carregando, "Reconectando…" e "Você continua na sala". Quem o usa o centra, a 20px do topo do palco.
+
+import { Tokens } from "../tokens.slint";
+import { Mascot, MascotMood, MascotAnimate } from "mascot.slint";
+
+export component ReconnectPill inherits Rectangle {
+    width: pill.preferred-width;
+    height: pill.preferred-height;
+    border-radius: self.height / 2;
+    background: Tokens.color-raised;
+    border-width: Tokens.shadow-lg-ring-width;
+    border-color: Tokens.shadow-lg-ring;
+    drop-shadow-color: Tokens.shadow-lg-color.with-alpha(0.5);
+    drop-shadow-offset-y: 14px;
+    drop-shadow-blur: 36px;
+    accessible-role: none;
+    accessible-label: "Reconectando…";
+
+    pill := HorizontalLayout {
+        padding-left: 8px;
+        padding-right: 20px;
+        padding-top: 6px;
+        padding-bottom: 6px;
+        spacing: 12px;
+        Rectangle {
+            width: 36px;
+            height: 40px;
+            Mascot {
+                x: (parent.width - self.width) / 2;
+                y: (parent.height - self.height) / 2;
+                mood: MascotMood.loading;
+                size: 32px;
+                animate: MascotAnimate.full;
+            }
+        }
+        Text {
+            text: "Reconectando…";
+            font-family: Tokens.font-heading;
+            font-size: 17px;
+            color: Tokens.color-text;
+            vertical-alignment: center;
+        }
+        Text {
+            text: "Você continua na sala";
+            font-family: Tokens.font-body;
+            font-size: 13px;
+            color: Tokens.color-text.with-alpha(0.6);
+            vertical-alignment: center;
+        }
+    }
+}

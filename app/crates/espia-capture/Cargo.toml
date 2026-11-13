@@ -1,0 +1,10 @@
+[package]
+name = "espia-capture"
+description = "Captura no Windows: telas, janelas, miniaturas, som por janela, câmera e entradas de som."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+publish.workspace = true
+
+[dependencies]
+espia-core.workspace = true

@@ -1,0 +1,764 @@
+// Seletor de transmissão (porte de src/ui/components/GoLiveModal.svelte, versão de computador): "Escolha o que
+// compartilhar" com as abas Janelas, Telas inteiras e Câmeras, a grade de cartões (modo do app) ou o cartão que explica o
+// próximo passo (modo do navegador), a barra de som/resolução/FPS e o rodapé com "Cancelar" e "Transmitir".
+// Os textos que dependem da escolha feita aqui dentro (dica do som, dica do rodapé) vêm de `audio-hint` e `foot-hint`
+// (o Rust os monta com o espia-core). A escolha de aba, resolução, FPS e som é uma cópia local: só vale em "Transmitir".
+// Não portado (só celular): frontal/traseira e os textos do celular.
+
+import { Tokens } from "../tokens.slint";
+import { Icon, Icons } from "icon.slint";
+import { Button, ButtonKind, IconButton } from "buttons.slint";
+import { ModalFrame } from "modal-frame.slint";
+import { Scroll } from "scroll.slint";
+import { Stripes } from "stripes.slint";
+import { Switch } from "switch.slint";
+import { Segmented } from "segmented.slint";
+import { AudioSelect } from "audio-select.slint";
+import { SourceCard } from "source-card.slint";
+import { CamError, CamPermission, GoLiveData, SourceData, SurfaceTab } from "room-state.slint";
+
+// Uma aba: pílula com ícone, nome e (no modo do app) a contagem.
+component Tab inherits Rectangle {
+    in property <string> label;
+    in property <image> icon;
+    in property <string> count: "";
+    in property <bool> on: false;
+    callback clicked();
+
+    border-radius: self.height / 2;
+    background: root.on ? Tokens.color-accent : transparent;
+    preferred-width: row.preferred-width;
+    preferred-height: row.preferred-height;
+    accessible-role: tab;
+    accessible-label: root.label;
+    accessible-checked: root.on;
+
+    row := HorizontalLayout {
+        padding-left: 18px;
+        padding-right: 18px;
+        padding-top: 9px;
+        padding-bottom: 9px;
+        spacing: 8px;
+        VerticalLayout {
+            alignment: center;
+            Icon {
+                source: root.icon;
+                size: 16px;
+                tint: root.on ? Tokens.color-bg : Tokens.color-text;
+            }
+        }
+        Text {
+            text: root.label;
+            font-family: Tokens.font-body;
+            font-size: 15px;
+            font-weight: 600;
+            color: root.on ? Tokens.color-bg : Tokens.color-text;
+            vertical-alignment: center;
+        }
+        if root.count != "": Text {
+            text: root.count;
+            font-family: Tokens.font-body;
+            font-size: 15px;
+            font-weight: 400;
+            color: root.on ? Tokens.color-bg.with-alpha(0.7) : Tokens.color-text.with-alpha(0.7);
+            vertical-alignment: center;
+        }
+    }
+    TouchArea {
+        mouse-cursor: pointer;
+        clicked => { root.clicked(); }
+    }
+}
+
+// Caixa de aviso do seletor (".empty"): fundo suave, texto no meio. Com `column`, é a versão com título e botão.
+component EmptyBox inherits Rectangle {
+    min-height: 160px;
+    border-radius: 22px;
+    background: Tokens.color-text.with-alpha(0.04);
+    accessible-role: none;
+    @children
+}
+
+// A grade de 3 colunas com rolagem (".grid": gap de 14px, folga 2 6 2 2, até 470px ou 52% da janela).
+component SourceGrid inherits Rectangle {
+    in property <[SourceData]> sources;
+    in property <length> max-h: 470px;
+    callback selected(string);
+
+    property <length> cw: (root.width - 8px - 28px) / 3;
+    property <length> ch: 8px + (root.cw - 16px) * 9 / 16 + 62px;
+    property <int> rows: ceil(root.sources.length / 3);
+    property <length> content-h: root.rows * root.ch + max(0, root.rows - 1) * 14px + 4px;
+
+    preferred-height: min(root.content-h, root.max-h);
+    min-height: min(root.content-h, root.max-h);
+    max-height: min(root.content-h, root.max-h);
+    accessible-role: list;
+
+    Scroll {
+        Rectangle {
+            height: root.content-h;
+            for s[i] in root.sources: SourceCard {
+                x: 2px + mod(i, 3) * (root.cw + 14px);
+                y: 2px + floor(i / 3) * (root.ch + 14px);
+                width: root.cw;
+                height: root.ch;
+                source: s;
+                selected => { root.selected(s.id); }
+            }
+        }
+    }
+}
+
+export component GoLiveModal inherits ModalFrame {
+    in property <GoLiveData> data;
+    pure callback audio-hint(SurfaceTab, bool, bool, string, bool, string) -> string;
+    pure callback foot-hint(int, int, int) -> string;
+    callback transmit(SurfaceTab, int, int, bool);
+    callback select(string);
+    callback surface-changed(SurfaceTab);
+    callback allow-camera();
+    callback select-camera(string);
+    callback select-audio(string);
+    callback set-role(bool);
+
+    // Cópia local: só vale quando clicar em "Transmitir".
+    in-out property <SurfaceTab> surface: root.data.cameras-only ? SurfaceTab.camera : root.data.surface;
+    in-out property <int> resolution: root.data.resolution;
+    in-out property <int> fps: root.data.fps;
+    in-out property <bool> audio: root.data.audio;
+
+    property <bool> native: root.data.native;
+    property <bool> screen: root.surface == SurfaceTab.monitor;
+    property <bool> is-camera: root.surface == SurfaceTab.camera;
+    // Site: tela inteira vai sempre sem som. App: pode levar o som do PC, menos o Discord.
+    property <bool> audio-locked: root.screen && !root.native;
+    property <bool> audio-on: root.audio && !root.audio-locked;
+    property <bool> cam-granted: root.data.cam-permission == CamPermission.granted;
+    property <bool> has-selected: root.surface == SurfaceTab.window ? root.data.has-selected-window : root.data.has-selected-monitor;
+    property <string> selected-title: root.surface == SurfaceTab.window ? root.data.selected-window : root.data.selected-monitor;
+    property <bool> can-start: root.is-camera ? root.data.has-cam-video : (!root.native || root.has-selected);
+    // Grade larga: janelas do app ou câmeras no PC.
+    property <bool> wide: root.native || root.is-camera;
+    property <bool> audio-pick: root.is-camera && root.audio && root.cam-granted;
+    property <length> grid-max: min(root.height * 0.52, 470px);
+
+    card-width: root.wide ? 920px : 680px;
+    card-pad: 28px;
+
+    function pick-surface(s: SurfaceTab) {
+        root.surface = s;
+        root.surface-changed(s);
+    }
+
+    VerticalLayout {
+        spacing: 20px;
+
+        // .head
+        HorizontalLayout {
+            spacing: 14px;
+            VerticalLayout {
+                alignment: start;
+                Rectangle {
+                    width: 48px;
+                    height: 48px;
+                    border-radius: 24px;
+                    background: Tokens.color-accent;
+                    Icon {
+                        x: (parent.width - self.width) / 2;
+                        y: (parent.height - self.height) / 2;
+                        source: Icons.monitor-up;
+                        size: 22px;
+                        tint: Tokens.color-accent-900;
+                    }
+                }
+            }
+            VerticalLayout {
+                horizontal-stretch: 1;
+                spacing: 2px;
+                alignment: start;
+                Text {
+                    text: "Escolha o que compartilhar";
+                    font-family: Tokens.font-heading;
+                    font-size: 26px;
+                    color: Tokens.color-text;
+                }
+                Text {
+                    text: "Uma janela de jogo ou app, a tela inteira ou uma câmera.";
+                    font-family: Tokens.font-body;
+                    font-size: 14px;
+                    color: Tokens.color-text.with-alpha(0.62);
+                }
+            }
+            VerticalLayout {
+                alignment: start;
+                IconButton {
+                    icon: Icons.x;
+                    label: "Fechar";
+                    clicked => { root.close(); }
+                }
+            }
+        }
+
+        // .tabs-row
+        HorizontalLayout {
+            spacing: 16px;
+            Rectangle {
+                border-radius: self.height / 2;
+                background: Tokens.color-text.with-alpha(0.06);
+                preferred-width: tabs.preferred-width;
+                max-width: tabs.preferred-width;
+                preferred-height: tabs.preferred-height;
+                tabs := HorizontalLayout {
+                    padding: 4px;
+                    spacing: 4px;
+                    if !root.data.cameras-only: Tab {
+                        label: "Janelas";
+                        icon: Icons.panel-top;
+                        count: root.native && !root.data.loading ? "" + root.data.windows.length : "";
+                        on: root.surface == SurfaceTab.window;
+                        clicked => { root.pick-surface(SurfaceTab.window); }
+                    }
+                    if !root.data.cameras-only: Tab {
+                        label: "Telas inteiras";
+                        icon: Icons.monitor;
+                        count: root.native && !root.data.loading ? "" + root.data.monitors.length : "";
+                        on: root.surface == SurfaceTab.monitor;
+                        clicked => { root.pick-surface(SurfaceTab.monitor); }
+                    }
+                    Tab {
+                        label: "Câmeras";
+                        icon: Icons.camera;
+                        count: root.cam-granted && !root.data.cameras-only ? "" + root.data.cams.length : "";
+                        on: root.surface == SurfaceTab.camera;
+                        clicked => { root.pick-surface(SurfaceTab.camera); }
+                    }
+                }
+            }
+            Rectangle {
+                horizontal-stretch: 1;
+            }
+            if root.native && !root.is-camera: Text {
+                text: "Prévias atualizam a cada 2s";
+                font-family: Tokens.font-body;
+                font-size: 13px;
+                color: Tokens.color-text.with-alpha(0.55);
+                vertical-alignment: center;
+            }
+        }
+
+        // ---- aba Câmeras ----
+        if root.is-camera && root.data.cam-permission == CamPermission.denied: EmptyBox {
+            VerticalLayout {
+                alignment: center;
+                spacing: 12px;
+                padding: 24px;
+                Text {
+                    text: "Câmera bloqueada";
+                    font-family: Tokens.font-body;
+                    font-size: 15px;
+                    font-weight: 700;
+                    color: Tokens.color-text;
+                    horizontal-alignment: center;
+                }
+                Text {
+                    text: "Libere a câmera nas permissões do site (o cadeado na barra de endereço) e abra de novo.";
+                    font-family: Tokens.font-body;
+                    font-size: 14px;
+                    color: Tokens.color-text.with-alpha(0.6);
+                    horizontal-alignment: center;
+                    wrap: word-wrap;
+                }
+            }
+        }
+        if root.is-camera && root.data.cam-permission != CamPermission.denied && !root.cam-granted: EmptyBox {
+            VerticalLayout {
+                alignment: center;
+                spacing: 12px;
+                padding: 24px;
+                HorizontalLayout {
+                    alignment: center;
+                    Icon {
+                        source: Icons.camera;
+                        size: 28px;
+                        tint: Tokens.color-text.with-alpha(0.6);
+                    }
+                }
+                Text {
+                    text: "Pra mostrar suas câmeras e placas de captura, o navegador vai pedir permissão.";
+                    font-family: Tokens.font-body;
+                    font-size: 14px;
+                    color: Tokens.color-text.with-alpha(0.6);
+                    horizontal-alignment: center;
+                    wrap: word-wrap;
+                }
+                HorizontalLayout {
+                    alignment: center;
+                    Button {
+                        kind: ButtonKind.primary;
+                        label: "Permitir câmeras";
+                        clicked => { root.allow-camera(); }
+                    }
+                }
+            }
+        }
+        if root.is-camera && root.cam-granted && root.data.cams.length == 0: EmptyBox {
+            VerticalLayout {
+                alignment: center;
+                spacing: 12px;
+                padding: 24px;
+                if root.data.cam-error == CamError.busy: Text {
+                    text: "A câmera está sendo usada por outro programa";
+                    font-family: Tokens.font-body;
+                    font-size: 15px;
+                    font-weight: 700;
+                    color: Tokens.color-text;
+                    horizontal-alignment: center;
+                    wrap: word-wrap;
+                }
+                if root.data.cam-error == CamError.busy: Text {
+                    text: "Feche a câmera no Discord, OBS, Teams ou Zoom (ou o app que estiver usando) e tente de novo.";
+                    font-family: Tokens.font-body;
+                    font-size: 14px;
+                    color: Tokens.color-text.with-alpha(0.6);
+                    horizontal-alignment: center;
+                    wrap: word-wrap;
+                }
+                if root.data.cam-error == CamError.not-found: Text {
+                    text: "Nenhuma câmera ou placa encontrada";
+                    font-family: Tokens.font-body;
+                    font-size: 15px;
+                    font-weight: 700;
+                    color: Tokens.color-text;
+                    horizontal-alignment: center;
+                    wrap: word-wrap;
+                }
+                if root.data.cam-error == CamError.not-found: Text {
+                    text: "Confira se ela está conectada e liberada em Configurações do Windows › Privacidade › Câmera.";
+                    font-family: Tokens.font-body;
+                    font-size: 14px;
+                    color: Tokens.color-text.with-alpha(0.6);
+                    horizontal-alignment: center;
+                    wrap: word-wrap;
+                }
+                if root.data.cam-error == CamError.other: Text {
+                    text: "A câmera não abriu";
+                    font-family: Tokens.font-body;
+                    font-size: 15px;
+                    font-weight: 700;
+                    color: Tokens.color-text;
+                    horizontal-alignment: center;
+                    wrap: word-wrap;
+                }
+                if root.data.cam-error == CamError.other: Text {
+                    text: "Confira as permissões de câmera do Windows e tente de novo.";
+                    font-family: Tokens.font-body;
+                    font-size: 14px;
+                    color: Tokens.color-text.with-alpha(0.6);
+                    horizontal-alignment: center;
+                    wrap: word-wrap;
+                }
+                if root.data.cam-error == CamError.none: Text {
+                    text: "Nenhuma câmera ou placa encontrada.";
+                    font-family: Tokens.font-body;
+                    font-size: 14px;
+                    color: Tokens.color-text.with-alpha(0.6);
+                    horizontal-alignment: center;
+                    wrap: word-wrap;
+                }
+                HorizontalLayout {
+                    alignment: center;
+                    Button {
+                        kind: ButtonKind.secondary;
+                        label: "Tentar de novo";
+                        clicked => { root.allow-camera(); }
+                    }
+                }
+            }
+        }
+        if root.is-camera && root.cam-granted && root.data.cams.length > 0: SourceGrid {
+            sources: root.data.cams;
+            max-h: root.grid-max;
+            selected(id) => { root.select-camera(id); }
+        }
+
+        // ---- abas Janelas e Telas inteiras ----
+        if !root.is-camera && root.native && root.data.loading: EmptyBox {
+            Text {
+                text: "Procurando suas janelas…";
+                font-family: Tokens.font-body;
+                font-size: 14px;
+                color: Tokens.color-text.with-alpha(0.6);
+                horizontal-alignment: center;
+                vertical-alignment: center;
+            }
+        }
+        if !root.is-camera && root.native && !root.data.loading && (root.screen ? root.data.monitors.length : root.data.windows.length) == 0: EmptyBox {
+            Text {
+                text: root.screen ? "Nenhuma tela encontrada." : "Nenhuma janela aberta pra mostrar.";
+                font-family: Tokens.font-body;
+                font-size: 14px;
+                color: Tokens.color-text.with-alpha(0.6);
+                horizontal-alignment: center;
+                vertical-alignment: center;
+            }
+        }
+        if !root.is-camera && root.native && !root.data.loading && !root.screen && root.data.windows.length > 0: SourceGrid {
+            sources: root.data.windows;
+            max-h: root.grid-max;
+            selected(id) => { root.select(id); }
+        }
+        if !root.is-camera && root.native && !root.data.loading && root.screen && root.data.monitors.length > 0: SourceGrid {
+            sources: root.data.monitors;
+            max-h: root.grid-max;
+            selected(id) => { root.select(id); }
+        }
+
+        // ---- modo do navegador: o cartão que explica o próximo passo (.pick) ----
+        if !root.is-camera && !root.native: Rectangle {
+            min-height: 120px;
+            preferred-height: 120px;
+            border-radius: 22px;
+            clip: true;
+            Stripes {
+                a: Tokens.color-accent.mix(Tokens.color-stage, 0.22);
+                b: Tokens.color-accent.mix(Tokens.color-stage, 0.17);
+                band: 22px;
+            }
+            Rectangle {
+                background: Tokens.color-accent.with-alpha(0.1);
+            }
+            // box-shadow: inset 0 0 0 3px accent
+            Rectangle {
+                border-radius: 22px;
+                border-width: 3px;
+                border-color: Tokens.color-accent;
+            }
+            HorizontalLayout {
+                padding: 20px;
+                spacing: 16px;
+                VerticalLayout {
+                    alignment: center;
+                    Rectangle {
+                        width: 56px;
+                        height: 56px;
+                        border-radius: 16px;
+                        background: Tokens.color-accent-300;
+                        Icon {
+                            x: (parent.width - self.width) / 2;
+                            y: (parent.height - self.height) / 2;
+                            source: root.screen ? Icons.monitor : Icons.panel-top;
+                            size: 30px;
+                            tint: Tokens.color-accent-800;
+                        }
+                    }
+                }
+                VerticalLayout {
+                    horizontal-stretch: 1;
+                    alignment: center;
+                    spacing: 4px;
+                    Text {
+                        text: root.screen ? "Você escolhe a tela no próximo passo" : "Você escolhe a janela no próximo passo";
+                        font-family: Tokens.font-body;
+                        font-size: 16px;
+                        font-weight: 600;
+                        color: Tokens.color-text;
+                        wrap: word-wrap;
+                    }
+                    Text {
+                        text: root.screen
+                            ? "O Windows mostra suas telas. Tudo o que aparecer nela vai pra sala."
+                            : "O Windows mostra suas janelas abertas: escolha o jogo, o vídeo ou o app.";
+                        font-family: Tokens.font-body;
+                        font-size: 13px;
+                        color: Tokens.color-text.with-alpha(0.7);
+                        wrap: word-wrap;
+                    }
+                    HorizontalLayout {
+                        padding-top: 4px;
+                        alignment: start;
+                        Rectangle {
+                            width: chip.preferred-width;
+                            height: chip.preferred-height;
+                            border-radius: self.height / 2;
+                            background: Tokens.color-overlay;
+                            chip := HorizontalLayout {
+                                padding-left: 9px;
+                                padding-right: 9px;
+                                padding-top: 4px;
+                                padding-bottom: 4px;
+                                spacing: 5px;
+                                VerticalLayout {
+                                    alignment: center;
+                                    Icon {
+                                        source: root.audio-on ? Icons.volume-2 : Icons.volume-x;
+                                        size: 12px;
+                                        tint: Tokens.color-text;
+                                    }
+                                }
+                                Text {
+                                    text: root.audio-on ? "com som" : "sem som";
+                                    font-family: Tokens.font-body;
+                                    font-size: 11px;
+                                    font-weight: 600;
+                                    color: Tokens.color-text;
+                                    vertical-alignment: center;
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        // ---- .bar: som, entrada de som da câmera, resolução e FPS ----
+        Rectangle {
+            border-radius: 24px;
+            background: Tokens.color-text.with-alpha(0.05);
+            preferred-height: bar.preferred-height;
+            bar := VerticalLayout {
+                padding: 14px;
+                spacing: 14px;
+
+                // Linha 1: o interruptor de som (no modo largo, sem entrada de som da câmera, divide a linha com
+                // resolução e FPS).
+                HorizontalLayout {
+                    spacing: 14px;
+                    Rectangle {
+                        horizontal-stretch: 1;
+                        min-width: 320px;
+                        preferred-height: toggle-row.preferred-height;
+                        TouchArea {
+                            enabled: !root.audio-locked;
+                            mouse-cursor: root.audio-locked ? MouseCursor.default : MouseCursor.pointer;
+                            clicked => { root.audio = !root.audio; }
+                        }
+                        toggle-row := HorizontalLayout {
+                            padding-left: 6px;
+                            padding-right: 6px;
+                            padding-top: 4px;
+                            padding-bottom: 4px;
+                            spacing: 14px;
+                            VerticalLayout {
+                                alignment: center;
+                                Switch {
+                                    checked: root.audio-on;
+                                    enabled: !root.audio-locked;
+                                    label: "Compartilhar áudio";
+                                    toggled(on) => { root.audio = on; }
+                                }
+                            }
+                            VerticalLayout {
+                                horizontal-stretch: 1;
+                                alignment: center;
+                                spacing: 1px;
+                                Text {
+                                    text: "Compartilhar áudio";
+                                    font-family: Tokens.font-body;
+                                    font-size: 15px;
+                                    font-weight: 600;
+                                    color: Tokens.color-text;
+                                }
+                                Text {
+                                    text: root.audio-hint(root.surface, root.native, root.audio, root.selected-title, root.cam-granted, root.data.cam-audio-label);
+                                    font-family: Tokens.font-body;
+                                    font-size: 13px;
+                                    color: Tokens.color-text.with-alpha(0.6);
+                                    wrap: word-wrap;
+                                }
+                            }
+                        }
+                    }
+                    if root.wide && !root.audio-pick: HorizontalLayout {
+                        spacing: 8px;
+                        VerticalLayout {
+                            alignment: center;
+                            Text {
+                                text: "Resolução";
+                                font-family: Tokens.font-body;
+                                font-size: 13px;
+                                font-weight: 600;
+                                color: Tokens.color-text.with-alpha(0.7);
+                            }
+                        }
+                        Rectangle {
+                            width: 8px;
+                        }
+                        VerticalLayout {
+                            alignment: center;
+                            Segmented {
+                                label: "Resolução";
+                                options: ["720p", "1080p"];
+                                current: root.resolution == 1080 ? 1 : 0;
+                                picked(i) => { root.resolution = i == 1 ? 1080 : 720; }
+                            }
+                        }
+                    }
+                    if root.wide && !root.audio-pick: HorizontalLayout {
+                        spacing: 8px;
+                        VerticalLayout {
+                            alignment: center;
+                            Text {
+                                text: "FPS";
+                                font-family: Tokens.font-body;
+                                font-size: 13px;
+                                font-weight: 600;
+                                color: Tokens.color-text.with-alpha(0.7);
+                            }
+                        }
+                        Rectangle {
+                            width: 8px;
+                        }
+                        VerticalLayout {
+                            alignment: center;
+                            Segmented {
+                                label: "FPS";
+                                options: ["30", "60"];
+                                current: root.fps == 60 ? 1 : 0;
+                                picked(i) => { root.fps = i == 1 ? 60 : 30; }
+                            }
+                        }
+                    }
+                }
+
+                // Linha 2 (aba Câmeras com som): entrada de som, tipo de som e a dica do eco.
+                if root.audio-pick: VerticalLayout {
+                    spacing: 10px;
+                    HorizontalLayout {
+                        padding-left: 6px;
+                        padding-right: 6px;
+                        spacing: 10px;
+                        AudioSelect {
+                            horizontal-stretch: 1;
+                            min-width: 240px;
+                            options: root.data.cam-audios;
+                            current: root.data.cam-audio-id;
+                            current-label: root.data.cam-audio-label;
+                            picked(id) => { root.select-audio(id); }
+                        }
+                        VerticalLayout {
+                            alignment: center;
+                            Segmented {
+                                label: "Tipo de som";
+                                options: ["Som de voz", "Som de jogo"];
+                                current: root.data.cam-role-game ? 1 : 0;
+                                picked(i) => { root.set-role(i == 1); }
+                            }
+                        }
+                    }
+                    if root.data.cam-audio-id != "" && !root.data.cam-role-game: HorizontalLayout {
+                        padding-left: 6px;
+                        padding-right: 6px;
+                        Text {
+                            text: "Se você está no Discord, a galera pode te ouvir duas vezes. Fone de ouvido evita eco.";
+                            font-family: Tokens.font-body;
+                            font-size: 13px;
+                            color: Tokens.color-accent-400.with-alpha(0.85);
+                            wrap: word-wrap;
+                        }
+                    }
+                }
+
+                // Linha de resolução e FPS quando não couberam na primeira (modo estreito, ou câmera com som).
+                if !root.wide || root.audio-pick: HorizontalLayout {
+                    spacing: 14px;
+                    alignment: start;
+                    HorizontalLayout {
+                        spacing: 8px;
+                        VerticalLayout {
+                            alignment: center;
+                            Text {
+                                text: "Resolução";
+                                font-family: Tokens.font-body;
+                                font-size: 13px;
+                                font-weight: 600;
+                                color: Tokens.color-text.with-alpha(0.7);
+                            }
+                        }
+                        Rectangle {
+                            width: 8px;
+                        }
+                        VerticalLayout {
+                            alignment: center;
+                            Segmented {
+                                label: "Resolução";
+                                options: ["720p", "1080p"];
+                                current: root.resolution == 1080 ? 1 : 0;
+                                picked(i) => { root.resolution = i == 1 ? 1080 : 720; }
+                            }
+                        }
+                    }
+                    HorizontalLayout {
+                        spacing: 8px;
+                        VerticalLayout {
+                            alignment: center;
+                            Text {
+                                text: "FPS";
+                                font-family: Tokens.font-body;
+                                font-size: 13px;
+                                font-weight: 600;
+                                color: Tokens.color-text.with-alpha(0.7);
+                            }
+                        }
+                        Rectangle {
+                            width: 8px;
+                        }
+                        VerticalLayout {
+                            alignment: center;
+                            Segmented {
+                                label: "FPS";
+                                options: ["30", "60"];
+                                current: root.fps == 60 ? 1 : 0;
+                                picked(i) => { root.fps = i == 1 ? 60 : 30; }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        // ---- .foot ----
+        HorizontalLayout {
+            spacing: 12px;
+            HorizontalLayout {
+                horizontal-stretch: 1;
+                spacing: 8px;
+                VerticalLayout {
+                    alignment: center;
+                    Icon {
+                        source: Icons.info;
+                        size: 15px;
+                        tint: Tokens.color-text.with-alpha(0.55);
+                    }
+                }
+                Text {
+                    horizontal-stretch: 1;
+                    text: root.foot-hint(root.data.people, root.resolution, root.fps);
+                    font-family: Tokens.font-body;
+                    font-size: 13px;
+                    color: Tokens.color-text.with-alpha(0.55);
+                    vertical-alignment: center;
+                    wrap: word-wrap;
+                }
+            }
+            HorizontalLayout {
+                spacing: 8.8px;
+                alignment: end;
+                Button {
+                    kind: ButtonKind.secondary;
+                    label: "Cancelar";
+                    clicked => { root.close(); }
+                }
+                Button {
+                    kind: ButtonKind.primary;
+                    label: "Transmitir";
+                    icon: Icons.radio;
+                    icon-size: 18px;
+                    pad-h: 22px;
+                    enabled: root.can-start;
+                    clicked => { root.transmit(root.surface, root.resolution, root.fps, root.audio); }
+                }
+            }
+        }
+    }
+}

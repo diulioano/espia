@@ -1,0 +1,99 @@
+// Confirmar "Tirar da sala" (porte de src/ui/components/RemoveDialog.svelte, specs/014 US4): só o dono de uma sala fixa vê.
+// Selo com o ícone de remover pessoa, título com o nome, aviso, erro e as duas ações. O título chega pronto do Rust.
+
+import { Tokens } from "../tokens.slint";
+import { Icon, Icons } from "icon.slint";
+import { Button, ButtonKind } from "buttons.slint";
+import { ModalFrame } from "modal-frame.slint";
+
+export component RemoveDialog inherits ModalFrame {
+    card-width: 440px;
+    in property <string> title;
+    in property <string> error;
+    in property <bool> busy: false;
+    callback confirm();
+
+    VerticalLayout {
+        spacing: 20px;
+        // .badge: 52px, accent-300, ícone de 22px.
+        HorizontalLayout {
+            alignment: start;
+            Rectangle {
+                width: 52px;
+                height: 52px;
+                border-radius: 26px;
+                background: Tokens.color-accent-300;
+                Icon {
+                    x: (parent.width - self.width) / 2;
+                    y: (parent.height - self.height) / 2;
+                    source: Icons.user-minus;
+                    size: 22px;
+                    tint: Tokens.color-accent-900;
+                }
+            }
+        }
+        VerticalLayout {
+            spacing: 8px;
+            Text {
+                text: root.title;
+                font-family: Tokens.font-heading;
+                font-size: 26px;
+                color: Tokens.color-text;
+                wrap: word-wrap;
+            }
+            Text {
+                text: "Sai na hora e vê um aviso. Se quiser, pode voltar pelo link.";
+                font-family: Tokens.font-body;
+                font-size: 15px;
+                color: Tokens.color-text.with-alpha(0.72);
+                wrap: word-wrap;
+            }
+        }
+        if root.error != "": Text {
+            text: root.error;
+            font-family: Tokens.font-body;
+            font-size: 13px;
+            color: Tokens.color-accent-300;
+            wrap: word-wrap;
+        }
+        HorizontalLayout {
+            spacing: 10px;
+            alignment: end;
+            Button {
+                kind: ButtonKind.secondary;
+                label: "Cancelar";
+                clicked => { root.close(); }
+            }
+            // .btn-remove: accent-300 com texto accent-900 (hover accent-200).
+            Rectangle {
+                property <bool> on: !root.busy;
+                border-radius: self.height / 2;
+                background: !self.on ? Tokens.color-accent-300 : rm-ta.has-hover ? Tokens.color-accent-200 : Tokens.color-accent-300;
+                opacity: self.on ? 1 : 0.45;
+                preferred-width: rm-row.preferred-width;
+                preferred-height: rm-row.preferred-height;
+                accessible-role: button;
+                accessible-label: "Tirar da sala";
+                animate background { duration: 120ms; easing: ease-out; }
+                rm-row := HorizontalLayout {
+                    padding-left: 23px;
+                    padding-right: 23px;
+                    padding-top: 13px;
+                    padding-bottom: 13px;
+                    Text {
+                        text: "Tirar da sala";
+                        font-family: Tokens.font-heading;
+                        font-size: 15px;
+                        color: Tokens.color-accent-900;
+                        vertical-alignment: center;
+                    }
+                }
+                rm-ta := TouchArea {
+                    enabled: parent.on;
+                    mouse-cursor: parent.on ? MouseCursor.pointer : MouseCursor.not-allowed;
+                    clicked => { root.confirm(); }
+                }
+            }
+        }
+    }
+}

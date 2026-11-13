@@ -1,0 +1,111 @@
+// Painel "Suas salas" (porte de src/ui/components/SavedRoomsPanel.svelte, versão de computador): cartão de 600px
+// com o castor espiando por cima à esquerda, o título com a nota ("neste aparelho") e as salas em grupos.
+// No máximo 5 salas (o limite vale no view-model; aqui só se desenha o que vier).
+
+import { Tokens } from "../tokens.slint";
+import { Mascot, MascotMood } from "mascot.slint";
+import { SavedRoom, SavedRoomData } from "saved-room.slint";
+
+export struct SavedGroupData {
+    // Título do grupo já em maiúsculas ("COM GENTE AGORA"); vazio = sem título.
+    label: string,
+    rooms: [SavedRoomData],
+}
+
+export component SavedRoomsPanel inherits Rectangle {
+    in property <string> note;
+    in property <[SavedGroupData]> groups;
+    callback enter(string);
+    callback menu(string, bool);
+    callback forget(string);
+    callback rename(string);
+    callback remove(string);
+    callback anchor(length, length);
+
+    width: 600px;
+    height: card.preferred-height;
+    accessible-role: none;
+
+    // .castor: à esquerda (a direita do topo é do "Baixar o app"), left 48, top -78, girado -4 graus; fica atrás do cartão.
+    Rectangle {
+        x: 48px;
+        y: -78px;
+        width: 92px;
+        height: 92px * 1.12;
+        transform-rotation: -4deg;
+        Mascot {
+            mood: MascotMood.peek;
+            size: 92px;
+        }
+    }
+
+    card := Rectangle {
+        width: root.width;
+        height: self.preferred-height;
+        preferred-height: col.preferred-height;
+        border-radius: 36px;
+        background: Tokens.color-surface;
+        drop-shadow-color: Tokens.shadow-lg-color.with-alpha(0.35);
+        drop-shadow-offset-y: 30px;
+        drop-shadow-blur: 70px;
+
+        col := VerticalLayout {
+            padding-top: 26px;
+            padding-left: 18px;
+            padding-right: 18px;
+            padding-bottom: 18px;
+            spacing: 14px;
+            // .head: título e nota na mesma linha de base.
+            HorizontalLayout {
+                padding-left: 12px;
+                padding-right: 12px;
+                spacing: 12px;
+                alignment: start;
+                Text {
+                    text: "Suas salas";
+                    font-family: Tokens.font-heading;
+                    font-size: 26px;
+                    color: Tokens.color-text;
+                    vertical-alignment: bottom;
+                }
+                Text {
+                    text: root.note;
+                    font-family: Tokens.font-body;
+                    font-size: 13px;
+                    color: Tokens.color-text.with-alpha(0.55);
+                    vertical-alignment: bottom;
+                }
+            }
+            // .groups: gap 14; cada grupo gap 2.
+            VerticalLayout {
+                spacing: 14px;
+                for group in root.groups: VerticalLayout {
+                    spacing: 2px;
+                    if group.label != "": HorizontalLayout {
+                        padding-left: 12px;
+                        padding-right: 12px;
+                        padding-top: 8px;
+                        padding-bottom: 4px;
+                        Text {
+                            text: group.label;
+                            font-family: Tokens.font-body;
+                            font-size: 12px;
+                            font-weight: 700;
+                            letter-spacing: 0.72px;
+                            color: Tokens.color-text.with-alpha(0.5);
+                        }
+                    }
+                    for room in group.rooms: SavedRoom {
+                        room: room;
+                        enter => { root.enter(room.code); }
+                        menu(open) => { root.menu(room.code, open); }
+                        forget => { root.forget(room.code); }
+                        rename => { root.rename(room.code); }
+                        remove => { root.remove(room.code); }
+                        anchor(x, y) => { root.anchor(x, y); }
+                    }
+                }
+            }
+        }
+    }
+}

@@ -1,0 +1,212 @@
+// Cartão da grade do seletor (porte de src/ui/components/SourceCard.svelte): janela, tela inteira ou câmera.
+// Prévia 16:9 (miniatura, ícone grande ou o ícone do tipo), selo "tocando som" ou "Em uso por outro programa",
+// marca de escolhido e, embaixo, a pastilha com a letra, o título e o programa. A altura é a do site com o programa
+// (a linha de baixo tem 40px: 14px e 12px de texto com line-height 1.55).
+// Miniaturas e prévias de mentira (as do mock) são listras com um rótulo; as de verdade chegam como imagem em `thumb`.
+
+import { Tokens } from "../tokens.slint";
+import { Tone } from "avatar.slint";
+import { Icon, Icons } from "icon.slint";
+import { Stripes } from "stripes.slint";
+import { SourceData, SourceKind } from "room-state.slint";
+
+export component SourceCard inherits Rectangle {
+    in property <SourceData> source;
+    callback selected();
+
+    property <length> pw: root.width - 16px;
+    property <length> ph: root.pw * 9 / 16;
+    property <bool> has-thumb: root.source.thumb.width > 0 || root.source.thumb-label != "";
+    property <color> tone-bg: root.source.icon-tone == Tone.accent ? Tokens.color-accent-300
+        : root.source.icon-tone == Tone.sage ? Tokens.color-accent-2-300
+        : root.source.icon-tone == Tone.sand ? Tokens.color-neutral-300
+        : Tokens.color-accent-400;
+    property <color> tone-fg: root.source.icon-tone == Tone.accent ? Tokens.color-accent-800
+        : root.source.icon-tone == Tone.sage ? Tokens.color-accent-2-800
+        : root.source.icon-tone == Tone.sand ? Tokens.color-neutral-800
+        : Tokens.color-accent-900;
+    // As listras da miniatura de mentira: a cor do programa misturada ao palco (as do site são tons soltos).
+    property <color> thumb-a: root.source.thumb-tone == Tone.accent ? Tokens.color-accent.mix(Tokens.color-stage, 0.22)
+        : root.source.thumb-tone == Tone.sage ? Tokens.color-accent-2.mix(Tokens.color-stage, 0.19)
+        : root.source.thumb-tone == Tone.sand ? Tokens.color-text.mix(Tokens.color-stage, 0.115)
+        : Tokens.color-accent.mix(Tokens.color-stage, 0.27);
+    property <color> thumb-b: root.source.thumb-tone == Tone.accent ? Tokens.color-accent.mix(Tokens.color-stage, 0.17)
+        : root.source.thumb-tone == Tone.sage ? Tokens.color-accent-2.mix(Tokens.color-stage, 0.14)
+        : root.source.thumb-tone == Tone.sand ? Tokens.color-text.mix(Tokens.color-stage, 0.095)
+        : Tokens.color-accent.mix(Tokens.color-stage, 0.2);
+
+    height: 8px + root.ph + 10px + 40px + 12px;
+    border-radius: Tokens.radius-tile;
+    background: root.source.selected ? Tokens.color-accent.with-alpha(0.12)
+        : root.source.busy ? Tokens.color-text.with-alpha(0.04)
+        : ta.has-hover ? Tokens.color-text.with-alpha(0.07)
+        : Tokens.color-text.with-alpha(0.04);
+    opacity: root.source.busy ? 0.55 : 1;
+    accessible-role: button;
+    accessible-label: root.source.busy ? root.source.title + " — em uso por outro programa" : root.source.title;
+    accessible-checkable: true;
+    accessible-checked: root.source.selected;
+    animate background { duration: 120ms; easing: ease-out; }
+
+    ta := TouchArea {
+        enabled: !root.source.busy;
+        mouse-cursor: root.source.busy ? MouseCursor.not-allowed : MouseCursor.pointer;
+        clicked => { root.selected(); }
+    }
+
+    // .preview
+    Rectangle {
+        x: 8px;
+        y: 8px;
+        width: root.pw;
+        height: root.ph;
+        border-radius: Tokens.radius-tile-sm;
+        clip: true;
+        Stripes {
+            a: root.has-thumb ? root.thumb-a : Tokens.color-text.mix(Tokens.color-stage, 0.115);
+            b: root.has-thumb ? root.thumb-b : Tokens.color-text.mix(Tokens.color-stage, 0.095);
+            band: 18px;
+            // Miniatura de verdade.
+            if root.source.thumb.width > 0: Image {
+                width: parent.width;
+                height: parent.height;
+                source: root.source.thumb;
+                image-fit: contain;
+            }
+            // Miniatura de mentira: o rótulo no meio (monospace 13px num quadro de 320px).
+            if root.source.thumb.width <= 0 && root.source.thumb-label != "": Text {
+                text: root.source.thumb-label;
+                font-family: Tokens.font-mono;
+                font-size: 13px * root.pw / 320px;
+                color: Tokens.color-text.with-alpha(0.55);
+                horizontal-alignment: center;
+                vertical-alignment: center;
+            }
+            // Sem miniatura: o ícone do tipo.
+            if !root.has-thumb: Rectangle {
+                x: (parent.width - self.width) / 2;
+                y: (parent.height - self.height) / 2;
+                width: 44px;
+                height: 44px;
+                border-radius: root.source.has-icon ? 11px : 0px;
+                background: root.source.has-icon ? root.tone-bg : transparent;
+                if root.source.has-icon: Text {
+                    text: root.source.letter;
+                    font-family: Tokens.font-heading;
+                    font-size: 22px;
+                    color: root.tone-fg;
+                    horizontal-alignment: center;
+                    vertical-alignment: center;
+                }
+                if !root.source.has-icon: Icon {
+                    x: (parent.width - self.width) / 2;
+                    y: (parent.height - self.height) / 2;
+                    source: root.source.kind == SourceKind.monitor ? Icons.monitor
+                        : root.source.kind == SourceKind.camera ? Icons.camera
+                        : Icons.panel-top;
+                    size: 34px;
+                    tint: Tokens.color-text.with-alpha(0.55);
+                }
+            }
+        }
+        if root.source.busy || root.source.playing: Rectangle {
+            x: 8px;
+            y: parent.height - self.height - 8px;
+            width: chip.preferred-width;
+            height: chip.preferred-height;
+            border-radius: self.height / 2;
+            background: Tokens.color-overlay;
+            chip := HorizontalLayout {
+                padding-left: 9px;
+                padding-right: 9px;
+                padding-top: 4px;
+                padding-bottom: 4px;
+                spacing: 5px;
+                if !root.source.busy: VerticalLayout {
+                    alignment: center;
+                    Icon {
+                        source: Icons.volume-2;
+                        size: 12px;
+                        tint: Tokens.color-text;
+                    }
+                }
+                Text {
+                    text: root.source.busy ? "Em uso por outro programa" : "tocando som";
+                    font-family: Tokens.font-body;
+                    font-size: 11px;
+                    font-weight: 600;
+                    color: Tokens.color-text;
+                    vertical-alignment: center;
+                }
+            }
+        }
+        if root.source.selected: Rectangle {
+            x: parent.width - self.width - 8px;
+            y: 8px;
+            width: 28px;
+            height: 28px;
+            border-radius: 14px;
+            background: Tokens.color-accent;
+            Icon {
+                x: (parent.width - self.width) / 2;
+                y: (parent.height - self.height) / 2;
+                source: Icons.check;
+                size: 16px;
+                tint: Tokens.color-accent-900;
+            }
+        }
+    }
+
+    // .meta: pastilha de 22px, título e programa
+    HorizontalLayout {
+        x: 12px;
+        y: 8px + root.ph + 10px;
+        width: root.width - 24px;
+        height: 40px;
+        spacing: 10px;
+        VerticalLayout {
+            alignment: start;
+            padding-top: 9px;
+            Rectangle {
+                width: 22px;
+                height: 22px;
+                border-radius: 6px;
+                background: root.source.has-icon ? root.tone-bg : Tokens.color-accent-200;
+                Text {
+                    text: root.source.letter;
+                    font-family: root.source.has-icon ? Tokens.font-heading : Tokens.font-heading;
+                    font-size: root.source.has-icon ? 11.7px : 12px;
+                    color: root.source.has-icon ? root.tone-fg : Tokens.color-accent-800;
+                    horizontal-alignment: center;
+                    vertical-alignment: center;
+                }
+            }
+        }
+        VerticalLayout {
+            horizontal-stretch: 1;
+            alignment: center;
+            Text {
+                text: root.source.title;
+                font-family: Tokens.font-body;
+                font-size: 14px;
+                font-weight: 600;
+                color: Tokens.color-text;
+                overflow: elide;
+            }
+            if root.source.app != "": Text {
+                text: root.source.app;
+                font-family: Tokens.font-body;
+                font-size: 12px;
+                color: Tokens.color-text.with-alpha(0.58);
+                overflow: elide;
+            }
+        }
+    }
+
+    // anéis: o de dentro (1px divisor) e o da escolha (3px)
+    Rectangle {
+        border-radius: Tokens.radius-tile;
+        border-width: root.source.selected ? 3px : 1px;
+        border-color: root.source.selected ? Tokens.color-accent : Tokens.color-divider;
+    }
+}

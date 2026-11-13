@@ -1,0 +1,65 @@
+// Avatar. Porte de src/ui/components/Avatar.svelte: círculo com a inicial em Caprasimo.
+// `letter` já vem em maiúscula (a Slint não tem "primeira letra"): use `espia_ui::initial(nome)` no Rust.
+// `live` põe o anel: 0 0 0 2px bg, 0 0 0 4px accent.
+
+import { Tokens } from "../tokens.slint";
+
+export enum Tone { accent, sage, sand, deep }
+
+// Um avatar de pilha ou de lista.
+export struct AvatarData {
+    letter: string,
+    tone: Tone,
+}
+
+export component Avatar inherits Rectangle {
+    in property <string> letter;
+    in property <Tone> tone: Tone.accent;
+    in property <bool> live: false;
+    in property <length> size: 38px;
+    // Cor entre o avatar e o anel de "ao vivo" (o fundo de quem está atrás).
+    in property <color> ring-gap: Tokens.color-bg;
+
+    property <color> bg: root.tone == Tone.accent ? Tokens.color-accent-300
+        : root.tone == Tone.sage ? Tokens.color-accent-2-300
+        : root.tone == Tone.sand ? Tokens.color-neutral-300
+        : Tokens.color-accent-400;
+    property <color> fg: root.tone == Tone.accent ? Tokens.color-accent-800
+        : root.tone == Tone.sage ? Tokens.color-accent-2-800
+        : root.tone == Tone.sand ? Tokens.color-neutral-800
+        : Tokens.color-accent-900;
+
+    width: root.size;
+    height: root.size;
+
+    if root.live: Rectangle {
+        x: -4px;
+        y: -4px;
+        width: root.size + 8px;
+        height: root.size + 8px;
+        border-radius: self.width / 2;
+        background: Tokens.color-accent;
+    }
+    if root.live: Rectangle {
+        x: -2px;
+        y: -2px;
+        width: root.size + 4px;
+        height: root.size + 4px;
+        border-radius: self.width / 2;
+        background: root.ring-gap;
+    }
+    Rectangle {
+        width: root.size;
+        height: root.size;
+        border-radius: root.size / 2;
+        background: root.bg;
+        Text {
+            text: root.letter;
+            font-family: Tokens.font-heading;
+            font-size: root.size * 0.45;
+            color: root.fg;
+            horizontal-alignment: center;
+            vertical-alignment: center;
+        }
+    }
+}

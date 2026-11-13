@@ -1,0 +1,425 @@
+// Tela da sala (RoomPage.svelte + Stage.svelte + StreamTile.svelte), cena `focus` do mock:
+// uma transmissão em foco no palco (Bia) e duas miniaturas (Lu e Tomás). Dados falsos vêm do Rust.
+
+import { Tokens } from "tokens.slint";
+import { Icon, LiveBadge, Avatar, Btn, Logo } from "widgets.slint";
+
+export struct Person {
+    name: string,
+    initial: string,
+    you: bool,
+    live: bool,
+    sub: string,
+    watching: bool,
+    // 0 accent, 1 sage, 2 sand, 3 deep (mesma ordem de `Tone` no site)
+    tone: int,
+}
+
+// Participant.svelte
+component PersonRow inherits Rectangle {
+    in property <Person> p;
+    pure function tone-bg(t: int) -> color {
+        t == 0 ? Tokens.color-accent-300 : t == 1 ? Tokens.color-accent-2-300 : t == 2 ? Tokens.color-neutral-300 : Tokens.color-accent-400
+    }
+    pure function tone-fg(t: int) -> color {
+        t == 0 ? Tokens.color-accent-800 : t == 1 ? Tokens.color-accent-2-800 : t == 2 ? Tokens.color-neutral-800 : Tokens.color-accent-900
+    }
+    border-radius: self.height / 2;
+    background: p.watching ? rgba(245, 234, 216, 0.07) : transparent;
+    // linha: padding 8 12 8 8, avatar 38, gap 12; texto com line-height 1.55 (15px + 12px)
+    height: p.sub == "" ? 54px : 59px;
+    HorizontalLayout {
+        padding-left: 8px;
+        padding-right: 12px;
+        spacing: 12px;
+        Rectangle {
+            width: 38px;
+            Avatar {
+                y: (parent.height - self.height) / 2;
+                letter: p.initial;
+                bg: tone-bg(p.tone);
+                fg: tone-fg(p.tone);
+                live: p.live;
+            }
+        }
+        VerticalLayout {
+            alignment: center;
+            spacing: 1px;
+            HorizontalLayout {
+                spacing: 6px;
+                alignment: start;
+                Text {
+                    text: p.name;
+                    font-size: 15px;
+                    font-weight: 600;
+                    overflow: elide;
+                    vertical-alignment: center;
+                }
+                if p.you: Rectangle {
+                    background: rgba(245, 234, 216, 0.1);
+                    border-radius: self.height / 2;
+                    preferred-width: you-row.preferred-width;
+                    height: 19px;
+                    y: (parent.height - self.height) / 2;
+                    you-row := HorizontalLayout {
+                        padding-left: 8px;
+                        padding-right: 8px;
+                        Text {
+                            text: "você";
+                            font-size: 11px;
+                            color: Tokens.color-text.with-alpha(0.75);
+                            vertical-alignment: center;
+                        }
+                    }
+                }
+            }
+            if p.sub != "": Text {
+                text: p.sub;
+                font-size: 12px;
+                color: Tokens.color-text-muted;
+                overflow: elide;
+            }
+        }
+        if p.live: LiveBadge { }
+    }
+}
+
+// Chip de nome sobre o vídeo (.name-chip do StreamTile.svelte).
+component NameChip inherits Rectangle {
+    in property <string> who;
+    in property <string> what;
+    in property <length> font: 12px;
+    // largura máxima do chip (max-width do CSS): passa dela, o texto da descrição é cortado com "…"
+    in property <length> limit: 10000px;
+    background: Tokens.color-overlay;
+    border-radius: self.height / 2;
+    width: min(chip.preferred-width, root.limit);
+    height: chip.preferred-height;
+    chip := HorizontalLayout {
+        padding-left: 5px;
+        padding-right: 12px;
+        padding-top: 5px;
+        padding-bottom: 5px;
+        spacing: 8px;
+        LiveBadge { }
+        Text {
+            text: root.who;
+            font-size: root.font;
+            font-weight: 600;
+            vertical-alignment: center;
+        }
+        if root.what != "": Text {
+            text: "· " + root.what;
+            font-size: root.font;
+            font-weight: 400;
+            color: Tokens.color-text.with-alpha(0.72);
+            overflow: elide;
+            vertical-alignment: center;
+        }
+    }
+}
+
+// Miniatura da faixa de baixo (size="thumb"): 200x113, canto 16, chip sempre visível.
+component Thumb inherits Rectangle {
+    in property <image> frame;
+    in property <string> who;
+    in property <string> what;
+    width: 200px;
+    height: 113px;
+    border-radius: Tokens.radius-tile-sm;
+    background: Tokens.color-stage;
+    clip: true;
+    Image {
+        width: parent.width;
+        height: parent.height;
+        source: root.frame;
+        image-fit: contain;
+    }
+    NameChip {
+        x: 8px;
+        y: 8px;
+        limit: root.width - 16px;
+        who: root.who;
+        what: root.what;
+        font: 12px;
+    }
+}
+
+export component RoomWindow inherits Window {
+    title: "Espia · sonda G2 (sala com dados falsos)";
+    preferred-width: 1280px;
+    preferred-height: 800px;
+    min-width: 1024px;
+    min-height: 560px;
+    background: Tokens.color-bg;
+    default-font-family: Tokens.font-body;
+    default-font-size: 15px;
+    default-font-weight: 400;
+
+    in property <[Person]> people;
+    in property <int> capacity: 10;
+    in property <string> room-title;
+    in property <string> room-subtitle;
+    in property <string> invite-label;
+    in property <string> toast-text;
+    in property <string> footer-hint;
+    in property <string> strip-hint;
+    in property <bool> eyes-open: true;
+
+    in property <image> stage-frame;
+    in property <string> stage-who;
+    in property <image> thumb-a;
+    in property <string> thumb-a-who;
+    in property <string> thumb-a-what;
+    in property <image> thumb-b;
+    in property <string> thumb-b-who;
+    in property <string> thumb-b-what;
+
+    HorizontalLayout {
+        // ---- barra lateral: 300px, padding 28 20 24 28, gap 28 ----
+        VerticalLayout {
+            width: 300px;
+            padding-left: 28px;
+            padding-top: 28px;
+            padding-right: 20px;
+            padding-bottom: 24px;
+            spacing: 28px;
+            alignment: start;
+
+            Logo {
+                eyes-open: root.eyes-open;
+            }
+
+            VerticalLayout {
+                spacing: 10px;
+                // .people-head: título 18px Caprasimo e contagem 13px, padding-right 8
+                HorizontalLayout {
+                    padding-right: 8px;
+                    height: 28px;
+                    Text {
+                        text: "Na sala";
+                        font-family: Tokens.font-heading;
+                        font-size: 18px;
+                        vertical-alignment: center;
+                    }
+                    Rectangle { }
+                    Text {
+                        text: root.people.length + " de " + root.capacity;
+                        font-size: 13px;
+                        color: Tokens.color-text-muted;
+                        vertical-alignment: center;
+                    }
+                }
+                // .list: margin-left -8px (a lista fica 8px mais larga e mais à esquerda)
+                Rectangle {
+                    height: list.preferred-height;
+                    list := VerticalLayout {
+                        x: -8px;
+                        width: parent.width + 8px;
+                        spacing: 4px;
+                        for p in root.people: PersonRow {
+                            p: p;
+                        }
+                    }
+                }
+            }
+        }
+
+        // ---- coluna principal: padding 24 28 24 0, gap 18 ----
+        VerticalLayout {
+            padding-top: 24px;
+            padding-right: 28px;
+            padding-bottom: 24px;
+            spacing: 18px;
+
+            // .header: título à esquerda, convite à direita, gap 16
+            HorizontalLayout {
+                spacing: 16px;
+                VerticalLayout {
+                    spacing: 2px;
+                    alignment: center;
+                    Text {
+                        text: root.room-title;
+                        font-family: Tokens.font-heading;
+                        font-size: 28px;
+                        overflow: elide;
+                        height: 31px;
+                    }
+                    Text {
+                        text: root.room-subtitle;
+                        font-size: 14px;
+                        color: Tokens.color-text-muted;
+                        height: 22px;
+                    }
+                }
+                // .invite: pílula surface, padding 6 6 6 18
+                Rectangle {
+                    background: Tokens.color-surface;
+                    border-radius: self.height / 2;
+                    preferred-width: invite.preferred-width;
+                    max-width: invite.preferred-width;
+                    invite := HorizontalLayout {
+                        padding-left: 18px;
+                        padding-right: 6px;
+                        padding-top: 6px;
+                        padding-bottom: 6px;
+                        spacing: 6px;
+                        Text {
+                            text: root.invite-label;
+                            font-family: Tokens.font-mono;
+                            font-size: 14px;
+                            color: Tokens.color-text.with-alpha(0.75);
+                            vertical-alignment: center;
+                        }
+                        Btn {
+                            label: "Copiar convite";
+                            icon: @image-url("../assets/icons/link.svg");
+                            background: Tokens.color-accent-2-400;
+                            fg: Tokens.color-accent-2-900;
+                            pad-v: 10px;
+                            pad-h: 18px;
+                        }
+                    }
+                }
+            }
+
+            // ---- palco: raio 32, fundo stage; foco com padding 14 e gap 14 ----
+            Rectangle {
+                vertical-stretch: 1;
+                background: Tokens.color-stage;
+                border-radius: Tokens.radius-stage;
+                clip: true;
+
+                VerticalLayout {
+                    padding: 14px;
+                    spacing: 14px;
+
+                    // tile em foco: raio 24, anel de 3px na cor de destaque
+                    Rectangle {
+                        vertical-stretch: 1;
+                        background: Tokens.color-stage;
+                        border-radius: 24px;
+                        clip: true;
+                        Image {
+                            width: parent.width;
+                            height: parent.height;
+                            source: root.stage-frame;
+                            image-fit: contain;
+                        }
+                        // selo de mudo (.muted-badge): 30px, canto superior direito
+                        Rectangle {
+                            x: parent.width - 30px - 16px;
+                            y: 16px;
+                            width: 30px;
+                            height: 30px;
+                            border-radius: 15px;
+                            background: Tokens.color-overlay;
+                            Icon {
+                                x: 7.5px;
+                                y: 7.5px;
+                                source: @image-url("../assets/icons/volume-x.svg");
+                                size: 15px;
+                            }
+                        }
+                        Rectangle {
+                            border-radius: 24px;
+                            border-width: 3px;
+                            border-color: Tokens.color-accent;
+                        }
+                    }
+
+                    // .strip: miniaturas de 200x113, gap 12, dica à direita
+                    HorizontalLayout {
+                        height: 113px;
+                        spacing: 12px;
+                        alignment: start;
+                        Thumb {
+                            frame: root.thumb-a;
+                            who: root.thumb-a-who;
+                            what: root.thumb-a-what;
+                        }
+                        Thumb {
+                            frame: root.thumb-b;
+                            who: root.thumb-b-who;
+                            what: root.thumb-b-what;
+                        }
+                        HorizontalLayout {
+                            padding-left: 8px;
+                            Text {
+                                text: root.strip-hint;
+                                font-size: 13px;
+                                color: Tokens.color-text.with-alpha(0.55);
+                                vertical-alignment: center;
+                            }
+                        }
+                    }
+                }
+
+                // aviso no canto superior direito (.corner: top 24, right 24)
+                Rectangle {
+                    x: parent.width - self.width - 24px;
+                    y: 24px;
+                    width: toast-row.preferred-width;
+                    height: toast-row.preferred-height;
+                    background: Tokens.color-raised;
+                    border-radius: self.height / 2;
+                    border-width: 1px;
+                    border-color: Tokens.shadow-lg-ring;
+                    drop-shadow-color: Tokens.shadow-lg-color;
+                    drop-shadow-offset-y: Tokens.shadow-lg-offset-y;
+                    drop-shadow-blur: Tokens.shadow-lg-blur;
+                    toast-row := HorizontalLayout {
+                        padding: 8px;
+                        padding-right: 20px;
+                        spacing: 12px;
+                        Rectangle {
+                            width: 34px;
+                            height: 34px;
+                            border-radius: 17px;
+                            background: Tokens.color-ctl;
+                            Icon {
+                                x: 8.5px;
+                                y: 8.5px;
+                                source: @image-url("../assets/icons/user-minus.svg");
+                                size: 17px;
+                            }
+                        }
+                        Text {
+                            text: root.toast-text;
+                            font-size: 14px;
+                            vertical-alignment: center;
+                        }
+                    }
+                }
+            }
+
+            // ---- rodapé: Transmitir, dica, espaço, Sair da sala (gap 16) ----
+            HorizontalLayout {
+                spacing: 16px;
+                Btn {
+                    label: "Transmitir";
+                    icon: @image-url("../assets/icons/monitor-up.svg");
+                    icon-size: 20px;
+                    background: Tokens.color-accent;
+                    fg: Tokens.color-bg;
+                    font-size: 17px;
+                    pad-v: 14px;
+                    pad-h: 26px;
+                }
+                Text {
+                    text: root.footer-hint;
+                    font-size: 14px;
+                    color: Tokens.color-text.with-alpha(0.55);
+                    vertical-alignment: center;
+                }
+                Rectangle { }
+                Btn {
+                    label: "Sair da sala";
+                    icon: @image-url("../assets/icons/log-out.svg");
+                    icon-size: 18px;
+                    border-color: Tokens.color-divider;
+                }
+            }
+        }
+    }
+}

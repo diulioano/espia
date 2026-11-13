@@ -1,0 +1,85 @@
+// "Não deu pra voltar pra sala" (porte de src/ui/components/ReconnectFail.svelte, specs/011 Q3): véu sobre o palco
+// com um cartão de 520px, castor triste, texto e as duas ações. A ligação continua tentando por trás.
+
+import { Tokens } from "../tokens.slint";
+import { Mascot, MascotMood } from "mascot.slint";
+import { Button, ButtonKind } from "buttons.slint";
+import { Icons } from "icon.slint";
+
+export component ReconnectFail inherits Rectangle {
+    callback retry();
+    callback leave();
+
+    background: Tokens.color-stage.with-alpha(0.78);
+    accessible-role: none;
+
+    // O véu come os cliques: o palco por baixo não responde.
+    TouchArea { }
+
+    Rectangle {
+        width: min(520px, root.width - 40px);
+        height: col.preferred-height;
+        x: (root.width - self.width) / 2;
+        y: (root.height - self.height) / 2;
+        border-radius: 32px;
+        background: Tokens.color-surface;
+        border-width: Tokens.shadow-lg-ring-width;
+        border-color: Tokens.shadow-lg-ring;
+        drop-shadow-color: Tokens.shadow-lg-color;
+        drop-shadow-offset-y: 24px;
+        drop-shadow-blur: 60px;
+        accessible-role: none;
+        accessible-label: "Não deu pra voltar pra sala.";
+
+        col := VerticalLayout {
+            padding: 36px;
+            spacing: 18px;
+            HorizontalLayout {
+                alignment: start;
+                Mascot {
+                    mood: MascotMood.sad;
+                    size: 84px;
+                }
+            }
+            VerticalLayout {
+                spacing: 8px;
+                Text {
+                    text: "Não deu pra voltar pra sala.";
+                    font-family: Tokens.font-heading;
+                    font-size: 30px;
+                    color: Tokens.color-text;
+                    wrap: word-wrap;
+                }
+                Text {
+                    text: "A conexão caiu faz 1 minuto e não voltou. Confira sua internet e tente de novo — a sala continua lá.";
+                    font-family: Tokens.font-body;
+                    font-size: 16px;
+                    color: Tokens.color-text.with-alpha(0.68);
+                    wrap: word-wrap;
+                }
+            }
+            HorizontalLayout {
+                spacing: 10px;
+                alignment: start;
+                Button {
+                    kind: ButtonKind.primary;
+                    label: "Tentar de novo";
+                    icon: Icons.refresh-cw;
+                    icon-size: 18px;
+                    font-size: 16px;
+                    pad-v: 14px;
+                    pad-h: 22px;
+                    clicked => { root.retry(); }
+                }
+                Button {
+                    kind: ButtonKind.secondary;
+                    label: "Sair da sala";
+                    font-size: 15px;
+                    pad-v: 15px;
+                    pad-h: 20px;
+                    clicked => { root.leave(); }
+                }
+            }
+        }
+    }
+}

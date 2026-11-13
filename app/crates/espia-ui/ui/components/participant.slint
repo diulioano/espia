@@ -1,0 +1,123 @@
+// Uma pessoa em "Na sala" (porte de src/ui/components/Participant.svelte): avatar com o anel de "ao vivo", nome com o
+// selo "você", a linha de baixo (o que está transmitindo ou "você está assistindo"), o selo AO VIVO e, para o dono, o
+// botão de tirar da sala (aparece com o mouse na linha). A altura é a do site: 54px, ou 59px com a linha de baixo
+// (o corpo do site usa line-height 1.55, que a Slint não tem).
+
+import { Tokens } from "../tokens.slint";
+import { Avatar } from "avatar.slint";
+import { Icon, Icons } from "icon.slint";
+import { LiveTag } from "live-tag.slint";
+import { PersonData } from "room-state.slint";
+
+export component Participant inherits Rectangle {
+    in property <PersonData> person;
+    callback remove();
+
+    property <bool> hover: row-ta.has-hover || rm-ta.has-hover;
+
+    height: root.person.sub != "" ? 59px : 54px;
+    border-radius: self.height / 2;
+    background: root.person.watching ? Tokens.color-text.with-alpha(0.07) : transparent;
+    accessible-role: none;
+    accessible-label: root.person.name;
+
+    row-ta := TouchArea { }
+
+    HorizontalLayout {
+        padding-left: 8px;
+        padding-right: 12px;
+        spacing: 12px;
+        VerticalLayout {
+            alignment: center;
+            Avatar {
+                letter: root.person.letter;
+                tone: root.person.tone;
+                live: root.person.live;
+                ring-gap: Tokens.color-bg;
+            }
+        }
+        VerticalLayout {
+            horizontal-stretch: 1;
+            alignment: center;
+            spacing: 1px;
+            HorizontalLayout {
+                spacing: 6px;
+                alignment: start;
+                Text {
+                    text: root.person.name;
+                    font-family: Tokens.font-body;
+                    font-size: 15px;
+                    font-weight: 600;
+                    color: Tokens.color-text;
+                    overflow: elide;
+                    vertical-alignment: center;
+                }
+                if root.person.you: VerticalLayout {
+                    alignment: center;
+                    Rectangle {
+                        height: 19px;
+                        border-radius: 9.5px;
+                        background: Tokens.color-text.with-alpha(0.1);
+                        preferred-width: you.preferred-width + 16px;
+                        you := Text {
+                            x: 8px;
+                            text: "você";
+                            font-family: Tokens.font-body;
+                            font-size: 11px;
+                            color: Tokens.color-text.with-alpha(0.75);
+                            vertical-alignment: center;
+                        }
+                    }
+                }
+            }
+            if root.person.sub != "": Text {
+                text: root.person.sub;
+                font-family: Tokens.font-body;
+                font-size: 12px;
+                color: Tokens.color-text-muted;
+                overflow: elide;
+            }
+        }
+        if root.person.live: VerticalLayout {
+            alignment: center;
+            LiveTag { }
+        }
+    }
+
+    // "Remover da sala": por cima do fim da linha, sem ocupar espaço. Só o dono, só em quem não é você.
+    Rectangle {
+        visible: root.person.removable && !root.person.you;
+        x: root.width - self.width - 8px;
+        y: (root.height - self.height) / 2;
+        width: 32px;
+        height: 32px;
+        opacity: root.hover ? 1 : 0;
+        animate opacity { duration: 150ms; easing: ease-out; }
+        // box-shadow: 0 0 0 4px surface
+        Rectangle {
+            x: -4px;
+            y: -4px;
+            width: parent.width + 8px;
+            height: parent.height + 8px;
+            border-radius: self.height / 2;
+            background: Tokens.color-surface;
+        }
+        Rectangle {
+            border-radius: 16px;
+            background: rm-ta.has-hover ? Tokens.color-text.with-alpha(0.24) : Tokens.color-surface;
+            accessible-role: button;
+            accessible-label: "Remover " + root.person.name + " da sala";
+            Icon {
+                x: (parent.width - self.width) / 2;
+                y: (parent.height - self.height) / 2;
+                source: Icons.user-minus;
+                size: 16px;
+                tint: Tokens.color-text;
+            }
+        }
+        rm-ta := TouchArea {
+            mouse-cursor: pointer;
+            clicked => { root.remove(); }
+        }
+    }
+}

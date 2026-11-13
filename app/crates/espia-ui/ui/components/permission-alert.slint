@@ -1,0 +1,77 @@
+// Aviso de permissão negada (porte de src/ui/components/PermissionAlert.svelte): castor triste, título, texto e
+// "Tentar de novo" / "Agora não". Cartão de até 480px, fundo `raised`, sombra grande. O texto é o do site, palavra por
+// palavra. Diferença: a Slint não tem negrito no meio da frase, então "Configurações do site → Compartilhar tela"
+// sai no mesmo peso do resto.
+
+import { Tokens } from "../tokens.slint";
+import { Mascot, MascotMood } from "mascot.slint";
+import { Button, ButtonKind } from "buttons.slint";
+
+export component PermissionAlert inherits Rectangle {
+    callback retry();
+    callback dismiss();
+
+    width: 480px;
+    height: row.preferred-height;
+    border-radius: Tokens.radius-card;
+    background: Tokens.color-raised;
+    drop-shadow-color: Tokens.shadow-lg-color;
+    drop-shadow-offset-y: Tokens.shadow-lg-offset-y;
+    drop-shadow-blur: Tokens.shadow-lg-blur;
+    border-width: Tokens.shadow-lg-ring-width;
+    border-color: Tokens.shadow-lg-ring;
+    accessible-role: none;
+    accessible-label: "O navegador não deixou compartilhar";
+
+    row := HorizontalLayout {
+        padding: 20px;
+        spacing: 16px;
+        VerticalLayout {
+            alignment: start;
+            Rectangle {
+                width: 64px;
+                height: 64px * 1.12;
+                Mascot {
+                    mood: MascotMood.sad;
+                    size: 64px;
+                }
+            }
+        }
+        VerticalLayout {
+            spacing: 6px;
+            Text {
+                text: "O navegador não deixou compartilhar";
+                font-family: Tokens.font-heading;
+                font-size: 19px;
+                color: Tokens.color-text;
+                wrap: word-wrap;
+            }
+            Text {
+                text: "Você fechou o seletor ou negou a permissão. Se o navegador não perguntar de novo, libere em Configurações do site → Compartilhar tela.";
+                font-family: Tokens.font-body;
+                font-size: 14px;
+                color: Tokens.color-text.with-alpha(0.72);
+                wrap: word-wrap;
+            }
+            HorizontalLayout {
+                padding-top: 8px;
+                spacing: 8px;
+                alignment: start;
+                Button {
+                    kind: ButtonKind.primary;
+                    label: "Tentar de novo";
+                    pad-v: 9px;
+                    pad-h: 16px;
+                    clicked => { root.retry(); }
+                }
+                Button {
+                    kind: ButtonKind.ghost;
+                    label: "Agora não";
+                    pad-v: 9px;
+                    pad-h: 16px;
+                    clicked => { root.dismiss(); }
+                }
+            }
+        }
+    }
+}

@@ -1,0 +1,488 @@
+// Tela inicial. Porte de src/ui/pages/HomePage.svelte (versão de computador): ilustração à direita (ou "Suas salas"
+// no lugar dela), logo e "Baixar o app" no topo, título, apelido + "Criar sala" + "Criar sala fixa", "Tem um link?"
+// e o convite do app. Os diálogos (sala fixa e apagar) e o aviso de chegada ficam por cima.
+// A tela só recebe dados em HomeState e devolve ações pelos callbacks; os textos derivados vêm prontos do Rust.
+// Pontos de quebra do site (largura da janela): 1400 (o painel desce), 1280 (a ilustração apaga e vai pra direita)
+// e 1024 (a ilustração some). O celular (< 640) não existe no app.
+
+import { Tokens } from "../tokens.slint";
+import { Scroll } from "../components/scroll.slint";
+import { Logo } from "../components/logo.slint";
+import { Heading } from "../components/heading.slint";
+import { Mascot, MascotMood } from "../components/mascot.slint";
+import { Button, ButtonKind } from "../components/buttons.slint";
+import { Icon, Icons } from "../components/icon.slint";
+import { InputPill } from "../components/input-pill.slint";
+import { DecoTile } from "../components/deco-tile.slint";
+import { AppInvite, InviteKind } from "../components/app-invite.slint";
+import { SavedRoomsPanel, SavedGroupData } from "../components/saved-rooms-panel.slint";
+import { SavedMenu } from "../components/saved-menu.slint";
+import { NameDialog } from "../components/name-dialog.slint";
+import { DeleteRoomDialog } from "../components/delete-room-dialog.slint";
+import { ToastStack, ToastPlacement } from "../components/toast-stack.slint";
+import { ToastData } from "../components/toast.slint";
+
+export global HomeState {
+    in-out property <string> nickname: "";
+    in-out property <string> link: "";
+    // "Esse link não parece de uma sala."; vazio = sem erro.
+    in property <string> link-error: "";
+    // Falha ao criar a sala; vazio = sem erro.
+    in property <string> create-error: "";
+    // Esperando o servidor criar a sala.
+    in property <bool> creating: false;
+    in property <InviteKind> invite: InviteKind.none;
+    // Aviso de chegada ("O dono te tirou da sala"): zero ou um aviso.
+    in property <[ToastData]> notices;
+    // Botão "Baixar o app" no topo.
+    in property <bool> download: false;
+    // Suas salas (vazio = a ilustração de sempre).
+    in property <bool> has-rooms: false;
+    in property <string> rooms-note: "";
+    in property <[SavedGroupData]> groups;
+    // Alguma linha com o menu "⋯" aberto (clicar fora fecha): qual sala é e se é do dono (Renomear/Apagar).
+    in property <bool> menu-open: false;
+    in property <string> menu-code: "";
+    in property <bool> menu-own: false;
+    // Modal "Criar sala fixa" (create) ou "Renomear sala".
+    in property <bool> fixed-open: false;
+    in property <bool> fixed-create: true;
+    in property <string> fixed-value: "";
+    in property <bool> fixed-busy: false;
+    in property <string> fixed-error: "";
+    // Modal "Apagar sala".
+    in property <bool> delete-open: false;
+    in property <string> delete-title: "";
+    in property <string> delete-warn: "";
+    in property <bool> delete-busy: false;
+    in property <string> delete-error: "";
+
+    // Regras de texto que moram no Rust (espia-core): corte ao digitar (apelido 24, nome de sala 40),
+    // apelido/nome "limpos" e "tem algo escrito".
+    pure callback limit-nickname(string) -> string;
+    pure callback clean-nickname(string) -> string;
+    pure callback limit-room-name(string) -> string;
+    pure callback normalize-room-name(string) -> string;
+    pure callback non-blank(string) -> bool;
+
+    callback create-room(string);
+    callback open-link(string);
+    callback clear-link-error();
+    callback download-app();
+    callback dismiss-app-invite();
+    callback dismiss-notice();
+    callback open-fixed-dialog();
+    callback close-fixed-dialog();
+    // (criar?, apelido limpo, nome da sala)
+    callback submit-fixed(bool, string, string);
+    callback enter-saved(string, string);
+    callback forget-saved(string);
+    // (código, aberto?)
+    callback toggle-saved-menu(string, bool);
+    callback close-saved-menu();
+    callback rename-saved(string);
+    callback delete-saved(string);
+    callback confirm-delete();
+    callback close-delete-dialog();
+}
+
+export component HomePage inherits Rectangle {
+    background: Tokens.color-bg;
+    clip: true;
+
+    property <length> w: root.width;
+    // Pontos de quebra do HomePage.svelte.
+    property <bool> wide: root.w >= 1400px;
+    property <bool> art-visible: root.w >= 1024px && !HomeState.has-rooms;
+    property <float> art-opacity: root.w >= 1280px ? 1 : 0.6;
+    // Notebook (altura até 820px) com o convite do app: compacta para caber sem rolar (specs/008 SC-804).
+    property <bool> compact: HomeState.invite != InviteKind.none && root.height <= 820px;
+    property <bool> can-create: HomeState.clean-nickname(HomeState.nickname) != "";
+    property <bool> busy: HomeState.creating;
+    property <length> content-w: min(640px, root.w - 144px);
+    // Onde o menu "⋯" aberto fica (as linhas avisam); fora da janela até a primeira medida chegar.
+    property <length> menu-x: -1000px;
+    property <length> menu-y: -1000px;
+    property <bool> menu-is-open: HomeState.menu-open;
+    changed menu-is-open => {
+        if (!root.menu-is-open) {
+            root.menu-x = -1000px;
+            root.menu-y = -1000px;
+        }
+    }
+
+    function create() {
+        if (root.can-create && !root.busy) {
+            HomeState.create-room(HomeState.clean-nickname(HomeState.nickname));
+        }
+    }
+    function open-fixed() {
+        if (root.can-create && !root.busy) {
+            HomeState.open-fixed-dialog();
+        }
+    }
+    function open-link() {
+        if (HomeState.non-blank(HomeState.link)) {
+            HomeState.open-link(HomeState.link);
+        }
+    }
+
+    sc := Scroll {
+        page := Rectangle {
+            min-height: max(root.height, col.preferred-height);
+            preferred-height: col.preferred-height;
+
+            // .deco: blobs e ilustração, atrás de tudo.
+            Rectangle {
+                x: root.w < 1024px ? root.w - 420px : root.w - 560px;
+                y: 90px;
+                width: 720px;
+                height: 720px;
+                border-radius: 360px;
+                background: Tokens.color-accent.with-alpha(0.16);
+            }
+            Rectangle {
+                x: root.w - 600px;
+                y: 520px;
+                width: 300px;
+                height: 300px;
+                border-radius: 150px;
+                background: Tokens.color-accent-2.with-alpha(0.22);
+            }
+            if root.art-visible: Rectangle {
+                x: root.w >= 1280px ? root.w - 450px : root.w - 200px;
+                y: 150px;
+                width: 150px;
+                height: 150px * 1.12;
+                opacity: root.art-opacity;
+                transform-rotation: -4deg;
+                Mascot {
+                    mood: MascotMood.peek;
+                    size: 150px;
+                }
+            }
+            if root.art-visible: DecoTile {
+                x: root.w >= 1280px ? root.w - 650px : root.w - 400px;
+                y: 260px;
+                opacity: root.art-opacity;
+                transform-rotation: -4deg;
+                name: "Lu";
+                caption: "tela de Lu";
+            }
+            if root.art-visible: DecoTile {
+                x: root.w >= 1280px ? root.w - 650px : root.w - 370px;
+                y: 500px;
+                opacity: root.art-opacity;
+                transform-rotation: 5deg;
+                thumb: true;
+                name: "Bia";
+                caption: "aba de Bia";
+            }
+
+            // Clique fora do menu "⋯" fecha (o botão que abriu cuida do próprio clique). Fica por baixo do conteúdo:
+            // só pega o clique em áreas vazias.
+            if HomeState.menu-open: TouchArea {
+                clicked => { HomeState.close-saved-menu(); }
+            }
+
+            col := VerticalLayout {
+                alignment: start;
+
+                // .top: padding 36px 72px, logo à esquerda e "Baixar o app" à direita.
+                HorizontalLayout {
+                    padding-left: 72px;
+                    padding-right: 72px;
+                    padding-top: root.compact ? 24px : 36px;
+                    padding-bottom: root.compact ? 0px : 36px;
+                    spacing: 16px;
+                    Logo {
+                        size: 36px;
+                        home => { sc.viewport-y = 0px; }
+                    }
+                    Rectangle { horizontal-stretch: 1; }
+                    if HomeState.download: VerticalLayout {
+                        alignment: center;
+                        horizontal-stretch: 0;
+                        max-width: dl.preferred-width;
+                        dl := Button {
+                            kind: ButtonKind.secondary;
+                            label: "Baixar o app";
+                            icon: Icons.download;
+                            font-size: 14px;
+                            pad-h: 16px;
+                            min-height: 40px;
+                            max-height: 40px;
+                            pad-v: 0px;
+                            clicked => { HomeState.download-app(); }
+                        }
+                    }
+                }
+
+                // .content: largura de 640, padding 56px 72px 72px, gap 22.
+                HorizontalLayout {
+                    padding-left: 72px;
+                    alignment: start;
+                    VerticalLayout {
+                        width: root.content-w;
+                        padding-top: root.compact ? 28px : 56px;
+                        padding-bottom: root.compact ? 20px : 72px;
+                        spacing: root.compact ? 16px : 22px;
+                        alignment: start;
+
+                        Heading {
+                            text: "Mostre sua tela pros amigos.";
+                            size: root.compact ? 64px : 76px;
+                            line: 1;
+                            tracking: root.compact ? -0.96px : -1.14px;
+                        }
+                        Text {
+                            text: "Crie uma sala, mande o link, pronto. Sem conta, sem instalar nada — até 10 pessoas.";
+                            font-family: Tokens.font-body;
+                            font-size: 20px;
+                            color: Tokens.color-text.with-alpha(0.68);
+                            wrap: word-wrap;
+                        }
+
+                        // .create: largura 480, margin-top 14 (além do gap), gap 12.
+                        HorizontalLayout {
+                            padding-top: 14px;
+                            alignment: start;
+                            VerticalLayout {
+                                width: min(480px, root.content-w);
+                                spacing: 12px;
+                                Text {
+                                    text: "Seu apelido";
+                                    font-family: Tokens.font-body;
+                                    font-size: 14px;
+                                    font-weight: 600;
+                                    color: Tokens.color-text;
+                                    opacity: 0.8;
+                                }
+                                HorizontalLayout {
+                                    spacing: 10px;
+                                    nick := InputPill {
+                                        horizontal-stretch: 1;
+                                        placeholder: "Como a galera te chama?";
+                                        text <=> HomeState.nickname;
+                                        edited(t) => { HomeState.nickname = HomeState.limit-nickname(t); }
+                                        accepted => { root.create(); }
+                                    }
+                                    Button {
+                                        kind: ButtonKind.primary;
+                                        label: "Criar sala";
+                                        font-size: 18px;
+                                        pad-h: 28px;
+                                        min-height: 56px;
+                                        max-height: 56px;
+                                        pad-v: 0px;
+                                        enabled: root.can-create && !root.busy;
+                                        clicked => { root.create(); }
+                                    }
+                                }
+                                // .fixed-row: margin-left -6, gap 12.
+                                Rectangle {
+                                    height: 44px;
+                                    HorizontalLayout {
+                                        x: -6px;
+                                        width: parent.width + 6px;
+                                        spacing: 12px;
+                                        alignment: start;
+                                        Button {
+                                            kind: ButtonKind.ghost;
+                                            label: "Criar sala fixa";
+                                            icon: Icons.pin;
+                                            icon-size: 17px;
+                                            font-size: 16px;
+                                            pad-h: 14px;
+                                            min-height: 44px;
+                                            max-height: 44px;
+                                            pad-v: 0px;
+                                            enabled: root.can-create && !root.busy;
+                                            clicked => { root.open-fixed(); }
+                                        }
+                                        VerticalLayout {
+                                            alignment: center;
+                                            Text {
+                                                text: "Com nome e um link que não muda.";
+                                                font-family: Tokens.font-body;
+                                                font-size: 14px;
+                                                color: Tokens.color-text.with-alpha(0.55);
+                                            }
+                                        }
+                                    }
+                                }
+                                if HomeState.create-error != "": Text {
+                                    text: HomeState.create-error;
+                                    font-family: Tokens.font-body;
+                                    font-size: 12px;
+                                    color: Tokens.color-accent-300;
+                                    wrap: word-wrap;
+                                }
+                            }
+                        }
+
+                        // .join: largura 480, margin-top 22 (além do gap), gap 10, itens alinhados ao topo.
+                        HorizontalLayout {
+                            padding-top: root.compact ? 12px : 22px;
+                            alignment: start;
+                            HorizontalLayout {
+                                width: min(480px, root.content-w);
+                                spacing: 10px;
+                                alignment: stretch;
+                                // .join-label: 14px, atenuado, altura de linha de 44.
+                                Rectangle {
+                                    width: label.preferred-width;
+                                    height: 44px;
+                                    label := Text {
+                                        text: "Tem um link?";
+                                        font-family: Tokens.font-body;
+                                        font-size: 14px;
+                                        color: Tokens.color-text-muted;
+                                        vertical-alignment: center;
+                                        height: 44px;
+                                    }
+                                }
+                                // .join-field: campo de 44px e o erro embaixo (gap 6).
+                                VerticalLayout {
+                                    horizontal-stretch: 1;
+                                    alignment: start;
+                                    spacing: 6px;
+                                    InputPill {
+                                        field-height: 44px;
+                                        font-size: 15px;
+                                        pad-h: 20px;
+                                        fill: transparent;
+                                        placeholder-color: Tokens.color-text.with-alpha(0.4);
+                                        placeholder: "Cole o link ou código da sala";
+                                        invalid: HomeState.link-error != "";
+                                        text <=> HomeState.link;
+                                        edited(t) => {
+                                            if (HomeState.link-error != "") {
+                                                HomeState.clear-link-error();
+                                            }
+                                        }
+                                        accepted => { root.open-link(); }
+                                    }
+                                    if HomeState.link-error != "": HorizontalLayout {
+                                        padding-left: 20px;
+                                        Text {
+                                            text: HomeState.link-error;
+                                            font-family: Tokens.font-body;
+                                            font-size: 12px;
+                                            color: Tokens.color-accent-300;
+                                            wrap: word-wrap;
+                                        }
+                                    }
+                                }
+                                VerticalLayout {
+                                    alignment: start;
+                                    Button {
+                                        kind: ButtonKind.secondary;
+                                        label: "Entrar";
+                                        pad-h: 18px;
+                                        min-height: 44px;
+                                        max-height: 44px;
+                                        pad-v: 0px;
+                                        enabled: HomeState.non-blank(HomeState.link);
+                                        clicked => { root.open-link(); }
+                                    }
+                                }
+                            }
+                        }
+
+                        // Convite do app: margin-top 18 (além do gap).
+                        if HomeState.invite != InviteKind.none: HorizontalLayout {
+                            padding-top: 18px;
+                            alignment: start;
+                            AppInvite {
+                                kind: HomeState.invite;
+                                download => { HomeState.download-app(); }
+                                dismiss => { HomeState.dismiss-app-invite(); }
+                            }
+                        }
+                    }
+                }
+
+                // Suas salas embaixo do texto quando não cabe ao lado (< 1400).
+                if !root.wide && HomeState.has-rooms: HorizontalLayout {
+                    padding-left: 72px;
+                    padding-right: 72px;
+                    padding-bottom: 72px;
+                    alignment: start;
+                    panel-flow := SavedRoomsPanel {
+                        width: min(600px, root.w - 144px);
+                        note: HomeState.rooms-note;
+                        groups: HomeState.groups;
+                        enter(code) => { HomeState.enter-saved(code, HomeState.clean-nickname(HomeState.nickname)); }
+                        menu(code, open) => { HomeState.toggle-saved-menu(code, open); }
+                        forget(code) => { HomeState.forget-saved(code); }
+                        rename(code) => { HomeState.rename-saved(code); }
+                        remove(code) => { HomeState.delete-saved(code); }
+                        anchor(x, y) => { root.menu-x = x; root.menu-y = y; }
+                    }
+                }
+            }
+
+            // Suas salas ao lado do texto (>= 1400): right 72, top 104.
+            if root.wide && HomeState.has-rooms: SavedRoomsPanel {
+                x: root.w - 72px - self.width;
+                y: 104px;
+                note: HomeState.rooms-note;
+                groups: HomeState.groups;
+                enter(code) => { HomeState.enter-saved(code, HomeState.clean-nickname(HomeState.nickname)); }
+                menu(code, open) => { HomeState.toggle-saved-menu(code, open); }
+                forget(code) => { HomeState.forget-saved(code); }
+                rename(code) => { HomeState.rename-saved(code); }
+                remove(code) => { HomeState.delete-saved(code); }
+                anchor(x, y) => { root.menu-x = x; root.menu-y = y; }
+            }
+        }
+    }
+
+    // Menu "⋯" da sala, por cima de tudo (menos dos diálogos).
+    if HomeState.menu-open: SavedMenu {
+        z: 20;
+        x: root.menu-x;
+        y: root.menu-y;
+        own: HomeState.menu-own;
+        rename => { HomeState.rename-saved(HomeState.menu-code); }
+        remove => { HomeState.delete-saved(HomeState.menu-code); }
+        forget => { HomeState.forget-saved(HomeState.menu-code); }
+    }
+
+    // Aviso de chegada, no canto de cima à direita.
+    ToastStack {
+        z: 30;
+        x: 0px;
+        y: 0px;
+        width: root.width;
+        height: 100px;
+        placement: ToastPlacement.top-right;
+        toasts: HomeState.notices;
+        dismissed(id) => { HomeState.dismiss-notice(); }
+        action-clicked(id) => { HomeState.dismiss-notice(); }
+    }
+
+    if HomeState.fixed-open: NameDialog {
+        z: 40;
+        create: HomeState.fixed-create;
+        initial: HomeState.fixed-value;
+        busy: HomeState.fixed-busy;
+        error: HomeState.fixed-error;
+        limit(t) => { return HomeState.limit-room-name(t); }
+        normalize(t) => { return HomeState.normalize-room-name(t); }
+        submit(name) => {
+            HomeState.submit-fixed(HomeState.fixed-create, HomeState.clean-nickname(HomeState.nickname), name);
+        }
+        close => { HomeState.close-fixed-dialog(); }
+    }
+    if HomeState.delete-open: DeleteRoomDialog {
+        z: 41;
+        title: HomeState.delete-title;
+        warn: HomeState.delete-warn;
+        busy: HomeState.delete-busy;
+        error: HomeState.delete-error;
+        confirm => { HomeState.confirm-delete(); }
+        close => { HomeState.close-delete-dialog(); }
+    }
+}

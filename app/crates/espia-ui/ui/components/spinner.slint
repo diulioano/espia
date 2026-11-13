@@ -1,0 +1,29 @@
+// Spinner. Porte de src/ui/components/Spinner.svelte: anel de 14% do texto com o arco de cima em
+// accent, uma volta a cada 0,9 s. O anel e o arco são dois SVGs (a espessura acompanha o tamanho:
+// 3px em 40px). Usa animation-tick(): só repinta enquanto estiver visível.
+
+import { Tokens } from "../tokens.slint";
+import { Icons } from "icon.slint";
+
+export component Spinner inherits Rectangle {
+    in property <length> size: 40px;
+
+    width: root.size;
+    height: root.size;
+    accessible-role: none;
+    accessible-label: "Carregando";
+
+    Image {
+        source: Icons.spinner-track;
+        colorize: Tokens.color-text.with-alpha(0.14);
+        width: root.size;
+        height: root.size;
+    }
+    Image {
+        source: Icons.spinner-arc;
+        colorize: Tokens.color-accent;
+        width: root.size;
+        height: root.size;
+        transform-rotation: 360deg * mod(animation-tick() / 900ms, 1);
+    }
+}

@@ -1,0 +1,250 @@
+// Uma linha de Suas salas (porte de src/ui/components/SavedRoom.svelte, versão de computador): inicial colorida,
+// nome com o selo "Sua", a linha de baixo (carregando, números ou "não existe mais"), "AO VIVO", "Entrar" e o "⋯".
+// O menu aberto vem do view-model (`menu-open`); a tela só pede para abrir/fechar.
+
+import { Tokens } from "../tokens.slint";
+import { Tone } from "avatar.slint";
+import { Button, ButtonKind } from "buttons.slint";
+import { Icon, Icons } from "icon.slint";
+import { LiveTag } from "live-tag.slint";
+
+export enum SavedState { loading, ok, gone }
+
+export struct SavedRoomData {
+    code: string,
+    name: string,
+    // Inicial já em maiúscula (a Slint não tem "primeira letra").
+    letter: string,
+    tone: Tone,
+    own: bool,
+    state: SavedState,
+    // Linha de baixo quando `state` é ok ("3 pessoas agora · 1 transmitindo", "Vazia · usada ontem").
+    sub: string,
+    live: bool,
+    menu-open: bool,
+}
+
+export component SavedRoom inherits Rectangle {
+    in property <SavedRoomData> room;
+    callback enter();
+    // `true` abre o menu; `false` fecha.
+    callback menu(bool);
+    callback forget();
+    callback rename();
+    callback remove();
+
+    property <bool> gone: root.room.state == SavedState.gone;
+    property <color> av-bg: root.gone ? Tokens.color-text.with-alpha(0.08)
+        : root.room.tone == Tone.accent ? Tokens.color-accent-300
+        : root.room.tone == Tone.sage ? Tokens.color-accent-2-300
+        : root.room.tone == Tone.sand ? Tokens.color-neutral-300
+        : Tokens.color-accent-400;
+    property <color> av-fg: root.gone ? Tokens.color-text.with-alpha(0.5)
+        : root.room.tone == Tone.accent ? Tokens.color-accent-800
+        : root.room.tone == Tone.sage ? Tokens.color-accent-2-800
+        : root.room.tone == Tone.sand ? Tokens.color-neutral-800
+        : Tokens.color-accent-900;
+
+    min-height: row.preferred-height;
+    preferred-height: row.preferred-height;
+    border-radius: 26px;
+    background: root.room.menu-open || row-hover.has-hover ? Tokens.color-text.with-alpha(0.07) : transparent;
+    accessible-role: none;
+
+    // Só para a Slint saber do mouse sobre a linha (hover); os botões ficam por cima.
+    row-hover := TouchArea { }
+
+    row := HorizontalLayout {
+        padding: 10px;
+        spacing: 14px;
+
+        // .avatar 46px, com o anel de "ao vivo" (2px surface + 2px accent).
+        VerticalLayout {
+            alignment: center;
+            Rectangle {
+                width: 46px;
+                height: 46px;
+                if root.room.live: Rectangle {
+                    x: -4px;
+                    y: -4px;
+                    width: 54px;
+                    height: 54px;
+                    border-radius: 27px;
+                    background: Tokens.color-accent;
+                }
+                if root.room.live: Rectangle {
+                    x: -2px;
+                    y: -2px;
+                    width: 50px;
+                    height: 50px;
+                    border-radius: 25px;
+                    background: Tokens.color-surface;
+                }
+                Rectangle {
+                    border-radius: 23px;
+                    background: root.av-bg;
+                    Text {
+                        text: root.room.letter;
+                        font-family: Tokens.font-heading;
+                        font-size: 19px;
+                        color: root.av-fg;
+                        horizontal-alignment: center;
+                        vertical-alignment: center;
+                    }
+                }
+            }
+        }
+
+        // .text: nome (com "Sua") e a linha de baixo.
+        VerticalLayout {
+            horizontal-stretch: 1;
+            min-width: 0px;
+            spacing: 3px;
+            alignment: center;
+            HorizontalLayout {
+                spacing: 8px;
+                alignment: start;
+                Text {
+                    text: root.room.name;
+                    font-family: Tokens.font-body;
+                    font-size: 16px;
+                    font-weight: 600;
+                    color: Tokens.color-text;
+                    opacity: root.gone ? 0.6 : 1;
+                    overflow: elide;
+                    horizontal-stretch: 0;
+                    min-width: 0px;
+                }
+                if root.room.own: VerticalLayout {
+                    alignment: center;
+                    Rectangle {
+                        border-radius: self.height / 2;
+                        background: Tokens.color-text.with-alpha(0.1);
+                        preferred-width: own-text.preferred-width + 16px;
+                        preferred-height: own-text.preferred-height + 4px;
+                        own-text := Text {
+                            x: 8px;
+                            y: 2px;
+                            text: "Sua";
+                            font-family: Tokens.font-body;
+                            font-size: 11px;
+                            font-weight: 600;
+                            color: Tokens.color-text.with-alpha(0.75);
+                        }
+                    }
+                }
+            }
+            if root.room.state == SavedState.loading: Rectangle {
+                height: 17px;
+                Rectangle {
+                    x: 0px;
+                    y: 4px;
+                    width: 128px;
+                    height: 10px;
+                    border-radius: 5px;
+                    background: Tokens.color-text.with-alpha(0.1);
+                }
+            }
+            if root.room.state == SavedState.ok: Text {
+                text: root.room.sub;
+                font-family: Tokens.font-body;
+                font-size: 13px;
+                color: Tokens.color-text.with-alpha(0.62);
+                overflow: elide;
+            }
+            if root.gone: Text {
+                text: "Esta sala não existe mais";
+                font-family: Tokens.font-body;
+                font-size: 13px;
+                color: Tokens.color-accent-300;
+                overflow: elide;
+            }
+        }
+
+        if root.room.live: VerticalLayout {
+            alignment: center;
+            LiveTag { }
+        }
+
+        if root.gone: VerticalLayout {
+            alignment: center;
+            horizontal-stretch: 0;
+            max-width: forget-text.preferred-width + 34px;
+            // "Tirar da lista": pílula cheia a 10% do texto, 40px de altura.
+            Rectangle {
+                height: 40px;
+                border-radius: 20px;
+                background: Tokens.color-text.with-alpha(forget-ta.has-hover ? 0.16 : 0.1);
+                preferred-width: forget-text.preferred-width + 34px;
+                accessible-role: button;
+                accessible-label: "Tirar da lista";
+                forget-text := Text {
+                    x: 17px;
+                    y: (parent.height - self.height) / 2;
+                    text: "Tirar da lista";
+                    font-family: Tokens.font-heading;
+                    font-size: 14px;
+                    color: Tokens.color-text;
+                }
+                forget-ta := TouchArea {
+                    mouse-cursor: pointer;
+                    clicked => { root.forget(); }
+                }
+            }
+        }
+        if !root.gone: HorizontalLayout {
+            spacing: 4px;
+            horizontal-stretch: 0;
+            VerticalLayout {
+                alignment: center;
+                horizontal-stretch: 0;
+                max-width: enter-btn.preferred-width;
+                enter-btn := Button {
+                    kind: ButtonKind.secondary;
+                    label: "Entrar";
+                    font-size: 14px;
+                    pad-h: 16px;
+                    min-height: 40px;
+                    max-height: 40px;
+                    pad-v: 0px;
+                    clicked => { root.enter(); }
+                }
+            }
+            VerticalLayout {
+                alignment: center;
+                // .more: 44px, sem fundo; com mouse ou menu aberto, texto a 12%.
+                Rectangle {
+                    width: 44px;
+                    height: 44px;
+                    border-radius: 22px;
+                    background: root.room.menu-open || more-ta.has-hover ? Tokens.color-text.with-alpha(0.12) : transparent;
+                    accessible-role: button;
+                    accessible-label: "Mais opções";
+                    Icon {
+                        x: (parent.width - self.width) / 2;
+                        y: (parent.height - self.height) / 2;
+                        source: Icons.ellipsis;
+                        size: 18px;
+                        tint: Tokens.color-text;
+                    }
+                    more-ta := TouchArea {
+                        mouse-cursor: pointer;
+                        clicked => { root.menu(!root.room.menu-open); }
+                    }
+                }
+            }
+        }
+    }
+
+    // O menu "⋯" é desenhado pela página, por cima de tudo (das linhas vizinhas também); a linha só diz onde ele deve
+    // ficar: à direita (8px) e logo abaixo dela (-4px), em coordenadas da janela. Enquanto o menu está aberto o aviso
+    // se repete (a página pode rolar com o menu aberto).
+    callback anchor(length, length);
+    Timer {
+        interval: 30ms;
+        running: root.room.menu-open;
+        triggered => {
+            root.anchor(root.absolute-position.x + root.width - 8px - 220px, root.absolute-position.y + root.height - 4px);
+        }
+    }
+}

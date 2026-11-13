@@ -1,0 +1,25 @@
+[package]
+name = "ui-probe"
+version = "0.1.0"
+edition = "2021"
+publish = false
+description = "Sonda G2 (019 T011): a tela da sala do Espia em Slint, com dados falsos e vídeo gerado"
+
+# Crate isolada: não entra no workspace de app/.
+[workspace]
+
+[dependencies]
+# Travada na 1.17.0 (R3): "1.17" sozinho sobe para a 1.18.1.
+slint = "=1.17.0"
+
+[build-dependencies]
+slint-build = "=1.17.0"
+
+[target.'cfg(windows)'.dependencies]
+windows-sys = { version = "0.52", features = ["Win32_System_ProcessStatus", "Win32_System_Threading", "Win32_Foundation"] }
+
+[profile.release]
+opt-level = 3
+lto = "thin"
+codegen-units = 1
+strip = true

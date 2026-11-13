@@ -1,0 +1,84 @@
+// Campo de texto em pílula, sem rótulo. Porte de `.input` de src/ui/base.css com as variações das telas
+// (altura, tamanho da letra, recuo e fundo): inicial usa 56px/17px/22px, entrada idem, "Tem um link?" 44px/15px.
+// O TextField base tem tamanho fixo (50px, 16px, 20px); por isso as telas usam este.
+// Limite de caracteres a Slint não tem: a tela corta o texto em `edited`.
+
+import { Tokens } from "../tokens.slint";
+
+export component InputPill inherits Rectangle {
+    in-out property <string> text;
+    in property <string> placeholder;
+    in property <length> field-height: 56px;
+    in property <length> font-size: 17px;
+    in property <length> pad-h: 22px;
+    in property <brush> fill: Tokens.color-surface;
+    // aria-invalid: borda em accent-400.
+    in property <bool> invalid: false;
+    in property <bool> enabled: true;
+    // Cor do texto de exemplo.
+    in property <color> placeholder-color: Tokens.color-text-muted;
+    out property <bool> has-focus: ti.has-focus;
+    callback accepted(string);
+    callback edited(string);
+
+    public function focus-input() { ti.focus(); }
+    public function select-all() { ti.select-all(); }
+
+    min-height: root.field-height;
+    max-height: root.field-height;
+    preferred-height: root.field-height;
+    border-radius: self.height / 2;
+    background: root.fill;
+    border-width: 1px;
+    border-color: ti.has-focus ? Tokens.color-accent
+        : root.invalid ? Tokens.color-accent-400
+        : hover.has-hover ? Tokens.color-text.with-alpha(0.45)
+        : Tokens.color-divider;
+    opacity: root.enabled ? 1 : 0.6;
+    accessible-role: text-input;
+    accessible-placeholder-text: root.placeholder;
+    accessible-value: root.text;
+
+    // --ring-focus por fora.
+    if ti.has-focus: Rectangle {
+        x: -Tokens.ring-focus-width;
+        y: -Tokens.ring-focus-width;
+        width: root.width + 2 * Tokens.ring-focus-width;
+        height: root.height + 2 * Tokens.ring-focus-width;
+        border-radius: self.height / 2;
+        border-width: Tokens.ring-focus-width;
+        border-color: Tokens.ring-focus-color;
+    }
+
+    hover := TouchArea { }
+    clip-box := Rectangle {
+        x: root.pad-h;
+        width: parent.width - 2 * root.pad-h;
+        clip: true;
+        if root.text == "" && root.placeholder != "": Text {
+            y: (parent.height - self.height) / 2;
+            width: parent.width;
+            text: root.placeholder;
+            font-family: Tokens.font-body;
+            font-size: root.font-size;
+            color: root.placeholder-color;
+            overflow: elide;
+        }
+        ti := TextInput {
+            y: 0px;
+            width: parent.width;
+            height: parent.height;
+            vertical-alignment: center;
+            text <=> root.text;
+            enabled: root.enabled;
+            single-line: true;
+            font-family: Tokens.font-body;
+            font-size: root.font-size;
+            color: Tokens.color-text;
+            selection-background-color: Tokens.color-accent.with-alpha(0.45);
+            selection-foreground-color: Tokens.color-text;
+            accepted => { root.accepted(self.text); }
+            edited => { root.edited(self.text); }
+        }
+    }
+}

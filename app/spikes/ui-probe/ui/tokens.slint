@@ -1,0 +1,61 @@
+// Tokens do Espia copiados de src/ui/tokens.css (tema escuro), com o mesmo nome do token.
+// Na crate de produção (R18) o build.rs gera este arquivo a partir do CSS; aqui a cópia é à mão.
+// Conferido contra tokens.css em 2026-11-11.
+
+export global Tokens {
+    // Ramps Organic
+    out property <color> color-accent: #c67139;
+    out property <color> color-accent-200: #ffe1d0;
+    out property <color> color-accent-300: #ffc6a5;
+    out property <color> color-accent-400: #f6a06b;
+    out property <color> color-accent-500: #d67f48;
+    out property <color> color-accent-600: #b2622d;
+    out property <color> color-accent-700: #8c491a;
+    out property <color> color-accent-800: #643312;
+    out property <color> color-accent-900: #402310;
+    out property <color> color-accent-2: #7a8a5e;
+    out property <color> color-accent-2-200: #e1eecc;
+    out property <color> color-accent-2-300: #ccdbb2;
+    out property <color> color-accent-2-400: #aebf92;
+    out property <color> color-accent-2-800: #3d472b;
+    out property <color> color-accent-2-900: #272e1b;
+    out property <color> color-neutral-300: #dcd3c4;
+    out property <color> color-neutral-800: #474238;
+
+    // Tema escuro
+    out property <color> color-stage: #12110f;
+    out property <color> color-bg: #1b1916;
+    out property <color> color-surface: #26231f;
+    out property <color> color-raised: #322e28;
+    out property <color> color-text: #f5ead8;
+    // color-mix(in srgb, var(--color-text) 60%, transparent) == a mesma cor com 60% de opacidade.
+    out property <color> color-text-muted: #f5ead8.with-alpha(0.6);
+    out property <color> color-divider: rgba(245, 234, 216, 0.13);
+    out property <color> color-overlay: rgba(18, 17, 15, 0.74);
+    out property <color> color-ctl: rgba(245, 234, 216, 0.14);
+    out property <color> color-backdrop: rgba(10, 9, 8, 0.66);
+
+    out property <string> font-heading: "Caprasimo";
+    out property <string> font-body: "Figtree";
+    // O CSS pede "ui-monospace, Menlo, monospace"; no Windows o Chrome cai em Consolas.
+    out property <string> font-mono: "Consolas";
+
+    out property <length> space-1: 4.4px;
+    out property <length> space-2: 8.8px;
+    out property <length> space-3: 13.2px;
+    out property <length> space-4: 17.6px;
+    out property <length> space-6: 26.4px;
+    out property <length> space-8: 35.2px;
+
+    out property <length> radius-tile-sm: 16px;
+    out property <length> radius-tile: 22px;
+    out property <length> radius-card: 28px;
+    out property <length> radius-stage: 32px;
+    out property <length> radius-pill: 999px;
+
+    // --shadow-lg: 0 0 0 1px rgba(245,234,216,0.08), 0 18px 48px rgba(0,0,0,0.55)
+    out property <color> shadow-lg-ring: rgba(245, 234, 216, 0.08);
+    out property <color> shadow-lg-color: rgba(0, 0, 0, 0.55);
+    out property <length> shadow-lg-offset-y: 18px;
+    out property <length> shadow-lg-blur: 48px;
+}

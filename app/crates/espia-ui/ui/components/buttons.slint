@@ -1,0 +1,159 @@
+// Botões em pílula. Porte das classes `.btn` de src/ui/base.css (mesmos tokens, mesmas cores).
+// Só recebem dados por propriedades e devolvem `clicked`.
+
+import { Tokens } from "../tokens.slint";
+import { Icon } from "icon.slint";
+
+// primary = .btn-primary, secondary = .btn-secondary, stop = .btn-stop, invite = .btn-invite,
+// ghost = .btn-ghost, plain = .btn sem variante.
+export enum ButtonKind { primary, secondary, stop, invite, ghost, plain }
+
+export component Button inherits Rectangle {
+    in property <string> label;
+    in property <image> icon;
+    in property <ButtonKind> kind: ButtonKind.plain;
+    // Só para `invite`: .is-copied ("Convite copiado").
+    in property <bool> copied: false;
+    in property <bool> enabled: true;
+    in property <length> font-size: 15px;
+    in property <length> icon-size: 16px;
+    in property <length> pad-v: 12px;
+    in property <length> pad-h: 20px;
+    callback clicked();
+
+    property <length> bw: root.kind == ButtonKind.stop ? 2px : 1px;
+    property <color> fg: root.kind == ButtonKind.primary ? Tokens.color-bg
+        : root.kind == ButtonKind.stop ? Tokens.color-accent-400
+        : root.kind == ButtonKind.invite ? Tokens.color-accent-2-900
+        : root.kind == ButtonKind.ghost ? Tokens.color-accent-400
+        : Tokens.color-text;
+    property <color> bg-rest: root.kind == ButtonKind.primary ? Tokens.color-accent
+        : root.kind == ButtonKind.invite ? (root.copied ? Tokens.color-accent-2-200 : Tokens.color-accent-2-400)
+        : transparent;
+    property <color> bg-hover: root.kind == ButtonKind.primary ? Tokens.color-accent-600
+        : root.kind == ButtonKind.invite ? (root.copied ? Tokens.color-accent-2-200 : Tokens.color-accent-2-300)
+        : root.kind == ButtonKind.stop ? Tokens.color-accent.with-alpha(0.1)
+        : root.kind == ButtonKind.ghost ? Tokens.color-accent.with-alpha(0.1)
+        : root.kind == ButtonKind.secondary ? Tokens.color-text.with-alpha(0.07)
+        : transparent;
+    property <color> bg-pressed: root.kind == ButtonKind.primary ? Tokens.color-accent-700
+        : root.kind == ButtonKind.secondary ? Tokens.color-text.with-alpha(0.14)
+        : root.bg-hover;
+
+    border-radius: self.height / 2;
+    border-width: root.bw;
+    border-color: root.kind == ButtonKind.secondary ? Tokens.color-divider
+        : root.kind == ButtonKind.stop ? Tokens.color-accent
+        : transparent;
+    background: !root.enabled ? root.bg-rest
+        : ta.pressed ? root.bg-pressed
+        : ta.has-hover ? root.bg-hover
+        : root.bg-rest;
+    opacity: root.enabled ? 1 : 0.45;
+    animate background { duration: 120ms; easing: ease-out; }
+    preferred-width: inner.preferred-width;
+    preferred-height: inner.preferred-height;
+    accessible-role: button;
+    accessible-label: root.label;
+
+    inner := HorizontalLayout {
+        padding-left: root.pad-h + root.bw;
+        padding-right: root.pad-h + root.bw;
+        padding-top: root.pad-v + root.bw;
+        padding-bottom: root.pad-v + root.bw;
+        spacing: 8px;
+        alignment: center;
+        if root.icon.width > 0: Icon {
+            source: root.icon;
+            size: root.icon-size;
+            tint: root.fg;
+        }
+        Text {
+            text: root.label;
+            font-family: Tokens.font-heading;
+            font-size: root.font-size;
+            color: root.fg;
+            vertical-alignment: center;
+        }
+    }
+
+    ta := TouchArea {
+        enabled: root.enabled;
+        mouse-cursor: root.enabled ? MouseCursor.pointer : MouseCursor.not-allowed;
+        clicked => { root.clicked(); }
+    }
+
+    fs := FocusScope {
+        enabled: root.enabled;
+        key-pressed(event) => {
+            if (event.text == " " || event.text == Key.Return) {
+                root.clicked();
+                return accept;
+            }
+            return reject;
+        }
+    }
+    // :focus-visible { outline: 2px solid accent; outline-offset: 2px }
+    if fs.has-focus: Rectangle {
+        x: -4px;
+        y: -4px;
+        width: root.width + 8px;
+        height: root.height + 8px;
+        border-radius: self.height / 2;
+        border-width: 2px;
+        border-color: Tokens.color-accent;
+    }
+}
+
+// .btn-icon: botão redondo 36x36 só com ícone.
+export component IconButton inherits Rectangle {
+    in property <image> icon;
+    in property <length> icon-size: 18px;
+    in property <length> size: 36px;
+    in property <string> label;
+    in property <bool> enabled: true;
+    callback clicked();
+
+    width: root.size;
+    height: root.size;
+    border-radius: self.height / 2;
+    background: !root.enabled ? Tokens.color-text.with-alpha(0.08)
+        : ta.has-hover ? Tokens.color-text.with-alpha(0.14)
+        : Tokens.color-text.with-alpha(0.08);
+    opacity: root.enabled ? 1 : 0.45;
+    accessible-role: button;
+    accessible-label: root.label;
+    animate background { duration: 120ms; easing: ease-out; }
+
+    Icon {
+        x: (parent.width - self.width) / 2;
+        y: (parent.height - self.height) / 2;
+        source: root.icon;
+        size: root.icon-size;
+        tint: Tokens.color-text;
+    }
+    ta := TouchArea {
+        enabled: root.enabled;
+        mouse-cursor: root.enabled ? MouseCursor.pointer : MouseCursor.not-allowed;
+        clicked => { root.clicked(); }
+    }
+    fs := FocusScope {
+        enabled: root.enabled;
+        key-pressed(event) => {
+            if (event.text == " " || event.text == Key.Return) {
+                root.clicked();
+                return accept;
+            }
+            return reject;
+        }
+    }
+    if fs.has-focus: Rectangle {
+        x: -4px;
+        y: -4px;
+        width: root.width + 8px;
+        height: root.height + 8px;
+        border-radius: self.height / 2;
+        border-width: 2px;
+        border-color: Tokens.color-accent;
+    }
+}

@@ -1,0 +1,83 @@
+// Janela raiz do Espia: mostra uma tela por vez (`screen`) e, no modo mock, o seletor de cenas por cima.
+// Cada tela guarda os próprios dados num global (HomeState, JoinState…) que o Rust preenche em
+// src/bind/. Por isso acrescentar propriedades a uma tela NÃO exige mexer neste arquivo.
+// Cores, fontes, raios e sombras vêm só de tokens.slint (gerado de src/ui/tokens.css).
+
+// Fontes embutidas (TTF convertido de @fontsource, ver LEIA-ME.md). Importar registra a fonte.
+import "../assets/fonts/Caprasimo-Regular.ttf";
+import "../assets/fonts/Figtree-Regular.ttf";
+import "../assets/fonts/Figtree-SemiBold.ttf";
+import "../assets/fonts/Figtree-Bold.ttf";
+
+import { Tokens } from "tokens.slint";
+import { MockIndex, MockScreenData, MockSceneData } from "mock-index.slint";
+import { MockSwitcher } from "mock-switcher.slint";
+import { HomePage, HomeState } from "pages/home.slint";
+import { JoinPage, JoinState } from "pages/join.slint";
+import { RoomPage, RoomState } from "pages/room.slint";
+import { NotFoundPage, NotFoundState } from "pages/notfound.slint";
+import { OfflinePage, OfflineState } from "pages/offline.slint";
+import { ComponentsPage, ComponentsState } from "pages/components.slint";
+import { Tone, AvatarData } from "components/avatar.slint";
+import { ToastKind, ToastData } from "components/toast.slint";
+import { ToastPlacement } from "components/toast-stack.slint";
+import { ButtonKind } from "components/buttons.slint";
+import { MascotMood, MascotAnimate } from "components/mascot.slint";
+
+// Tipos e globais que o Rust enxerga.
+export { MockScreenData, MockSceneData, Tone, AvatarData, ToastKind, ToastData, ToastPlacement, ButtonKind, MascotMood, MascotAnimate }
+export { HomeState, JoinState, RoomState, NotFoundState, OfflineState, ComponentsState }
+
+export enum ScreenId { mock-index, home, join, room, notfound, offline, components }
+
+export component AppWindow inherits Window {
+    in property <ScreenId> screen: ScreenId.mock-index;
+
+    // Modo mock: índice, linha de aviso e seletor de cenas.
+    in property <[MockScreenData]> mock-screens;
+    in property <string> mock-error;
+    in property <bool> mock-bar: false;
+    // A barra começa recolhida (capturas com --screenshot mostram a tela inteira).
+    in property <bool> mock-recolhida: false;
+    in property <[MockSceneData]> mock-scenes;
+    in property <string> mock-screen-id;
+    in property <string> mock-scene-id;
+    in property <string> mock-label;
+    // Abrir uma tela/cena (cena vazia = a padrão da tela) e voltar ao índice.
+    callback mock-open(string, string);
+    callback mock-index();
+
+    title: "Espia";
+    preferred-width: 1280px;
+    preferred-height: 800px;
+    min-width: 480px;
+    min-height: 360px;
+    background: Tokens.color-bg;
+    default-font-family: Tokens.font-body;
+    default-font-size: 15px;
+
+    if root.screen == ScreenId.mock-index: MockIndex {
+        screens: root.mock-screens;
+        error: root.mock-error;
+        open(screen, scene) => { root.mock-open(screen, scene); }
+    }
+    if root.screen == ScreenId.home: HomePage { }
+    if root.screen == ScreenId.join: JoinPage { }
+    if root.screen == ScreenId.room: RoomPage { }
+    if root.screen == ScreenId.notfound: NotFoundPage { }
+    if root.screen == ScreenId.offline: OfflinePage { }
+    if root.screen == ScreenId.components: ComponentsPage { }
+
+    if root.mock-bar && root.screen != ScreenId.mock-index: MockSwitcher {
+        x: root.width - self.width - 16px;
+        y: root.height - self.height - 16px;
+        screens: root.mock-screens;
+        scenes: root.mock-scenes;
+        screen-id: root.mock-screen-id;
+        scene-id: root.mock-scene-id;
+        current-label: root.mock-label;
+        recolhida: root.mock-recolhida;
+        open(screen, scene) => { root.mock-open(screen, scene); }
+        index => { root.mock-index(); }
+    }
+}

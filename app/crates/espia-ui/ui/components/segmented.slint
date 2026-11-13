@@ -1,0 +1,52 @@
+// Seletor segmentado do seletor de transmissão (porte do `.opt .seg` / `.audio-pick .seg`): trilho de pílulas com
+// 4px de folga e 2px entre as opções; a escolhida fica em accent com texto escuro. Resolução, FPS e tipo de som.
+
+import { Tokens } from "../tokens.slint";
+
+export component Segmented inherits Rectangle {
+    in property <[string]> options;
+    in property <int> current: 0;
+    in property <string> label;
+    callback picked(int);
+
+    border-radius: self.height / 2;
+    background: Tokens.color-text.with-alpha(0.07);
+    preferred-width: row.preferred-width;
+    preferred-height: row.preferred-height;
+    max-width: row.preferred-width;
+    accessible-role: tab-list;
+    accessible-label: root.label;
+
+    row := HorizontalLayout {
+        padding: 4px;
+        spacing: 2px;
+        for text[i] in root.options: cell := Rectangle {
+            property <bool> on: i == root.current;
+            border-radius: self.height / 2;
+            background: self.on ? Tokens.color-accent : ta.has-hover ? Tokens.color-text.with-alpha(0.07) : transparent;
+            preferred-width: opt.preferred-width;
+            preferred-height: opt.preferred-height;
+            accessible-role: tab;
+            accessible-label: text;
+            accessible-checked: self.on;
+            opt := HorizontalLayout {
+                padding-left: 14px;
+                padding-right: 14px;
+                padding-top: 7px;
+                padding-bottom: 7px;
+                Text {
+                    text: text;
+                    font-family: Tokens.font-body;
+                    font-size: 14px;
+                    font-weight: 600;
+                    color: cell.on ? Tokens.color-bg : Tokens.color-text;
+                    vertical-alignment: center;
+                }
+            }
+            ta := TouchArea {
+                mouse-cursor: pointer;
+                clicked => { root.picked(i); }
+            }
+        }
+    }
+}

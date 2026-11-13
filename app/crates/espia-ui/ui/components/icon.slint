@@ -1,0 +1,60 @@
+// Ícones Lucide (SVG, traço 2.75 como no site) e o componente que os pinta numa cor só.
+// Para usar: `Icon { source: Icons.user-plus; size: 17px; tint: Tokens.color-text; }`.
+
+import { Tokens } from "../tokens.slint";
+
+export global Icons {
+    out property <image> arrow-right: @image-url("../../assets/icons/arrow-right.svg");
+    out property <image> camera: @image-url("../../assets/icons/camera.svg");
+    out property <image> check: @image-url("../../assets/icons/check.svg");
+    out property <image> chevron-down: @image-url("../../assets/icons/chevron-down.svg");
+    out property <image> chevron-up: @image-url("../../assets/icons/chevron-up.svg");
+    out property <image> download: @image-url("../../assets/icons/download.svg");
+    out property <image> ellipsis: @image-url("../../assets/icons/ellipsis.svg");
+    out property <image> eye: @image-url("../../assets/icons/eye.svg");
+    out property <image> eye-off: @image-url("../../assets/icons/eye-off.svg");
+    out property <image> info: @image-url("../../assets/icons/info.svg");
+    out property <image> link: @image-url("../../assets/icons/link.svg");
+    out property <image> list-minus: @image-url("../../assets/icons/list-minus.svg");
+    out property <image> log-out: @image-url("../../assets/icons/log-out.svg");
+    out property <image> maximize: @image-url("../../assets/icons/maximize.svg");
+    out property <image> minimize: @image-url("../../assets/icons/minimize.svg");
+    out property <image> monitor: @image-url("../../assets/icons/monitor.svg");
+    out property <image> monitor-up: @image-url("../../assets/icons/monitor-up.svg");
+    out property <image> panel-top: @image-url("../../assets/icons/panel-top.svg");
+    out property <image> pencil: @image-url("../../assets/icons/pencil.svg");
+    out property <image> picture-in-picture-2: @image-url("../../assets/icons/picture-in-picture-2.svg");
+    out property <image> pin: @image-url("../../assets/icons/pin.svg");
+    out property <image> radio: @image-url("../../assets/icons/radio.svg");
+    out property <image> refresh-cw: @image-url("../../assets/icons/refresh-cw.svg");
+    out property <image> screen-share-off: @image-url("../../assets/icons/screen-share-off.svg");
+    out property <image> smartphone: @image-url("../../assets/icons/smartphone.svg");
+    out property <image> trash: @image-url("../../assets/icons/trash.svg");
+    out property <image> triangle-alert: @image-url("../../assets/icons/triangle-alert.svg");
+    out property <image> user-minus: @image-url("../../assets/icons/user-minus.svg");
+    out property <image> user-plus: @image-url("../../assets/icons/user-plus.svg");
+    out property <image> users: @image-url("../../assets/icons/users.svg");
+    out property <image> volume-2: @image-url("../../assets/icons/volume-2.svg");
+    out property <image> volume-x: @image-url("../../assets/icons/volume-x.svg");
+    out property <image> wifi-off: @image-url("../../assets/icons/wifi-off.svg");
+    out property <image> x: @image-url("../../assets/icons/x.svg");
+    out property <image> spinner-track: @image-url("../../assets/icons/spinner-track.svg");
+    out property <image> spinner-arc: @image-url("../../assets/icons/spinner-arc.svg");
+}
+
+// Ícone pintado numa cor só (`colorize`), centrado na altura da linha.
+export component Icon inherits Rectangle {
+    in property <image> source;
+    in property <length> size: 16px;
+    in property <color> tint: Tokens.color-text;
+    width: size;
+    min-height: size;
+    Image {
+        source: root.source;
+        colorize: root.tint;
+        width: root.size;
+        height: root.size;
+        y: (parent.height - self.height) / 2;
+        image-fit: contain;
+    }
+}

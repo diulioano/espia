@@ -1,0 +1,50 @@
+// Selo "AO VIVO" em pílula (porte de src/ui/components/LiveBadge.svelte): ponto escuro e texto em
+// maiúsculas, negrito, com espaço entre as letras. `md` é o tamanho maior (12px). Quem usa passa o texto
+// já em maiúsculas (a Slint não tem text-transform).
+
+import { Tokens } from "../tokens.slint";
+
+export component LiveTag inherits Rectangle {
+    in property <string> label: "AO VIVO";
+    // false = sm (10px, 3px 8px); true = md (12px, 5px 12px).
+    in property <bool> large: false;
+    // Recuo lateral (a tela de entrada usa 9px no sm).
+    in property <length> pad-h: root.large ? 12px : 8px;
+
+    property <length> pad-v: root.large ? 5px : 3px;
+
+    border-radius: self.height / 2;
+    background: Tokens.color-accent;
+    preferred-width: row.preferred-width;
+    preferred-height: row.preferred-height;
+    max-width: row.preferred-width;
+    accessible-role: none;
+    accessible-label: root.label;
+
+    row := HorizontalLayout {
+        padding-left: root.pad-h;
+        padding-right: root.pad-h;
+        padding-top: root.pad-v;
+        padding-bottom: root.pad-v;
+        spacing: root.large ? 7px : 5px;
+        alignment: center;
+        VerticalLayout {
+            alignment: center;
+            Rectangle {
+                width: 6px;
+                height: 6px;
+                border-radius: 3px;
+                background: Tokens.color-accent-900;
+            }
+        }
+        Text {
+            text: root.label;
+            font-family: Tokens.font-body;
+            font-size: root.large ? 12px : 10px;
+            font-weight: 700;
+            letter-spacing: root.large ? 0.96px : 0.8px;
+            color: Tokens.color-accent-900;
+            vertical-alignment: center;
+        }
+    }
+}

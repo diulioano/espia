@@ -1,0 +1,58 @@
+// Área rolável com a barra do site (src/ui/base.css): pílula na cor de destaque a 65%, sem setas,
+// trilho transparente. A roda do mouse e o toque rolam pelo Flickable; a barra também arrasta.
+// Os filhos entram numa coluna que ocupa a largura da área.
+
+import { Tokens } from "../tokens.slint";
+
+export component Scroll inherits Rectangle {
+    in-out property <length> viewport-y <=> fl.viewport-y;
+    out property <length> content-height: fl.viewport-height;
+    clip: true;
+
+    property <length> trilho: 12px;
+    property <length> alca-h: max(32px, root.height * root.height / max(fl.viewport-height, 1px));
+    property <length> curso: root.height - self.alca-h;
+    property <length> excesso: max(fl.viewport-height - root.height, 1px);
+
+    fl := Flickable {
+        x: 0px;
+        y: 0px;
+        width: root.width;
+        height: root.height;
+        VerticalLayout {
+            alignment: start;
+            @children
+        }
+    }
+
+    if fl.viewport-height > root.height + 1px: Rectangle {
+        x: root.width - root.trilho;
+        y: 0px;
+        width: root.trilho;
+        height: root.height;
+        // alça: 6px de largura (12px do trilho menos 3px de borda transparente de cada lado)
+        Rectangle {
+            x: 3px;
+            y: (-fl.viewport-y) / root.excesso * root.curso;
+            width: 6px;
+            height: root.alca-h;
+            border-radius: 3px;
+            background: drag.pressed || drag.has-hover ? Tokens.color-accent : Tokens.color-accent.with-alpha(0.65);
+        }
+        drag := TouchArea {
+            property <length> vy0;
+            mouse-cursor: default;
+            pointer-event(e) => {
+                if (e.kind == PointerEventKind.down) {
+                    self.vy0 = fl.viewport-y;
+                }
+            }
+            moved => {
+                if (self.pressed) {
+                    fl.viewport-y = min(0px, max(-root.excesso,
+                        self.vy0 - (self.mouse-y - self.pressed-y) * root.excesso / max(root.curso, 1px)));
+                }
+            }
+        }
+    }
+}
