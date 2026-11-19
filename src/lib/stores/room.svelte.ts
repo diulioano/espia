@@ -35,6 +35,7 @@ import {
 import { liveLabel } from '../live-label';
 import { grabSnapshot, SNAPSHOT_MS } from '../snapshot';
 import { roomPath } from '../room-id';
+import { inviteOrigin } from '../site-origin';
 import { forgetRoom, loadSavedRooms, rememberRoom, renameSaved, saveSavedRooms } from '../saved-rooms';
 import { deleteRoom, ownerErrorText, removePerson, renameRoom } from '../api';
 import { Signaling, type SignalingEnd } from '../signaling';
@@ -515,7 +516,7 @@ export class RoomStore {
     const focusedId = self && me ? me.id : streams.some((s) => s.id === this.focusedId) ? this.focusedId : null;
     return {
       roomId: this.code,
-      inviteUrl: location.origin + roomPath(this.code),
+      inviteUrl: inviteOrigin(location) + roomPath(this.code),
       status: this.connected ? 'ready' : 'connecting',
       participants,
       capacity: this.capacity,

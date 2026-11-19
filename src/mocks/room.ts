@@ -1,5 +1,6 @@
 // Cenas mockadas da sala — espelham a prop `scene` de design_handoff_espia/design/Room.dc.html.
 import type { CameraView, CaptureSource, GoLivePrefs, ParticipantView, PickerView, RoomView, StreamView, ToastView } from '../lib/types';
+import { inviteOrigin } from '../lib/site-origin';
 
 export const ROOM_SCENES = [
   {id:'update-required',code:'017',label:'Atualização necessária'},
@@ -305,7 +306,7 @@ function rawRoomScene(scene: RoomScene): RoomView {
 
   return {
     roomId: MOCK_ROOM_ID,
-    inviteUrl: `${location.origin}/s/${MOCK_ROOM_ID}`,
+    inviteUrl: `${inviteOrigin(location)}/s/${MOCK_ROOM_ID}`,
     status: scene === 'connecting' ? 'connecting' : 'ready',
     participants: (scene === 'crowd' ? [...PEOPLE, ...CROWD] : PEOPLE).map((p) => ({
       ...p,
