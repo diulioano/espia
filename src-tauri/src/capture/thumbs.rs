@@ -70,20 +70,32 @@ mod imp {
     (!bits.is_null()).then_some((bmp, bits as *mut u8))
   }
 
+  const MAX_WINDOW_DIM: i32 = 16_384;
+  const MAX_ENCODED_BYTES: u64 = 16 * 1024 * 1024;
+
   /// Reduz `src_dc` (w×h) para caber em 320×180 e devolve os pixels BGRA.
   unsafe fn shrink(src_dc: HDC, x: i32, y: i32, w: i32, h: i32) -> Option<(i32, i32, Vec<u8>)> {
+    if src_dc.is_invalid() || w <= 0 || h <= 0 {
+      return None;
+    }
     let (tw, th) = fit(w, h, THUMB_W, THUMB_H);
     unsafe {
       let dc = CreateCompatibleDC(Some(src_dc));
-      let (bmp, bits) = dib(dc, tw, th)?;
-      let old = SelectObject(dc, bmp.into());
-      SetStretchBltMode(dc, HALFTONE);
-      let ok = StretchBlt(dc, 0, 0, tw, th, Some(src_dc), x, y, w, h, SRCCOPY).as_bool();
-      let pixels = std::slice::from_raw_parts(bits, (tw * th * 4) as usize).to_vec();
-      SelectObject(dc, old);
-      let _ = DeleteObject(bmp.into());
+      if dc.is_invalid() {
+        return None;
+      }
+      let out = (|| {
+        let (bmp, bits) = dib(dc, tw, th)?;
+        let old = SelectObject(dc, bmp.into());
+        SetStretchBltMode(dc, HALFTONE);
+        let ok = StretchBlt(dc, 0, 0, tw, th, Some(src_dc), x, y, w, h, SRCCOPY).as_bool();
+        let pixels = ok.then(|| std::slice::from_raw_parts(bits, (tw * th * 4) as usize).to_vec());
+        SelectObject(dc, old);
+        let _ = DeleteObject(bmp.into());
+        pixels.map(|px| (tw, th, px))
+      })();
       let _ = DeleteDC(dc);
-      ok.then_some((tw, th, pixels))
+      out
     }
   }
 
@@ -95,19 +107,33 @@ mod imp {
       }
       let mut r = RECT::default();
       GetWindowRect(hwnd, &mut r).ok()?;
-      let (w, h) = (r.right - r.left, r.bottom - r.top);
-      if w <= 0 || h <= 0 {
+      let (w, h) = (r.right.saturating_sub(r.left), r.bottom.saturating_sub(r.top));
+      if w <= 0 || h <= 0 || w > MAX_WINDOW_DIM || h > MAX_WINDOW_DIM {
         return None;
       }
       let screen = GetDC(None);
-      let dc = CreateCompatibleDC(Some(screen));
-      let bmp = CreateCompatibleBitmap(screen, w, h);
-      let old = SelectObject(dc, bmp.into());
-      let printed = PrintWindow(hwnd, dc, PW_RENDERFULLCONTENT).as_bool();
-      let small = if printed { shrink(dc, 0, 0, w, h) } else { None };
-      SelectObject(dc, old);
-      let _ = DeleteObject(bmp.into());
-      let _ = DeleteDC(dc);
+      if screen.is_invalid() {
+        return None;
+      }
+      let small = (|| {
+        let dc = CreateCompatibleDC(Some(screen));
+        if dc.is_invalid() {
+          return None;
+        }
+        let bmp = CreateCompatibleBitmap(screen, w, h);
+        let res = if !bmp.is_invalid() {
+          let old = SelectObject(dc, bmp.into());
+          let printed = PrintWindow(hwnd, dc, PW_RENDERFULLCONTENT).as_bool();
+          let small = if printed { shrink(dc, 0, 0, w, h) } else { None };
+          SelectObject(dc, old);
+          let _ = DeleteObject(bmp.into());
+          small
+        } else {
+          None
+        };
+        let _ = DeleteDC(dc);
+        res
+      })();
       ReleaseDC(None, screen);
       let (tw, th, px) = small?;
       if is_black(&px) {
@@ -119,9 +145,16 @@ mod imp {
 
   /// Miniatura de um monitor (retângulo na área de trabalho virtual).
   pub fn monitor_thumb(r: RECT) -> Option<String> {
+    let (w, h) = (r.right.saturating_sub(r.left), r.bottom.saturating_sub(r.top));
+    if w <= 0 || h <= 0 || w > MAX_WINDOW_DIM || h > MAX_WINDOW_DIM {
+      return None;
+    }
     unsafe {
       let screen = GetDC(None);
-      let small = shrink(screen, r.left, r.top, r.right - r.left, r.bottom - r.top);
+      if screen.is_invalid() {
+        return None;
+      }
+      let small = shrink(screen, r.left, r.top, w, h);
       ReleaseDC(None, screen);
       let (tw, th, px) = small?;
       encode(&px, tw, th, false).map(|b| format!("data:image/jpeg;base64,{}", STANDARD.encode(b)))
@@ -131,19 +164,27 @@ mod imp {
   /// Ícone 32×32 em PNG com transparência.
   pub fn icon_png(icon: HICON) -> Option<String> {
     const S: i32 = 32;
+    if icon.is_invalid() {
+      return None;
+    }
     unsafe {
       let screen = GetDC(None);
+      if screen.is_invalid() {
+        return None;
+      }
       let dc = CreateCompatibleDC(Some(screen));
+      if dc.is_invalid() {
+        ReleaseDC(None, screen);
+        return None;
+      }
       let out = (|| {
         let (bmp, bits) = dib(dc, S, S)?;
         let old = SelectObject(dc, bmp.into());
         let drawn = DrawIconEx(dc, 0, 0, icon, S, S, 0, None, DI_NORMAL).is_ok();
-        let mut px = std::slice::from_raw_parts(bits, (S * S * 4) as usize).to_vec();
+        let px = drawn.then(|| std::slice::from_raw_parts(bits, (S * S * 4) as usize).to_vec());
         SelectObject(dc, old);
         let _ = DeleteObject(bmp.into());
-        if !drawn {
-          return None;
-        }
+        let mut px = px?;
         // Ícone antigo sem alfa: o que foi desenhado fica opaco.
         if px.as_chunks::<4>().0.iter().all(|p| p[3] == 0) {
           for p in px.as_chunks_mut::<4>().0 {
@@ -187,6 +228,9 @@ mod imp {
       encoder.Commit().ok()?;
       let mut stat = Default::default();
       stream.Stat(&mut stat, STATFLAG_NONAME).ok()?;
+      if stat.cbSize == 0 || stat.cbSize > MAX_ENCODED_BYTES {
+        return None;
+      }
       stream.Seek(0, STREAM_SEEK_SET, None).ok()?;
       let mut out = vec![0u8; stat.cbSize as usize];
       let mut read = 0u32;

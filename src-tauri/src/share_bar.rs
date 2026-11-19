@@ -112,11 +112,11 @@ unsafe extern "system" fn visit(hwnd: HWND, lparam: LPARAM) -> BOOL {
 fn describe(hwnd: HWND) -> (String, i32) {
   let mut rect = RECT::default();
   let height = match unsafe { GetWindowRect(hwnd, &mut rect) } {
-    Ok(()) => rect.bottom - rect.top,
+    Ok(()) => rect.bottom.saturating_sub(rect.top),
     Err(_) => i32::MAX,
   };
   let mut buf = [0u16; 512];
-  let len = unsafe { GetWindowTextW(hwnd, &mut buf) } as usize;
+  let len = (unsafe { GetWindowTextW(hwnd, &mut buf) }.max(0) as usize).min(buf.len());
   (String::from_utf16_lossy(&buf[..len]), height)
 }
 

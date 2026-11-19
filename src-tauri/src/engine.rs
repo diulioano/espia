@@ -76,18 +76,18 @@ mod imp {
   impl EngineState {
     fn action<R: Runtime>(&self, app: &AppHandle<R>) -> EngineAction {
       let live = app.state::<TrayState>().live();
-      engine_action(*self.window.lock().unwrap(), self.in_room.load(Ordering::Relaxed), live)
+      engine_action(self.window(), self.in_room.load(Ordering::Relaxed), live)
     }
 
     pub fn window(&self) -> WindowMode {
-      *self.window.lock().unwrap()
+      *self.window.lock().unwrap_or_else(|e| e.into_inner())
     }
   }
 
   /// A janela mudou (mostrada, minimizada, escondida). Só reage se mudou de fato.
   pub fn set_window<R: Runtime>(app: &AppHandle<R>, mode: WindowMode) {
     let state = app.state::<EngineState>();
-    let changed = std::mem::replace(&mut *state.window.lock().unwrap(), mode) != mode;
+    let changed = std::mem::replace(&mut *state.window.lock().unwrap_or_else(|e| e.into_inner()), mode) != mode;
     if changed {
       apply(app);
     }

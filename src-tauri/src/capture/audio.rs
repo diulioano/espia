@@ -154,15 +154,24 @@ mod imp {
     out
   }
 
+  #[allow(dead_code)]
+  struct ActivationParams(Box<AUDIOCLIENT_ACTIVATION_PARAMS>);
+  unsafe impl Send for ActivationParams {}
+  unsafe impl Sync for ActivationParams {}
+
   #[implement(IActivateAudioInterfaceCompletionHandler, IAgileObject)]
-  struct Done(std::sync::Mutex<Option<mpsc::Sender<()>>>);
+  struct Done {
+    tx: std::sync::Mutex<Option<mpsc::Sender<()>>>,
+    /// Mantém o blob de ativação vivo na heap até o Windows soltar o handler (evita UAF em timeout).
+    _params: ActivationParams,
+  }
 
   // Ágil: o Windows chama o fim da ativação em qualquer thread.
   impl windows::Win32::System::Com::IAgileObject_Impl for Done_Impl {}
 
   impl IActivateAudioInterfaceCompletionHandler_Impl for Done_Impl {
     fn ActivateCompleted(&self, _op: Ref<IActivateAudioInterfaceAsyncOperation>) -> windows::core::Result<()> {
-      if let Some(tx) = self.0.lock().unwrap().take() {
+      if let Some(tx) = self.tx.lock().unwrap_or_else(|e| e.into_inner()).take() {
         let _ = tx.send(());
       }
       Ok(())
@@ -175,13 +184,14 @@ mod imp {
       Plan::Exclude(pid) => (pid, PROCESS_LOOPBACK_MODE_EXCLUDE_TARGET_PROCESS_TREE),
       Plan::None(_) => return Err(windows::core::Error::empty()),
     };
-    let mut params = AUDIOCLIENT_ACTIVATION_PARAMS {
+    let mut params = Box::new(AUDIOCLIENT_ACTIVATION_PARAMS {
       ActivationType: AUDIOCLIENT_ACTIVATION_TYPE_PROCESS_LOOPBACK,
       Anonymous: AUDIOCLIENT_ACTIVATION_PARAMS_0 {
         ProcessLoopbackParams: AUDIOCLIENT_PROCESS_LOOPBACK_PARAMS { TargetProcessId: pid, ProcessLoopbackMode: mode },
       },
-    };
-    // O PROPVARIANT só aponta para `params`: ManuallyDrop para ninguém tentar liberar o blob.
+    });
+    let params_ptr = (&mut *params as *mut AUDIOCLIENT_ACTIVATION_PARAMS).cast::<u8>();
+    // O PROPVARIANT só aponta para `params` (na heap, mantido vivo por `Done`): ManuallyDrop para ninguém liberar o blob.
     let prop = ManuallyDrop::new(PROPVARIANT {
       Anonymous: PROPVARIANT_0 {
         Anonymous: ManuallyDrop::new(PROPVARIANT_0_0 {
@@ -190,13 +200,17 @@ mod imp {
           wReserved2: 0,
           wReserved3: 0,
           Anonymous: PROPVARIANT_0_0_0 {
-            blob: BLOB { cbSize: size_of::<AUDIOCLIENT_ACTIVATION_PARAMS>() as u32, pBlobData: &mut params as *mut _ as *mut u8 },
+            blob: BLOB { cbSize: size_of::<AUDIOCLIENT_ACTIVATION_PARAMS>() as u32, pBlobData: params_ptr },
           },
         }),
       },
     });
     let (tx, rx) = mpsc::channel();
-    let handler: IActivateAudioInterfaceCompletionHandler = Done(std::sync::Mutex::new(Some(tx))).into();
+    let handler: IActivateAudioInterfaceCompletionHandler = Done {
+      tx: std::sync::Mutex::new(Some(tx)),
+      _params: ActivationParams(params),
+    }
+    .into();
     unsafe {
       let op = ActivateAudioInterfaceAsync(VIRTUAL_AUDIO_DEVICE_PROCESS_LOOPBACK, &IAudioClient::IID, Some(&*prop as *const _), &handler)?;
       rx.recv_timeout(Duration::from_secs(5)).map_err(|_| windows::core::Error::empty())?;
@@ -246,10 +260,19 @@ mod imp {
               None,
             )?;
             let event = CreateEventW(None, false, false, None)?;
-            client.SetEventHandle(event)?;
-            let capture: IAudioCaptureClient = client.GetService()?;
-            client.Start()?;
-            Ok::<_, windows::core::Error>((client, capture, event))
+            let init = (|| {
+              client.SetEventHandle(event)?;
+              let capture: IAudioCaptureClient = client.GetService()?;
+              client.Start()?;
+              Ok::<_, windows::core::Error>(capture)
+            })();
+            match init {
+              Ok(capture) => Ok((client, capture, event)),
+              Err(err) => {
+                let _ = CloseHandle(event);
+                Err(err)
+              }
+            }
           })();
           let (client, capture, event) = match started {
             Ok(v) => {
@@ -283,11 +306,14 @@ mod imp {
                   break;
                 }
                 let samples = frames as usize * CHANNELS as usize;
-                if flags & AUDCLNT_BUFFERFLAGS_SILENT.0 as u32 != 0 || data.is_null() {
-                  pending.extend(std::iter::repeat_n(0.0, samples));
-                } else {
-                  let pcm = std::slice::from_raw_parts(data as *const i16, samples);
-                  pending.extend(pcm.iter().map(|&s| s as f32 / 32768.0));
+                if samples > 0 {
+                  if flags & AUDCLNT_BUFFERFLAGS_SILENT.0 as u32 != 0 || data.is_null() {
+                    pending.extend(std::iter::repeat_n(0.0, samples));
+                  } else {
+                    // Lê bytes sem assumir alinhamento de i16.
+                    let raw = std::slice::from_raw_parts(data, samples * 2);
+                    pending.extend(raw.chunks_exact(2).map(|b| i16::from_le_bytes([b[0], b[1]]) as f32 / 32768.0));
+                  }
                 }
                 let _ = capture.ReleaseBuffer(frames);
                 dropped_samples += super::retain_recent_pcm(&mut pending);

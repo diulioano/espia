@@ -34,8 +34,8 @@ impl Drop for ComGuard {
 mod imp {
   use std::{
     sync::{
-      Arc, Mutex,
-      atomic::{AtomicBool, AtomicU64, Ordering},
+      Arc, Mutex, MutexGuard,
+      atomic::{AtomicBool, AtomicU32, AtomicU64, Ordering},
     },
     thread,
     time::{Duration, Instant},
@@ -60,6 +60,10 @@ mod imp {
 
   const VERSION: u32 = 1;
 
+  fn lock_or_recover<T>(m: &Mutex<T>) -> MutexGuard<'_, T> {
+    m.lock().unwrap_or_else(|e| e.into_inner())
+  }
+
   /// A página que chama é a do Espia, na janela principal (R9).
   pub(crate) fn origin_ok<R: Runtime>(webview: &Webview<R>) -> bool {
     if webview.label() != "main" {
@@ -80,8 +84,23 @@ mod imp {
   pub struct Capture {
     session: Mutex<Option<Session>>,
     epoch: AtomicU64,
+    /// Monotônico entre sessões e trocas de qualidade: liberações atrasadas nunca fecham slots novos.
+    generation: AtomicU32,
     pending: Mutex<Option<Arc<Mutex<PublishQueue>>>>,
     starting: tauri::async_runtime::Mutex<()>,
+    quality: tauri::async_runtime::Mutex<()>,
+  }
+
+  impl Capture {
+    pub(crate) fn next_generation(&self) -> u32 {
+      loop {
+        let prev = self.generation.fetch_add(1, Ordering::SeqCst);
+        let next = prev.wrapping_add(1);
+        if next != 0 {
+          return next;
+        }
+      }
+    }
   }
 
   struct Session {
@@ -95,19 +114,22 @@ mod imp {
 
   impl Session {
     fn stop<R: Runtime>(self, webview: &Webview<R>, reason: &str) {
-      self.publication.lock().unwrap().stop();
+      lock_or_recover(&self.publication).stop();
       self.watching.store(false, Ordering::Relaxed);
-      self.sound.lock().unwrap().take();
+      lock_or_recover(&self.sound).take();
       self.video.stop(reason);
-      SlotSet::release(webview, self.generation);
+      SlotSet::release_gen(webview, self.generation);
     }
   }
 
   /// Para a transmissão nativa (recarregou/navegou a página, fechou a janela).
   pub fn stop_all<R: Runtime>(webview: &Webview<R>, capture: &Capture) {
     capture.epoch.fetch_add(1, Ordering::SeqCst);
-    if let Some(q) = capture.pending.lock().unwrap().take() { q.lock().unwrap().stop(); }
-    if let Some(s) = capture.session.lock().unwrap().take() {
+    if let Some(q) = lock_or_recover(&capture.pending).take() {
+      lock_or_recover(&q).stop();
+    }
+    let session = lock_or_recover(&capture.session).take();
+    if let Some(s) = session {
       s.stop(webview, "stopped");
     }
   }
@@ -185,18 +207,18 @@ mod imp {
     use webview2_com::Microsoft::Web::WebView2::Win32::ICoreWebView2;
     use windows::core::HSTRING;
     {
-      let mut q = queue.lock().unwrap();
+      let mut q = lock_or_recover(queue);
       if q.scheduled || !q.pending() { return; }
       q.scheduled = true;
     }
     let q2 = queue.clone();
     let webview2 = webview.clone();
     let result = webview.with_webview(move |wv| unsafe {
-      let messages = q2.lock().unwrap().take(Instant::now());
+      let messages = lock_or_recover(&q2).take(Instant::now());
       let core: Result<ICoreWebView2, _> = wv.controller().CoreWebView2();
       if let Ok(core) = core {
         for message in messages {
-          if q2.lock().unwrap().stopped { break; }
+          if lock_or_recover(&q2).stopped { break; }
           let json = match message {
             Message::Frame(m) => json!({"espia":"f","m":m}).to_string(),
             Message::Pcm(bytes) => sound_json(&bytes),
@@ -204,17 +226,17 @@ mod imp {
           let _ = core.PostWebMessageAsJson(&HSTRING::from(json));
         }
       }
-      q2.lock().unwrap().scheduled = false;
+      lock_or_recover(&q2).scheduled = false;
       schedule_publish(&webview2, &q2);
     });
-    if result.is_err() { queue.lock().unwrap().scheduled = false; }
+    if result.is_err() { lock_or_recover(queue).scheduled = false; }
   }
 
   fn frame_sink<R: Runtime>(webview: &Webview<R>, queue: &Arc<Mutex<PublishQueue>>) -> FrameSink {
     let webview = webview.clone();
     let queue = queue.clone();
     FrameSink(Arc::new(move |m| {
-      queue.lock().unwrap().frame(m, Instant::now());
+      lock_or_recover(&queue).frame(m, Instant::now());
       schedule_publish(&webview, &queue);
     }))
   }
@@ -232,7 +254,7 @@ mod imp {
     let webview = webview.clone();
     let queue = queue.clone();
     Arc::new(move |bytes| {
-      queue.lock().unwrap().pcm(bytes, Instant::now());
+      lock_or_recover(&queue).pcm(bytes, Instant::now());
       schedule_publish(&webview, &queue);
     })
   }
@@ -285,19 +307,22 @@ mod imp {
     // Uma sessão por vez: começar outra encerra a anterior.
     stop_all(&webview, &state);
     let epoch = state.epoch.load(Ordering::SeqCst);
+    let generation = state.next_generation();
     let publication = Arc::new(Mutex::new(PublishQueue::default()));
-    *state.pending.lock().unwrap() = Some(publication.clone());
+    *lock_or_recover(&state.pending) = Some(publication.clone());
 
     let (item, target) = match source {
       SourceId::Window(h) => {
         let hwnd = HWND(h as _);
         if !sources::window_alive(hwnd) {
+          lock_or_recover(&state.pending).take();
           return Err("source_gone".into());
         }
         (Item::Window(h), Target::Window(sources::window_pid(hwnd)))
       }
       SourceId::Monitor(m) => {
         if sources::monitor_rect(m).is_none() {
+          lock_or_recover(&state.pending).take();
           return Err("source_gone".into());
         }
         (Item::Monitor(m), Target::Monitor)
@@ -313,7 +338,7 @@ mod imp {
     let cleanup = publication.clone();
     let session = tauri::async_runtime::spawn_blocking(move || {
       let _com = super::com_init();
-      let video = Video::start(&item, resolution, fps, frames2.clone(), |w, h| SlotSet::post(&wv, 1, w, h)).map_err(|e| {
+      let video = Video::start(&item, resolution, fps, frames2.clone(), |w, h| SlotSet::post(&wv, generation, w, h)).map_err(|e| {
         eprintln!("[espia] captura falhou: {e}");
         "capture_failed".to_string()
       })?;
@@ -326,7 +351,7 @@ mod imp {
         watch_discord(watching.clone(), sound_slot.clone(), plan, sound2.clone(), frames2.clone());
       }
       let out = result(&video, plan);
-      Ok::<_, String>((Session { publication, video, sound: sound_slot, watching, generation: 1 }, out))
+      Ok::<_, String>((Session { publication, video, sound: sound_slot, watching, generation }, out))
     })
     .await
     .map_err(|_| "capture_failed".to_string())
@@ -335,18 +360,22 @@ mod imp {
     let session = match session {
       Ok(s) => s,
       Err(e) => {
-        cleanup.lock().unwrap().stop();
-        SlotSet::release(&webview, 1);
+        lock_or_recover(&state.pending).take();
+        lock_or_recover(&cleanup).stop();
+        SlotSet::release_gen(&webview, generation);
         return Err(e);
       }
     };
 
     let (session, out) = session;
-    let mut guard = state.session.lock().unwrap();
+    let mut guard = lock_or_recover(&state.session);
     if state.epoch.load(Ordering::SeqCst) != epoch {
+      drop(guard);
+      lock_or_recover(&state.pending).take();
       session.stop(&webview, "stopped");
       return Err("capture_failed".into());
     }
+    lock_or_recover(&state.pending).take();
     *guard = Some(session);
     Ok(out)
   }
@@ -373,12 +402,12 @@ mod imp {
         roots = now;
         let wanted = audio::audio_plan(Target::Monitor, true, &roots, std::process::id());
         // Para o som antigo antes de abrir o novo: nunca os dois (nem o Discord) juntos.
-        slot.lock().unwrap().take();
+        lock_or_recover(&slot).take();
         let (loopback, plan) = start_sound(wanted, &sound);
         {
           // Confere a parada com o slot travado: Session::stop desliga a vigia antes de esvaziar o
           // slot, então nenhum som novo fica ligado depois de parar.
-          let mut guard = slot.lock().unwrap();
+          let mut guard = lock_or_recover(&slot);
           if !watching.load(Ordering::Relaxed) {
             break;
           }
@@ -389,7 +418,7 @@ mod imp {
           if let Some(w) = plan.warn() {
             msg["warn"] = json!(w.as_str());
           }
-          let _ = frames.send(msg);
+          frames.send(msg);
         }
         current = plan;
       }
@@ -401,19 +430,49 @@ mod imp {
     if !origin_ok(&webview) {
       return Err(denied());
     }
+    let _quality = state.quality.lock().await;
     let resolution = if resolution >= 1080 { 1080 } else { 720 };
     let fps = if fps >= 60 { 60 } else { 30 };
-    let mut guard = state.session.lock().unwrap();
-    let session = guard.as_mut().ok_or("not_live")?;
-    let next = session.generation + 1;
-    let before = session.video.size();
-    let (w, h) = session.video.set_quality(resolution, fps, |w, h| SlotSet::post(&webview, next, w, h))?;
-    if (w, h) != before {
-      session.publication.lock().unwrap().generation(next as u64);
-      SlotSet::release(&webview, session.generation);
-      session.generation = next;
+
+    // Nunca segura `state.session` durante `SlotSet::post` (que espera a UI thread), evitando deadlock com `stop_all` em `on_page_load`.
+    let (epoch, target, next_gen) = {
+      let guard = lock_or_recover(&state.session);
+      let session = guard.as_ref().ok_or("not_live")?;
+      session.video.set_fps(fps);
+      let target = session.video.target_size_for(resolution);
+      if target == session.video.size() {
+        return Ok(json!({ "width": target.0, "height": target.1 }));
+      }
+      (state.epoch.load(Ordering::SeqCst), target, state.next_generation())
+    };
+
+    let wv = webview.clone();
+    let slots = tauri::async_runtime::spawn_blocking(move || SlotSet::post(&wv, next_gen, target.0, target.1))
+      .await
+      .map_err(|_| "shared_buffer_failed".to_string())??;
+
+    let mut guard = lock_or_recover(&state.session);
+    if state.epoch.load(Ordering::SeqCst) != epoch {
+      drop(guard);
+      SlotSet::release_gen(&webview, next_gen);
+      return Err("not_live".into());
     }
-    Ok(json!({ "width": w, "height": h }))
+    let Some(session) = guard.as_mut() else {
+      drop(guard);
+      SlotSet::release_gen(&webview, next_gen);
+      return Err("not_live".into());
+    };
+    if let Err(e) = session.video.apply_slots(slots) {
+      drop(guard);
+      SlotSet::release_gen(&webview, next_gen);
+      return Err(e);
+    }
+    let old_gen = session.generation;
+    session.generation = next_gen;
+    lock_or_recover(&session.publication).generation(next_gen as u64);
+    drop(guard);
+    SlotSet::release_gen(&webview, old_gen);
+    Ok(json!({ "width": target.0, "height": target.1 }))
   }
 
   #[tauri::command]
@@ -427,7 +486,7 @@ mod imp {
 
 #[cfg(all(test, windows))]
 mod tests {
-  use super::{audio::CHUNK_FRAMES, sound_json};
+  use super::{Capture, audio::CHUNK_FRAMES, sound_json};
 
   #[test]
   fn mensagem_de_som_volta_igual() {
@@ -436,5 +495,14 @@ mod tests {
     let v: serde_json::Value = serde_json::from_str(&sound_json(&bytes)).unwrap();
     assert_eq!(v["espia"], "pcm");
     assert_eq!(STANDARD.decode(v["d"].as_str().unwrap()).unwrap(), bytes);
+  }
+
+  #[test]
+  fn geracoes_sao_monotonicas_e_nunca_zero() {
+    let c = Capture::default();
+    let g1 = c.next_generation();
+    let g2 = c.next_generation();
+    let g3 = c.next_generation();
+    assert_eq!((g1, g2, g3), (1, 2, 3));
   }
 }

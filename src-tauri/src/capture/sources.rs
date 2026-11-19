@@ -106,13 +106,15 @@ mod imp {
   fn text(hwnd: HWND) -> String {
     let mut buf = [0u16; 512];
     let n = unsafe { GetWindowTextW(hwnd, &mut buf) };
-    String::from_utf16_lossy(&buf[..n.max(0) as usize])
+    let n = (n.max(0) as usize).min(buf.len());
+    String::from_utf16_lossy(&buf[..n])
   }
 
   fn class(hwnd: HWND) -> String {
     let mut buf = [0u16; 256];
     let n = unsafe { GetClassNameW(hwnd, &mut buf) };
-    String::from_utf16_lossy(&buf[..n.max(0) as usize])
+    let n = (n.max(0) as usize).min(buf.len());
+    String::from_utf16_lossy(&buf[..n])
   }
 
   pub fn window_pid(hwnd: HWND) -> u32 {
@@ -160,8 +162,8 @@ mod imp {
         cloaked: cloaked != 0,
         has_owner: GetWindow(hwnd, GW_OWNER).is_ok_and(|o| !o.is_invalid()),
         pid,
-        width: r.right - r.left,
-        height: r.bottom - r.top,
+        width: r.right.saturating_sub(r.left),
+        height: r.bottom.saturating_sub(r.top),
       }
     }
   }
@@ -173,7 +175,8 @@ mod imp {
       let mut len = buf.len() as u32;
       let ok = QueryFullProcessImageNameW(h, PROCESS_NAME_WIN32, windows::core::PWSTR(buf.as_mut_ptr()), &mut len).is_ok();
       let _ = CloseHandle(h);
-      ok.then(|| String::from_utf16_lossy(&buf[..len as usize]))
+      let n = (len as usize).min(buf.len());
+      ok.then(|| String::from_utf16_lossy(&buf[..n]))
     }
   }
 
@@ -187,19 +190,38 @@ mod imp {
       }
       let mut data = vec![0u8; size as usize];
       GetFileVersionInfoW(&wide, None, size, data.as_mut_ptr() as _).ok()?;
+      let base = data.as_ptr() as usize;
+      let end = base.checked_add(data.len())?;
+
       let mut ptr = std::ptr::null_mut();
       let mut len = 0u32;
-      if !VerQueryValueW(data.as_ptr() as _, &HSTRING::from("\\VarFileInfo\\Translation"), &mut ptr, &mut len).as_bool() || len < 4 {
+      if !VerQueryValueW(data.as_ptr() as _, &HSTRING::from("\\VarFileInfo\\Translation"), &mut ptr, &mut len).as_bool()
+        || ptr.is_null()
+        || len < 4
+      {
         return None;
       }
-      let lang = *(ptr as *const u16);
-      let cp = *(ptr as *const u16).add(1);
+      let p = ptr as usize;
+      if p < base || p.checked_add(4)? > end {
+        return None;
+      }
+      let lang = std::ptr::read_unaligned(ptr as *const u16);
+      let cp = std::ptr::read_unaligned((ptr as *const u8).add(2) as *const u16);
+
+      ptr = std::ptr::null_mut();
+      len = 0;
       let key = HSTRING::from(format!("\\StringFileInfo\\{lang:04x}{cp:04x}\\FileDescription"));
-      if !VerQueryValueW(data.as_ptr() as _, &key, &mut ptr, &mut len).as_bool() || len == 0 {
+      if !VerQueryValueW(data.as_ptr() as _, &key, &mut ptr, &mut len).as_bool() || ptr.is_null() || len == 0 {
         return None;
       }
-      let s = std::slice::from_raw_parts(ptr as *const u16, len as usize);
-      let s = String::from_utf16_lossy(s).trim_end_matches('\0').trim().to_string();
+      let p = ptr as usize;
+      let bytes = (len as usize).checked_mul(2)?;
+      if p < base || p.checked_add(bytes)? > end {
+        return None;
+      }
+      let raw = std::slice::from_raw_parts(ptr as *const u8, bytes);
+      let units: Vec<u16> = raw.chunks_exact(2).map(|b| u16::from_le_bytes([b[0], b[1]])).collect();
+      let s = String::from_utf16_lossy(&units).trim_end_matches('\0').trim().to_string();
       (!s.is_empty()).then_some(s)
     }
   }
@@ -228,7 +250,7 @@ mod imp {
   fn app_info(hwnd: HWND, pid: u32) -> AppInfo {
     let path = exe_path(pid);
     let key = path.clone().unwrap_or_else(|| format!("pid:{pid}"));
-    if let Some(c) = APPS.lock().unwrap().get(&key) {
+    if let Some(c) = APPS.lock().unwrap_or_else(|e| e.into_inner()).get(&key) {
       return c.clone();
     }
     let file = path.as_deref().and_then(|p| p.rsplit('\\').next()).unwrap_or("").to_string();
@@ -236,7 +258,7 @@ mod imp {
     let icon = window_icon(hwnd, path.as_deref());
     // Sem ícone pode ser só a janela ainda carregando: não guarda.
     if icon.is_some() {
-      APPS.lock().unwrap().insert(key, AppInfo { name: name.clone(), icon: icon.clone() });
+      APPS.lock().unwrap_or_else(|e| e.into_inner()).insert(key, AppInfo { name: name.clone(), icon: icon.clone() });
     }
     AppInfo { name, icon }
   }

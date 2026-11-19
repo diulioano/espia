@@ -25,7 +25,7 @@ pub fn letterbox(cw: u32, ch: u32, w: u32, h: u32) -> (i32, i32, i32, i32) {
 
 /// Bytes de um quadro NV12 compacto (Y w×h + UV w×h/2).
 pub fn nv12_size(w: u32, h: u32) -> usize {
-  (w * h * 3 / 2) as usize
+  (w as usize) * (h as usize) * 3 / 2
 }
 
 #[cfg(windows)]
@@ -83,6 +83,10 @@ mod imp {
 
   use super::{letterbox, nv12_size, target_size};
 
+  fn lock_or_recover<T>(m: &Mutex<T>) -> std::sync::MutexGuard<'_, T> {
+    m.lock().unwrap_or_else(|e| e.into_inner())
+  }
+
   // ---------- Buffers compartilhados com a página ----------
 
   struct SendPtr(*mut u8);
@@ -106,9 +110,18 @@ mod imp {
     /// Cria e posta os 3 buffers para a página (precisa rodar a criação na thread da UI).
     pub fn post<R: tauri::Runtime>(webview: &tauri::Webview<R>, generation: u32, width: u32, height: u32) -> Result<Self, String> {
       let size = nv12_size(width, height);
+      if size == 0 {
+        return Err("shared_buffer_empty".to_string());
+      }
       let (tx, rx) = mpsc::channel::<Result<[usize; 3], String>>();
+      let cancelled = Arc::new(AtomicBool::new(false));
+      let cancelled2 = cancelled.clone();
       webview
         .with_webview(move |wv| {
+          if cancelled2.load(Ordering::SeqCst) {
+            return;
+          }
+          let mut created: Vec<ICoreWebView2SharedBuffer> = Vec::with_capacity(3);
           let res = (|| unsafe {
             let env: ICoreWebView2Environment12 = wv.environment().cast().map_err(|e| e.to_string())?;
             let core: ICoreWebView2_17 = wv.controller().CoreWebView2().and_then(|c| c.cast()).map_err(|e| e.to_string())?;
@@ -117,28 +130,65 @@ mod imp {
               let buffer = env.CreateSharedBuffer(size as u64).map_err(|e| e.to_string())?;
               let mut p = std::ptr::null_mut();
               buffer.Buffer(&mut p).map_err(|e| e.to_string())?;
+              if p.is_null() {
+                let _ = buffer.Close();
+                return Err("shared_buffer_null".to_string());
+              }
               *out = p as usize;
               let meta = json!({ "espia": "frame-slot", "gen": generation, "slot": slot, "width": width, "height": height, "format": "NV12" });
-              core
-                .PostSharedBufferToScript(&buffer, COREWEBVIEW2_SHARED_BUFFER_ACCESS_READ_ONLY, &HSTRING::from(meta.to_string()))
-                .map_err(|e| e.to_string())?;
-              BUFFERS.with(|b| b.borrow_mut().push((generation, buffer)));
+              if let Err(e) = core.PostSharedBufferToScript(&buffer, COREWEBVIEW2_SHARED_BUFFER_ACCESS_READ_ONLY, &HSTRING::from(meta.to_string())) {
+                let _ = buffer.Close();
+                return Err(e.to_string());
+              }
+              created.push(buffer);
             }
             Ok(ptrs)
           })();
-          let _ = tx.send(res);
+          match res {
+            Ok(ptrs) => {
+              if cancelled2.load(Ordering::SeqCst) || tx.send(Ok(ptrs)).is_err() {
+                for buf in created {
+                  unsafe {
+                    let _ = buf.Close();
+                  }
+                }
+              } else {
+                BUFFERS.with(|b| {
+                  let mut guard = b.borrow_mut();
+                  for buf in created {
+                    guard.push((generation, buf));
+                  }
+                });
+              }
+            }
+            Err(e) => {
+              for buf in created {
+                unsafe {
+                  let _ = buf.Close();
+                }
+              }
+              let _ = tx.send(Err(e));
+            }
+          }
         })
         .map_err(|e| e.to_string())?;
-      let ptrs = rx.recv_timeout(Duration::from_secs(5)).map_err(|_| "shared_buffer_timeout".to_string())??;
-      Ok(Self { generation, width, height, ptrs: ptrs.map(|p| SendPtr(p as *mut u8)) })
+      match rx.recv_timeout(Duration::from_secs(5)) {
+        Ok(Ok(ptrs)) => Ok(Self { generation, width, height, ptrs: ptrs.map(|p| SendPtr(p as *mut u8)) }),
+        Ok(Err(e)) => Err(e),
+        Err(_) => {
+          cancelled.store(true, Ordering::SeqCst);
+          Self::release_gen(webview, generation);
+          Err("shared_buffer_timeout".to_string())
+        }
+      }
     }
 
-    /// Libera (na thread da UI) as gerações até `upto`, inclusive.
-    pub fn release<R: tauri::Runtime>(webview: &tauri::Webview<R>, upto: u32) {
+    /// Libera (na thread da UI) apenas os buffers da geração exata `generation`.
+    pub fn release_gen<R: tauri::Runtime>(webview: &tauri::Webview<R>, generation: u32) {
       let _ = webview.with_webview(move |_| {
         BUFFERS.with(|b| {
           b.borrow_mut().retain(|(g, buf)| {
-            if *g <= upto {
+            if *g == generation {
               unsafe {
                 let _ = buf.Close();
               }
@@ -154,22 +204,44 @@ mod imp {
 
   // ---------- GPU: BGRA (tamanho da fonte) → NV12 (tamanho alvo) → staging ----------
 
+  struct UnmapGuard<'a> {
+    ctx: &'a ID3D11DeviceContext,
+    res: &'a ID3D11Texture2D,
+  }
+
+  impl Drop for UnmapGuard<'_> {
+    fn drop(&mut self) {
+      unsafe {
+        self.ctx.Unmap(self.res, 0);
+      }
+    }
+  }
+
+  struct FrameGuard(windows::Graphics::Capture::Direct3D11CaptureFrame);
+
+  impl Drop for FrameGuard {
+    fn drop(&mut self) {
+      let _ = self.0.Close();
+    }
+  }
+
   pub struct Pipeline {
-    device: ID3D11Device,
-    ctx: ID3D11DeviceContext,
-    _vdev: ID3D11VideoDevice,
-    vctx: ID3D11VideoContext,
+    // Ordem de drop: views/processor primeiro, depois texturas, contextos e por fim o device.
+    in_view: ID3D11VideoProcessorInputView,
+    out_view: ID3D11VideoProcessorOutputView,
+    processor: ID3D11VideoProcessor,
+    /// Mantido vivo junto com o processador e as views criadas a partir dele.
+    _enumerator: ID3D11VideoProcessorEnumerator,
+    staging: ID3D11Texture2D,
+    output: ID3D11Texture2D,
+    input: ID3D11Texture2D,
     /// Tamanho da textura de entrada (o do frame pool).
     in_size: (u32, u32),
     out_size: (u32, u32),
-    input: ID3D11Texture2D,
-    in_view: ID3D11VideoProcessorInputView,
-    /// Mantido vivo junto com o processador e as views criadas a partir dele.
-    _enumerator: ID3D11VideoProcessorEnumerator,
-    processor: ID3D11VideoProcessor,
-    output: ID3D11Texture2D,
-    out_view: ID3D11VideoProcessorOutputView,
-    staging: ID3D11Texture2D,
+    vctx: ID3D11VideoContext,
+    _vdev: ID3D11VideoDevice,
+    ctx: ID3D11DeviceContext,
+    device: ID3D11Device,
   }
 
   unsafe impl Send for Pipeline {}
@@ -194,6 +266,9 @@ mod imp {
 
   impl Pipeline {
     fn new(device: ID3D11Device, in_size: (u32, u32), out_size: (u32, u32)) -> windows::core::Result<Self> {
+      if in_size.0 == 0 || in_size.1 == 0 || out_size.0 < 2 || out_size.1 < 2 || out_size.0 % 2 != 0 || out_size.1 % 2 != 0 {
+        return Err(windows::core::Error::empty());
+      }
       unsafe {
         let ctx = device.GetImmediateContext()?;
         let vdev: ID3D11VideoDevice = device.cast()?;
@@ -233,35 +308,51 @@ mod imp {
         vctx.VideoProcessorSetStreamFrameFormat(&processor, 0, D3D11_VIDEO_FRAME_FORMAT_PROGRESSIVE);
         vctx.VideoProcessorSetStreamAutoProcessingMode(&processor, 0, false);
         Ok(Self {
-          device,
-          ctx,
-          _vdev: vdev,
-          vctx,
+          in_view: in_view.ok_or_else(windows::core::Error::empty)?,
+          out_view: out_view.ok_or_else(windows::core::Error::empty)?,
+          processor,
+          _enumerator: enumerator,
+          staging,
+          output,
+          input,
           in_size,
           out_size,
-          input,
-          in_view: in_view.ok_or_else(windows::core::Error::empty)?,
-          _enumerator: enumerator,
-          processor,
-          output,
-          out_view: out_view.ok_or_else(windows::core::Error::empty)?,
-          staging,
+          vctx,
+          _vdev: vdev,
+          ctx,
+          device,
         })
       }
     }
 
-    /// Converte o quadro e copia o NV12 compacto para `dst`. Devolve a média aproximada de Y.
-    fn convert(&mut self, frame: &ID3D11Texture2D, content: (u32, u32), dst: *mut u8) -> windows::core::Result<u8> {
+    fn device_removed(&self) -> bool {
+      unsafe { self.device.GetDeviceRemovedReason().is_err() }
+    }
+
+    /// Converte o quadro e copia o NV12 compacto para `dst`. Devolve `Some(luma)` ou `None` se o quadro estiver vazio/inválido.
+    fn convert(&mut self, frame: &ID3D11Texture2D, content: (u32, u32), dst: *mut u8) -> windows::core::Result<Option<u8>> {
+      if dst.is_null() || content.0 == 0 || content.1 == 0 {
+        return Ok(None);
+      }
       unsafe {
         let mut desc = D3D11_TEXTURE2D_DESC::default();
         frame.GetDesc(&mut desc);
+        if desc.Width == 0 || desc.Height == 0 || desc.Format != DXGI_FORMAT_B8G8R8A8_UNORM {
+          return Ok(None);
+        }
         if (desc.Width, desc.Height) != self.in_size {
           *self = Pipeline::new(self.device.clone(), (desc.Width, desc.Height), self.out_size)?;
         }
         self.ctx.CopyResource(&self.input, frame);
         let (cw, ch) = (content.0.min(self.in_size.0), content.1.min(self.in_size.1));
+        if cw == 0 || ch == 0 {
+          return Ok(None);
+        }
         let src = RECT { left: 0, top: 0, right: cw as i32, bottom: ch as i32 };
         let (l, t, r, b) = letterbox(cw, ch, self.out_size.0, self.out_size.1);
+        if r <= l || b <= t {
+          return Ok(None);
+        }
         let dest = RECT { left: l, top: t, right: r, bottom: b };
         self.vctx.VideoProcessorSetStreamSourceRect(&self.processor, 0, true, Some(&src));
         self.vctx.VideoProcessorSetStreamDestRect(&self.processor, 0, true, Some(&dest));
@@ -278,8 +369,12 @@ mod imp {
         self.ctx.CopyResource(&self.staging, &self.output);
         let mut map = D3D11_MAPPED_SUBRESOURCE::default();
         self.ctx.Map(&self.staging, 0, D3D11_MAP_READ, 0, Some(&mut map))?;
+        let _unmap = UnmapGuard { ctx: &self.ctx, res: &self.staging };
         let (w, h) = (self.out_size.0 as usize, self.out_size.1 as usize);
         let pitch = map.RowPitch as usize;
+        if map.pData.is_null() || pitch < w || w == 0 || h < 2 || h % 2 != 0 {
+          return Ok(None);
+        }
         let src = map.pData as *const u8;
         let mut luma: u64 = 0;
         // Y: h linhas; UV: h/2 linhas logo depois das h linhas (com o mesmo pitch).
@@ -293,8 +388,7 @@ mod imp {
         for row in 0..h / 2 {
           std::ptr::copy_nonoverlapping(uv_src.add(row * pitch), uv_dst.add(row * w), w);
         }
-        self.ctx.Unmap(&self.staging, 0);
-        Ok((luma / h.max(1) as u64) as u8)
+        Ok(Some((luma / h.max(1) as u64) as u8))
       }
     }
   }
@@ -335,8 +429,11 @@ mod imp {
 
   pub struct Video {
     shared: Arc<Shared>,
+    item: GraphicsCaptureItem,
     pool: Direct3D11CaptureFramePool,
     session: GraphicsCaptureSession,
+    frame_token: i64,
+    closed_token: i64,
     device: AgileDevice,
     frames: FrameSink,
     content: (u32, u32),
@@ -399,10 +496,13 @@ mod imp {
       let e = |e: windows::core::Error| e.to_string();
       let item = capture_item(item).map_err(e)?;
       let size = item.Size().map_err(e)?;
+      if size.Width <= 0 || size.Height <= 0 {
+        return Err("source_gone".into());
+      }
       let (w, h) = target_size(size.Width as u32, size.Height as u32, resolution);
       let slots = slots_for(w, h)?;
       let (device, winrt) = d3d().map_err(e)?;
-      let pipeline = Pipeline::new(device, (size.Width.max(1) as u32, size.Height.max(1) as u32), (w, h)).map_err(e)?;
+      let pipeline = Pipeline::new(device, (size.Width as u32, size.Height as u32), (w, h)).map_err(e)?;
       let pool = Direct3D11CaptureFramePool::CreateFreeThreaded(&winrt, DirectXPixelFormat::B8G8R8A8UIntNormalized, 2, size).map_err(e)?;
       let session = pool.CreateCaptureSession(&item).map_err(e)?;
       let _ = session.SetIsCursorCaptureEnabled(true);
@@ -433,48 +533,88 @@ mod imp {
         let winrt = AgileDevice(winrt.clone());
         windows::Foundation::TypedEventHandler::<Direct3D11CaptureFramePool, windows::core::IInspectable>::new(move |pool, _| {
           let Some(pool) = pool.as_ref() else { return Ok(()) };
-          if shared.ended.load(Ordering::SeqCst) { return Ok(()); }
-          let mut frame = pool.TryGetNextFrame()?;
+          if shared.ended.load(Ordering::SeqCst) {
+            return Ok(());
+          }
+          let Ok(mut frame) = pool.TryGetNextFrame() else {
+            return Ok(());
+          };
           // O pool tem dois buffers: após uma pausa, usar o mais recente disponível.
-          while let Ok(newer) = pool.TryGetNextFrame() { frame = newer; }
-          let content = frame.ContentSize()?;
+          while let Ok(newer) = pool.TryGetNextFrame() {
+            let _ = frame.Close();
+            frame = newer;
+          }
+          let frame = FrameGuard(frame);
+          let Ok(content) = frame.0.ContentSize() else {
+            return Ok(());
+          };
+          if content.Width <= 0 || content.Height <= 0 {
+            return Ok(());
+          }
           // A janela mudou de tamanho: o pool acompanha (o tamanho de saída não muda).
           {
-            let mut ps = shared.pool_size.lock().unwrap();
-            if (content.Width, content.Height) != *ps && content.Width > 0 && content.Height > 0 {
-              *ps = (content.Width, content.Height);
-              let _ = pool.Recreate(winrt.get(), DirectXPixelFormat::B8G8R8A8UIntNormalized, 2, content);
+            let mut ps = lock_or_recover(&shared.pool_size);
+            if (content.Width, content.Height) != *ps {
+              if pool.Recreate(winrt.get(), DirectXPixelFormat::B8G8R8A8UIntNormalized, 2, content).is_ok() {
+                *ps = (content.Width, content.Height);
+              }
             }
           }
-          let now = Instant::now();
-          {
-            let mut last = shared.last.lock().unwrap();
+          // Lê `Instant::now()` dentro do lock e usa subtração saturada: CreateFreeThreaded pode
+          // disparar callbacks concorrentes, onde `now - l` causava panic/abort em release.
+          let now = {
+            let mut last = lock_or_recover(&shared.last);
+            let now = Instant::now();
             let interval = Duration::from_micros(shared.interval_us.load(Ordering::Relaxed) * 9 / 10);
-            if last.is_some_and(|l| now - l < interval) {
+            if last.is_some_and(|l| now.saturating_duration_since(l) < interval) {
               return Ok(());
             }
             *last = Some(now);
-          }
-          let access: IDirect3DDxgiInterfaceAccess = frame.Surface()?.cast()?;
-          let tex: ID3D11Texture2D = unsafe { access.GetInterface()? };
-          // Ordem fixa dos travamentos (pipeline → slots), a mesma do set_quality: o tamanho do NV12
+            now
+          };
+          let Ok(surface) = frame.0.Surface() else {
+            return Ok(());
+          };
+          let Ok(access) = surface.cast::<IDirect3DDxgiInterfaceAccess>() else {
+            return Ok(());
+          };
+          let Ok(tex) = (unsafe { access.GetInterface::<ID3D11Texture2D>() }) else {
+            return Ok(());
+          };
+          // Ordem fixa dos travamentos (pipeline → slots), a mesma do apply_slots: o tamanho do NV12
           // e o do buffer de destino nunca se desencontram.
-          let mut pipeline = shared.pipeline.lock().unwrap();
-          if shared.ended.load(Ordering::SeqCst) { return Ok(()); }
+          let mut pipeline = lock_or_recover(&shared.pipeline);
+          if shared.ended.load(Ordering::SeqCst) {
+            return Ok(());
+          }
           let seq = shared.seq.fetch_add(1, Ordering::Relaxed);
           let slot = (seq % 3) as usize;
           let (generation, ptr) = {
-            let s = shared.slots.lock().unwrap();
+            let s = lock_or_recover(&shared.slots);
             if (s.width, s.height) != pipeline.out_size {
               return Ok(());
             }
             (s.generation, s.ptrs[slot].0)
           };
-          let luma = pipeline.convert(&tex, (content.Width.max(0) as u32, content.Height.max(0) as u32), ptr)?;
+          let luma = match pipeline.convert(&tex, (content.Width as u32, content.Height as u32), ptr) {
+            Ok(Some(luma)) => luma,
+            Ok(None) => return Ok(()),
+            Err(err) => {
+              let removed = pipeline.device_removed();
+              drop(pipeline);
+              eprintln!("[espia] erro na conversão do quadro (gpu_removed={removed}): {err}");
+              if removed && !shared.ended.swap(true, Ordering::SeqCst) {
+                frames.send(json!({ "t": "ended", "reason": "error" }));
+              }
+              return Ok(());
+            }
+          };
           drop(pipeline);
-          if shared.ended.load(Ordering::SeqCst) { return Ok(()); }
-          let ts = (now - shared.started).as_micros() as u64;
-          let _ = frames.send(json!({ "t": "frame", "gen": generation, "slot": slot, "seq": seq, "ts": ts }));
+          if shared.ended.load(Ordering::SeqCst) {
+            return Ok(());
+          }
+          let ts = now.saturating_duration_since(shared.started).as_micros() as u64;
+          frames.send(json!({ "t": "frame", "gen": generation, "slot": slot, "seq": seq, "ts": ts }));
           // Jogo em tela cheia exclusiva costuma sair preto (T546).
           if seq < BLACK_FRAMES {
             if luma < BLACK_Y {
@@ -484,62 +624,75 @@ mod imp {
               && shared.dark_frames.load(Ordering::Relaxed) >= BLACK_FRAMES
               && !shared.warned_black.swap(true, Ordering::Relaxed)
             {
-              let _ = frames.send(json!({ "t": "warn", "reason": "black" }));
+              frames.send(json!({ "t": "warn", "reason": "black" }));
             }
           }
           Ok(())
         })
       };
-      pool.FrameArrived(&on_frame).map_err(e)?;
+      let frame_token = pool.FrameArrived(&on_frame).map_err(e)?;
 
       let on_closed = {
         let shared = shared.clone();
         let frames = frames.clone();
         windows::Foundation::TypedEventHandler::<GraphicsCaptureItem, windows::core::IInspectable>::new(move |_, _| {
           if !shared.ended.swap(true, Ordering::SeqCst) {
-            let _ = frames.send(json!({ "t": "ended", "reason": "source_closed" }));
+            frames.send(json!({ "t": "ended", "reason": "source_closed" }));
           }
           Ok(())
         })
       };
-      item.Closed(&on_closed).map_err(e)?;
-      session.StartCapture().map_err(e)?;
-      let content = (size.Width.max(0) as u32, size.Height.max(0) as u32);
-      Ok(Self { shared, pool, session, device: AgileDevice(winrt), frames, content })
+      let closed_token = item.Closed(&on_closed).map_err(e)?;
+      if let Err(err) = session.StartCapture() {
+        let _ = pool.RemoveFrameArrived(frame_token);
+        let _ = item.RemoveClosed(closed_token);
+        let _ = session.Close();
+        let _ = pool.Close();
+        return Err(err.to_string());
+      }
+      let content = (size.Width as u32, size.Height as u32);
+      Ok(Self { shared, item, pool, session, frame_token, closed_token, device: AgileDevice(winrt), frames, content })
     }
 
     pub fn size(&self) -> (u32, u32) {
-      let s = self.shared.slots.lock().unwrap();
+      let s = lock_or_recover(&self.shared.slots);
       (s.width, s.height)
     }
 
-    /// Troca resolução/fps no ar: novo tamanho → nova geração de slots.
-    pub fn set_quality(&self, resolution: u32, fps: u32, slots_for: impl FnOnce(u32, u32) -> Result<SlotSet, String>) -> Result<(u32, u32), String> {
+    pub fn set_fps(&self, fps: u32) {
       self.shared.interval_us.store(1_000_000 / fps.max(1) as u64, Ordering::Relaxed);
       limit_rate(&self.session, fps);
-      let (cw, ch) = *self.shared.pool_size.lock().unwrap();
+    }
+
+    pub fn target_size_for(&self, resolution: u32) -> (u32, u32) {
+      let (cw, ch) = *lock_or_recover(&self.shared.pool_size);
       let src = if cw > 0 && ch > 0 { (cw as u32, ch as u32) } else { self.content };
-      let (w, h) = target_size(src.0, src.1, resolution);
-      if (w, h) == self.size() {
-        return Ok((w, h));
+      target_size(src.0, src.1, resolution)
+    }
+
+    /// Aplica novos slots pré-alocados na GPU (ordem fixa pipeline → slots).
+    pub fn apply_slots(&self, slots: SlotSet) -> Result<(), String> {
+      let mut pipeline = lock_or_recover(&self.shared.pipeline);
+      if self.shared.ended.load(Ordering::SeqCst) {
+        return Err("not_live".into());
       }
-      let slots = slots_for(w, h)?;
-      let mut pipeline = self.shared.pipeline.lock().unwrap();
       let in_size = pipeline.in_size;
-      *pipeline = Pipeline::new(pipeline.device.clone(), in_size, (w, h)).map_err(|e| e.to_string())?;
-      *self.shared.slots.lock().unwrap() = slots;
+      *pipeline = Pipeline::new(pipeline.device.clone(), in_size, (slots.width, slots.height)).map_err(|e| e.to_string())?;
+      *lock_or_recover(&self.shared.slots) = slots;
       drop(pipeline);
-      Ok((w, h))
+      Ok(())
     }
 
     pub fn stop(&self, reason: &str) {
       let was_ended = self.shared.ended.swap(true, Ordering::SeqCst);
       // Aguarda uma cópia já em andamento antes de liberar os buffers compartilhados.
-      drop(self.shared.pipeline.lock().unwrap());
+      drop(lock_or_recover(&self.shared.pipeline));
+      let _ = self.pool.RemoveFrameArrived(self.frame_token);
+      let _ = self.item.RemoveClosed(self.closed_token);
       let _ = self.session.Close();
       let _ = self.pool.Close();
       if !was_ended {
-        let _ = self.frames.send(json!({ "t": "ended", "reason": reason }));
+        self.frames.send(json!({ "t": "ended", "reason": reason }));
       }
       let _ = &self.device;
     }

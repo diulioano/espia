@@ -94,11 +94,11 @@ mod imp {
     }
 
     fn prefs(&self) -> TrayPrefs {
-      *self.prefs.lock().unwrap()
+      *self.prefs.lock().unwrap_or_else(|e| e.into_inner())
     }
 
     fn update(&self, f: impl FnOnce(&mut TrayPrefs)) {
-      let mut p = self.prefs.lock().unwrap();
+      let mut p = self.prefs.lock().unwrap_or_else(|e| e.into_inner());
       f(&mut p);
       let Some(path) = &self.path else { return };
       let saved = path.parent().map_or(Ok(()), std::fs::create_dir_all).and_then(|_| std::fs::write(path, prefs_json(&p)));
@@ -247,6 +247,9 @@ mod imp {
   fn exit<R: Runtime>(app: &AppHandle<R>) {
     use tauri_plugin_window_state::{AppHandleExt, StateFlags};
     app.state::<TrayState>().quitting.store(true, Ordering::Relaxed);
+    if let Some(window) = app.get_webview_window("main") {
+      crate::capture::stop_all(window.as_ref(), &app.state::<crate::capture::Capture>());
+    }
     let _ = app.save_window_state(StateFlags::all());
     app.exit(0);
   }
